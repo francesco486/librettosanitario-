@@ -12,7 +12,7 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     .btn-salva>button {width: 100%; border-radius: 8px; background-color: #28a745; color: white; font-weight: bold;}
-    .btn-indietro>button {width: 100%; border-radius: 8px; background-color: #6c757d; color: white;}
+    .btn-indietro>button {width: 100%; border-radius: 8px; background-color: #6c757d; color: white; font-weight: bold;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -129,7 +129,6 @@ elif st.session_state.step_corrente == 'dashboard':
             icona_stato = stato.split()[0] if stato else "🔴"
             titolo_scheda = f"🔍 {data} - {prestazione} ({icona_stato})"
             
-            # Scheda espansa di default per mostrare subito la sezione allegati
             with st.expander(titolo_scheda, expanded=True):
                 col1, col2 = st.columns(2)
                 with col1:
@@ -141,7 +140,6 @@ elif st.session_state.step_corrente == 'dashboard':
                 st.markdown("**📋 Note Cliniche:**")
                 st.info(dettagli)
                 
-                # DOCUMENTI GIÀ CARICATI
                 st.markdown("---")
                 st.markdown("### 📎 Referti ed Esami Allegati")
                 if allegati:
@@ -156,7 +154,6 @@ elif st.session_state.step_corrente == 'dashboard':
                 else:
                     st.caption("Nessun documento allegato a questa visita.")
                 
-                # BOX PER IL CARICAMENTO DIFFERITO (ANCHE DOPO MESI)
                 st.markdown("#### 📤 Carica un nuovo referto PDF/Foto per questa visita")
                 nuovo_file = st.file_uploader(
                     "Seleziona un file dal PC o dallo smartphone (Ecografia, Esami, RX)", 
@@ -182,6 +179,11 @@ elif st.session_state.step_corrente == 'dashboard':
 # STEP 4A: INSERIMENTO PRESTAZIONE VETERINARIA
 # ---------------------------------------------------------
 elif st.session_state.step_corrente == 'aggiungi_prestazione':
+    # Pulsante di ritorno rapido in alto
+    if st.button("⬅️ Torna alla Dashboard (Annulla)", key="top_back_prestazione"):
+        st.session_state.step_corrente = 'dashboard'
+        st.rerun()
+        
     st.title("🩺 Registra Prestazione Veterinaria")
     st.markdown(f"Aggiungi una visita, vaccino o controllo per **{st.session_state.dati_animale.get('nome', 'il tuo pet')}**.")
     
@@ -199,7 +201,6 @@ elif st.session_state.step_corrente == 'aggiungi_prestazione':
         height=100
     )
     
-    # ALLEGATO SUBITO ALLA CREAZIONE (OPZIONALE)
     st.markdown("### 📎 Allegati Contestuali (Opzionale)")
     file_iniziale = st.file_uploader("Hai già il referto pronto? Caricalo ora (altrimenti potrai farlo in seguito)", type=['pdf', 'png', 'jpg', 'jpeg'], key="upload_iniziale")
     
@@ -228,7 +229,7 @@ elif st.session_state.step_corrente == 'aggiungi_prestazione':
     col1, col2 = st.columns(2)
     with col1:
         st.markdown('<div class="btn-indietro">', unsafe_allow_html=True)
-        if st.button("Annulla"):
+        if st.button("⬅️ Annulla / Indietro", key="bottom_cancel_prestazione"):
             st.session_state.step_corrente = 'dashboard'
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
@@ -265,6 +266,11 @@ elif st.session_state.step_corrente == 'aggiungi_prestazione':
 # STEP 4B: INSERIMENTO TERAPIA / FARMACO
 # ---------------------------------------------------------
 elif st.session_state.step_corrente == 'aggiungi_terapia':
+    # Pulsante di ritorno rapido in alto
+    if st.button("⬅️ Torna alla Dashboard (Annulla)", key="top_back_terapia"):
+        st.session_state.step_corrente = 'dashboard'
+        st.rerun()
+        
     st.title("💊 Prescrivi / Registra Terapia")
     st.markdown(f"Inserisci un farmaco o una cura da somministrare a **{st.session_state.dati_animale.get('nome', 'il tuo pet')}**.")
     
@@ -298,7 +304,7 @@ elif st.session_state.step_corrente == 'aggiungi_terapia':
     col1, col2 = st.columns(2)
     with col1:
         st.markdown('<div class="btn-indietro">', unsafe_allow_html=True)
-        if st.button("Annulla"):
+        if st.button("⬅️ Annulla / Indietro", key="bottom_cancel_terapia"):
             st.session_state.step_corrente = 'dashboard'
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
