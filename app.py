@@ -3,7 +3,7 @@ import datetime
 import pandas as pd
 
 # ---------------------------------------------------------
-# 1. CONFIGURAZIONE PAGINA
+# 1. CONFIGURAZIONE PAGINA & STILE
 # ---------------------------------------------------------
 st.set_page_config(page_title="PetHealth - Libretto Digitale", page_icon="🐾", layout="centered")
 
@@ -13,12 +13,12 @@ st.markdown("""
     footer {visibility: hidden;}
     .btn-salva>button {width: 100%; border-radius: 8px; background-color: #28a745; color: white; font-weight: bold;}
     .btn-indietro>button {width: 100%; border-radius: 8px; background-color: #6c757d; color: white;}
-    .terapia-box {background-color: #e8f4f8; border-left: 5px solid #2980b9; padding: 10px; border-radius: 5px; margin-bottom: 10px;}
+    .terapia-card {background-color: #f0f8ff; border-left: 5px solid #007bff; padding: 12px; border-radius: 8px; margin-bottom: 12px;}
     </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. GESTIONE DEGLI STEP (STATO DELLA SESSIONE)
+# 2. GESTIONE DEGLI STEP E INIZIALIZZAZIONE MEMORIA
 # ---------------------------------------------------------
 if 'step_corrente' not in st.session_state:
     st.session_state.step_corrente = 'registrazione_utente'
@@ -26,8 +26,12 @@ if 'dati_utente' not in st.session_state:
     st.session_state.dati_utente = {}
 if 'dati_animale' not in st.session_state:
     st.session_state.dati_animale = {}
+
+# Salvataggi separati per le due sezioni
 if 'prestazioni' not in st.session_state:
     st.session_state.prestazioni = []
+if 'terapie' not in st.session_state:
+    st.session_state.terapie = []
 
 # ---------------------------------------------------------
 # STEP 1: REGISTRAZIONE PROPRIETARIO
@@ -51,7 +55,7 @@ if st.session_state.step_corrente == 'registrazione_utente':
 # STEP 2: INSERIMENTO ANIMALE
 # ---------------------------------------------------------
 elif st.session_state.step_corrente == 'registrazione_animale':
-    st.title(f"Ciao {st.session_state.dati_utente['nome']}! 👋")
+    st.title(f"Ciao {st.session_state.dati_utente.get('nome', '')}! 👋")
     st.markdown("Parlaci un po' del tuo compagno di avventure.")
     
     with st.form("form_animale"):
@@ -72,43 +76,62 @@ elif st.session_state.step_corrente == 'registrazione_animale':
 elif st.session_state.step_corrente == 'dashboard':
     st.title(f"Libretto Sanitario di {st.session_state.dati_animale.get('nome', 'Animale')} 🐾")
     
-    # Pulsante per aggiungere nuove visite o cure
-    if st.button("➕ Aggiungi una Prestazione o Terapia Veterinaria", use_container_width=True):
-        st.session_state.step_corrente = 'aggiungi_prestazione'
-        st.rerun()
+    # PULSANTI D'AZIONE SEPARATI
+    st.markdown("### ⚡ Azioni Rapide")
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if st.button("➕ Nuova Prestazione / Visita", use_container_width=True):
+            st.session_state.step_corrente = 'aggiungi_prestazione'
+            st.rerun()
+    with col_btn2:
+        if st.button("💊 Nuova Terapia / Farmaco", use_container_width=True):
+            st.session_state.step_corrente = 'aggiungi_terapia'
+            st.rerun()
 
     st.divider()
     
-    # 1. SEZIONE TERAPIE IN CORSO (Mostra subito i farmaci da somministrare)
-    terapie_attive = [p for p in st.session_state.prestazioni if p.get('Ha_Terapia', False)]
+    # ----------------------------------------------------
+    # SEZIONE 1: TERAPIE E FARAMACI PRESCRITTI
+    # ----------------------------------------------------
+    st.subheader("💊 Terapie & Farmaci in Corso")
     
-    if terapie_attive:
-        st.subheader("💊 Terapie & Farmaci da Somministrare")
-        for t in terapie_attive:
-            with st.container():
-                st.markdown(f"""
-                <div class="terapia-box">
-                    <h4>💊 {t.get('Nome_Farmaco', 'Farmaco')}</h4>
-                    <p><b>Posologia/Istruzioni:</b> {t.get('Posologia', 'N/D')}</p>
-                    <p><b>Durata:</b> {t.get('Durata_Terapia', 'N/D')} | <b>Prescritto il:</b> {t.get('Data', 'N/D')} da {t.get('Veterinario', 'N/D')}</p>
-                </div>
-                """, unsafe_allow_html=True)
-        st.divider()
+    if len(st.session_state.terapie) == 0:
+        st.info("Nessun farmaco o terapia attiva al momento.")
+    else:
+        for t in reversed(st.session_state.terapie):
+            data_t = t.get('Data_Inizio', 'N/D')
+            farmaco = t.get('Farmaco', 'Farmaco')
+            stato_t = t.get('Stato', '🔴 Non certificato')
+            icona_t = stato_t.split()[0] if stato_t else "🔴"
+            
+            with st.expander(f"💊 {farmaco} - Inizio: {data_t} ({icona_t})"):
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.write(f"**🏥 Prescritto da:** {t.get('Veterinario', 'N/D')}")
+                    st.write(f"**⏳ Durata Cura:** {t.get('Durata', 'N/D')}")
+                with c2:
+                    st.write(f"**🛡️ Certificazione:** {stato_t}")
+                
+                st.markdown("**📋 Posologia & Istruzioni:**")
+                st.info(t.get('Posologia', 'Nessuna istruzione inserita.'))
 
-    # 2. STORICO COMPLETO VISITE
-    st.subheader("📜 Cartella Clinica & Storico Visite")
+    st.divider()
+
+    # ----------------------------------------------------
+    # SEZIONE 2: CARTELLE CLINICHE & PRESTAZIONI VETERINARIE
+    # ----------------------------------------------------
+    st.subheader("📜 Cartella Clinica & Visite Veterinarie")
     
     if len(st.session_state.prestazioni) == 0:
-        st.info("Nessuna prestazione o cura registrata al momento. Clicca sul pulsante in alto per iniziare!")
+        st.info("Nessuna prestazione o visita registrata al momento.")
     else:
         for item in reversed(st.session_state.prestazioni):
             data = item.get('Data', 'N/D')
             prestazione = item.get('Prestazione', 'Visita')
-            stato = item.get('Stato', 'Non certificato')
+            stato = item.get('Stato', '🔴 Non certificato')
             vet = item.get('Veterinario', 'N/D')
             scadenza = item.get('Scadenza/Richiamo', 'Non prevista')
             dettagli = item.get('Dettagli', 'Nessun dettaglio aggiuntivo.')
-            ha_terapia = item.get('Ha_Terapia', False)
             
             icona_stato = stato.split()[0] if stato else "🔴"
             titolo_scheda = f"{data} - {prestazione} ({icona_stato})"
@@ -121,79 +144,52 @@ elif st.session_state.step_corrente == 'dashboard':
                 with col2:
                     st.write(f"**📅 Prossimo Richiamo:** {scadenza}")
                 
-                st.markdown("**📋 Note della Visita:**")
+                st.markdown("**📋 Note Cliniche della Visita:**")
                 st.info(dettagli)
-                
-                if ha_terapia:
-                    st.markdown("**💊 Terapia Prescritta:**")
-                    st.warning(f"**Farmaco:** {item.get('Nome_Farmaco')}\n\n**Istruzioni:** {item.get('Posologia')}\n\n**Durata:** {item.get('Durata_Terapia')}")
 
 # ---------------------------------------------------------
-# STEP 4: AGGIUNTA PRESTAZIONE E TERAPIA
+# STEP 4A: INSERIMENTO PRESTAZIONE VETERINARIA
 # ---------------------------------------------------------
 elif st.session_state.step_corrente == 'aggiungi_prestazione':
-    st.title("➕ Nuova Prestazione / Terapia")
-    st.markdown(f"Registra la visita e le eventuali prescrizioni per **{st.session_state.dati_animale.get('nome', 'il tuo pet')}**.")
+    st.title("🩺 Registra Prestazione Veterinaria")
+    st.markdown(f"Aggiungi una visita, vaccino o controllo per **{st.session_state.dati_animale.get('nome', 'il tuo pet')}**.")
     
     col_a, col_b = st.columns(2)
     with col_a:
-        tipo_prestazione = st.selectbox("Tipo di Prestazione", ["Visita Generale", "Vaccino", "Antiparassitario", "Prescrizione Terapia/Farmaco", "Intervento Chirurgico", "Esami del Sangue / RX", "Altro"])
+        tipo_prestazione = st.selectbox("Tipo di Prestazione", ["Visita Generale", "Vaccino", "Antiparassitario", "Intervento Chirurgico", "Esami del Sangue / RX", "Altro"])
     with col_b:
-        data_esecuzione = st.date_input("Data Visita/Prescrizione", datetime.date.today())
+        data_esecuzione = st.date_input("Data Visita", datetime.date.today())
         
-    nome_vet = st.text_input("Nome Clinica o Veterinario Curante", placeholder="Es. Clinica Veterinaria San Siro - Dr. Rossi")
+    nome_vet = st.text_input("Nome Clinica o Veterinario", placeholder="Es. Clinica Veterinaria San Siro - Dr. Rossi")
     
     dettagli_prestazione = st.text_area(
-        "📝 Dettagli della visita / Diagnosi", 
-        placeholder="Scrivi qui l'esito della visita o le osservazioni del veterinario...",
-        height=100
+        "📝 Dettagli della visita / Esito clinic", 
+        placeholder="Scrivi qui cosa è stato fatto durante la visita, l'esito dei controlli o le raccomandazioni...",
+        height=120
     )
     
     st.divider()
     
-    # --- NUOVA SEZIONE: PRESCRIZIONE FARMACI ---
-    st.markdown("### 💊 Prescrizione Cura / Farmaci per Casa")
-    prescrive_terapia = st.checkbox("Il veterinario ha prescritto farmaci o una terapia da fare a casa?")
-    
-    nome_farmaco = ""
-    posologia = ""
-    durata_terapia = ""
-    
-    if prescrive_terapia:
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            nome_farmaco = st.text_input("Nome del Farmaco / Medicinale", placeholder="Es. Augmentin, Simparica, Ribes Pet...")
-            durata_terapia = st.text_input("Durata della cura", placeholder="Es. 7 giorni, 2 settimane, Continuativa...")
-        with col_f2:
-            posologia = st.text_area("Posologia & Dosaggio", placeholder="Es. 1 compressa ogni 12 ore a stomaco pieno", height=93)
-            
-    st.divider()
-    
-    # Sistema per il richiamo/visita di controllo
-    da_ripetere = st.checkbox("🔄 Richiede un controllo futuro o un richiamo vaccinale?")
+    da_ripetere = st.checkbox("🔄 Questa prestazione richiede un controllo futuro o un richiamo?")
     data_scadenza = None
     if da_ripetere:
         data_scadenza = st.date_input("📅 Data del prossimo controllo / richiamo", datetime.date.today() + datetime.timedelta(days=365))
     
     st.divider()
     
-    # Sistema di Certificazione Anti-Frode
     st.markdown("### 🔐 Certificazione Ufficiale")
-    st.caption("Fai inserire il PIN alla clinica per autenticare questa scheda e la relativa ricetta/prescrizione.")
     certifica = st.checkbox("Certifica ora con PIN Veterinario")
-    
     stato_certificazione = "🔴 Non Certificato (Dichiarato dal proprietario)"
     if certifica:
         pin_vet = st.text_input("PIN Veterinario (per test usa: 1234)", type="password")
         if pin_vet == "1234":
-            st.success("✅ PIN Corretto. Scheda e terapia certificate ufficialmente.")
+            st.success("✅ PIN Corretto. Prestazione certificata.")
             stato_certificazione = "🟢 Certificato Ufficialmente"
         elif pin_vet != "":
             st.error("❌ PIN Errato.")
     
     st.divider()
     
-    # Pulsanti
     col1, col2 = st.columns(2)
     with col1:
         st.markdown('<div class="btn-indietro">', unsafe_allow_html=True)
@@ -204,25 +200,86 @@ elif st.session_state.step_corrente == 'aggiungi_prestazione':
         
     with col2:
         st.markdown('<div class="btn-salva">', unsafe_allow_html=True)
-        if st.button("Salva nel Libretto"):
+        if st.button("Salva Prestazione"):
             if not nome_vet:
                 st.error("⚠️ Inserisci il nome del veterinario o della clinica!")
-            elif prescrive_terapia and not nome_farmaco:
-                st.error("⚠️ Hai spuntato la prescrizione di una terapia: inserisci il nome del farmaco!")
             else:
                 nuova_prestazione = {
                     "Data": data_esecuzione.strftime("%d/%m/%Y"),
                     "Prestazione": tipo_prestazione,
                     "Veterinario": nome_vet,
                     "Dettagli": dettagli_prestazione if dettagli_prestazione else "Nessuna nota aggiuntiva.",
-                    "Ha_Terapia": prescrive_terapia,
-                    "Nome_Farmaco": nome_farmaco,
-                    "Posologia": posologia if posologia else "Seguire indicazioni del veterinario.",
-                    "Durata_Terapia": durata_terapia if durata_terapia else "Da concordare",
                     "Scadenza/Richiamo": data_scadenza.strftime("%d/%m/%Y") if da_ripetere else "Non previsto",
                     "Stato": stato_certificazione
                 }
                 st.session_state.prestazioni.append(nuova_prestazione)
+                st.session_state.step_corrente = 'dashboard'
+                st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+# ---------------------------------------------------------
+# STEP 4B: INSERIMENTO TERAPIA / FARMACO (NUOVA SCHERMATA)
+# ---------------------------------------------------------
+elif st.session_state.step_corrente == 'aggiungi_terapia':
+    st.title("💊 Prescrivi / Registra Terapia")
+    st.markdown(f"Inserisci un farmaco o una cura da somministrare a **{st.session_state.dati_animale.get('nome', 'il tuo pet')}**.")
+    
+    nome_farmaco = st.text_input("Nome del Farmaco / Medicinale", placeholder="Es. Augmentin, Simparica, Ribes Pet...")
+    
+    col_t1, col_t2 = st.columns(2)
+    with col_t1:
+        data_inizio = st.date_input("Data Inizio Terapia", datetime.date.today())
+    with col_t2:
+        durata_terapia = st.text_input("Durata della Cura", placeholder="Es. 7 giorni, 2 settimane, Continuativa...")
+        
+    nome_vet_prescrittore = st.text_input("Veterinario / Clinica Prescrittrice", placeholder="Es. Dr. Rossi - Clinica San Siro")
+    
+    posologia = st.text_area(
+        "📋 Posologia & Istruzioni di Somministrazione", 
+        placeholder="Es. 1 compressa ogni 12 ore dopo i pasti. Conservare in frigorifero.",
+        height=120
+    )
+    
+    st.divider()
+    
+    st.markdown("### 🔐 Certificazione Ufficiale Prescrizione")
+    certifica_t = st.checkbox("Fai certificare la prescrizione con PIN Veterinario")
+    stato_certificazione_t = "🔴 Non Certificato (Dichiarato dal proprietario)"
+    if certifica_t:
+        pin_vet_t = st.text_input("PIN Veterinario (per test usa: 1234)", type="password")
+        if pin_vet_t == "1234":
+            st.success("✅ PIN Corretto. Terapia certificata ufficialmente.")
+            stato_certificazione_t = "🟢 Certificato Ufficialmente"
+        elif pin_vet_t != "":
+            st.error("❌ PIN Errato.")
+            
+    st.divider()
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown('<div class="btn-indietro">', unsafe_allow_html=True)
+        if st.button("Annulla"):
+            st.session_state.step_corrente = 'dashboard'
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+    with col2:
+        st.markdown('<div class="btn-salva">', unsafe_allow_html=True)
+        if st.button("Salva Terapia"):
+            if not nome_farmaco:
+                st.error("⚠️ Inserisci il nome del farmaco!")
+            elif not nome_vet_prescrittore:
+                st.error("⚠️ Inserisci il nome del veterinario prescrittore!")
+            else:
+                nuova_terapia = {
+                    "Farmaco": nome_farmaco,
+                    "Data_Inizio": data_inizio.strftime("%d/%m/%Y"),
+                    "Durata": durata_terapia if durata_terapia else "Non specificata",
+                    "Veterinario": nome_vet_prescrittore,
+                    "Posologia": posologia if posologia else "Seguire indicazioni del medico.",
+                    "Stato": stato_certificazione_t
+                }
+                st.session_state.terapie.append(nuova_terapia)
                 st.session_state.step_corrente = 'dashboard'
                 st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
