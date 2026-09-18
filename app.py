@@ -1,6 +1,7 @@
 import streamlit as st
 import datetime
-import pandas as pd
+import sqlite3
+import json
 
 # ---------------------------------------------------------
 # 1. CONFIGURAZIONE PAGINA & STILE
@@ -17,12 +18,115 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. MEMORIA E SESSION STATE
+# 2. GESTIONE DATABASE SQLITE (MEMORIA PERMANENTE)
 # ---------------------------------------------------------
+def init_db():
+    conn = sqlite3.connect('pethealth.db')
+    c = conn.cursor()
+    # Tabella Utenti
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS utenti (
+            email TEXT PRIMARY KEY,
+            nome TEXT,
+            password TEXT
+        )
+    ''')
+    # Tabella Animali
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS animali (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_email TEXT,
+            nome TEXT,
+            specie TEXT,
+            razza TEXT,
+            microchip TEXT,
+            FOREIGN KEY(user_email) REFERENCES utenti(email)
+        )
+    ''')
+    # Tabella Cartella Sanitaria (Prestazioni e Terapie salvate in JSON)
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS dati_sanitari (
+            pet_id INTEGER PRIMARY KEY,
+            prestazioni TEXT,
+            terapie TEXT,
+            FOREIGN KEY(pet_id) REFERENCES animali(id)
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# --- Funzioni Ausiliarie DB ---
+def registra_utente_db(nome, email, password):
+    conn = sqlite3.connect('pethealth.db')
+    c = conn.cursor()
+    try:
+        c.execute("INSERT INTO utenti VALUES (?, ?, ?)", (email, nome, password))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+def verifica_login_db(email, password):
+    conn = sqlite3.connect('pethealth.db')
+    c = conn.cursor()
+    c.execute("SELECT nome FROM utenti WHERE email = ? AND password = ?", (email, password))
+    user = c.fetchone()
+    conn.close()
+    return user
+
+def salva_animale_db(email, nome, specie, razza, microchip):
+    conn = sqlite3.connect('pethealth.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO animali (user_email, nome, specie, razza, microchip) VALUES (?, ?, ?, ?, ?)",
+              (email, nome, specie, razza, microchip))
+    pet_id = c.lastrowid
+    # Inizializza scheda sanitaria vuota
+    c.execute("INSERT INTO dati_sanitari VALUES (?, ?, ?)", (pet_id, json.dumps([]), json.dumps([])))
+    conn.commit()
+    conn.close()
+    return pet_id
+
+def carica_dati_pet_db(email):
+    conn = sqlite3.connect('pethealth.db')
+    c = conn.cursor()
+    c.execute("SELECT id, nome, specie, razza, microchip FROM animali WHERE user_email = ?", (email,))
+    pet = c.fetchone()
+    if pet:
+        pet_id, nome, specie, razza, microchip = pet
+        c.execute("SELECT prestazioni, terapie FROM dati_sanitari WHERE pet_id = ?", (pet_id,))
+        sanitari = c.fetchone()
+        prestazioni = json.loads(sanitari[0]) if sanitari else []
+        terapie = json.loads(sanitari[1]) if sanitari else []
+        conn.close()
+        return {
+            "id": pet_id, "nome": nome, "specie": specie, "razza": razza, "microchip": microchip
+        }, prestazioni, terapie
+    conn.close()
+    return None, [], []
+
+def salva_sanitari_db(pet_id, prestazioni, terapie):
+    conn = sqlite3.connect('pethealth.db')
+    c = conn.cursor()
+    c.execute("UPDATE dati_sanitari SET prestazioni = ?, terapie = ? WHERE pet_id = ?",
+              (json.dumps(prestazioni), json.dumps(terapie), pet_id))
+    conn.commit()
+    conn.close()
+
+# ---------------------------------------------------------
+# 3. SESSION STATE INITIALIZATION
+# ---------------------------------------------------------
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
+if 'user_email' not in st.session_state:
+    st.session_state.user_email = ""
+if 'user_nome' not in st.session_state:
+    st.session_state.user_nome = ""
 if 'step_corrente' not in st.session_state:
-    st.session_state.step_corrente = 'registrazione_utente'
-if 'dati_utente' not in st.session_state:
-    st.session_state.dati_utente = {}
+    st.session_state.step_corrente = 'auth'
 if 'dati_animale' not in st.session_state:
     st.session_state.dati_animale = {}
 if 'prestazioni' not in st.session_state:
@@ -31,29 +135,62 @@ if 'terapie' not in st.session_state:
     st.session_state.terapie = []
 
 # ---------------------------------------------------------
-# STEP 1: REGISTRAZIONE PROPRIETARIO
+# STEP 1: SCHERMATA LOGIN / REGISTRAZIONE UTENTE
 # ---------------------------------------------------------
-if st.session_state.step_corrente == 'registrazione_utente':
+if not st.session_state.logged_in:
     st.title("Benvenuto su PetHealth 🐾")
-    st.markdown("Crea il tuo account per tenere traccia della salute del tuo animale.")
+    st.markdown("Accedi al tuo profilo o registrati per gestire il libretto del tuo pet.")
     
-    with st.form("form_utente"):
-        nome = st.text_input("Il tuo Nome e Cognome")
-        email = st.text_input("La tua E-mail")
-        password = st.text_input("Crea una Password", type="password")
-        submit = st.form_submit_button("Continua ➔")
-        
-        if submit and nome and email and password:
-            st.session_state.dati_utente = {"nome": nome, "email": email}
-            st.session_state.step_corrente = 'registrazione_animale'
-            st.rerun()
+    tab_login, tab_reg = st.tabs(["🔑 Accedi", "📝 Registrati"])
+    
+    with tab_login:
+        with st.form("form_login"):
+            email_log = st.text_input("E-mail")
+            pass_log = st.text_input("Password", type="password")
+            btn_log = st.form_submit_button("Accedi ➔")
+            
+            if btn_log:
+                user = verifica_login_db(email_log, pass_log)
+                if user:
+                    st.session_state.logged_in = True
+                    st.session_state.user_email = email_log
+                    st.session_state.user_nome = user[0]
+                    
+                    # Carica i dati salvati
+                    pet, prest, ter = carica_dati_pet_db(email_log)
+                    if pet:
+                        st.session_state.dati_animale = pet
+                        st.session_state.prestazioni = prest
+                        st.session_state.terapie = ter
+                        st.session_state.step_corrente = 'dashboard'
+                    else:
+                        st.session_state.step_corrente = 'registrazione_animale'
+                    st.rerun()
+                else:
+                    st.error("❌ E-mail o Password errate.")
+                    
+    with tab_reg:
+        with st.form("form_registrazione"):
+            nome_reg = st.text_input("Nome e Cognome")
+            email_reg = st.text_input("E-mail")
+            pass_reg = st.text_input("Password", type="password")
+            btn_reg = st.form_submit_button("Crea Account ➔")
+            
+            if btn_reg:
+                if nome_reg and email_reg and pass_reg:
+                    if registra_utente_db(nome_reg, email_reg, pass_reg):
+                        st.success("✅ Account creato con successo! Ora puoi effettuare il Login.")
+                    else:
+                        st.error("⚠️ Questa e-mail risulta già registrata!")
+                else:
+                    st.warning("⚠️ Compila tutti i campi.")
 
 # ---------------------------------------------------------
-# STEP 2: INSERIMENTO ANIMALE
+# STEP 2: REGISTRAZIONE PRIMO ANIMALE (SE NUOVO UTENTE)
 # ---------------------------------------------------------
 elif st.session_state.step_corrente == 'registrazione_animale':
-    st.title(f"Ciao {st.session_state.dati_utente.get('nome', '')}! 👋")
-    st.markdown("Parlaci un po' del tuo compagno di avventure.")
+    st.title(f"Ciao {st.session_state.user_nome}! 👋")
+    st.markdown("Aggiungi il tuo compagno di avventure per creare il suo libretto digitale.")
     
     with st.form("form_animale"):
         nome_pet = st.text_input("Nome dell'animale")
@@ -63,7 +200,10 @@ elif st.session_state.step_corrente == 'registrazione_animale':
         submit_pet = st.form_submit_button("Crea Libretto ➔")
         
         if submit_pet and nome_pet:
-            st.session_state.dati_animale = {"nome": nome_pet, "specie": specie, "razza": razza, "microchip": microchip}
+            pet_id = salva_animale_db(st.session_state.user_email, nome_pet, specie, razza, microchip)
+            st.session_state.dati_animale = {
+                "id": pet_id, "nome": nome_pet, "specie": specie, "razza": razza, "microchip": microchip
+            }
             st.session_state.step_corrente = 'dashboard'
             st.rerun()
 
@@ -71,7 +211,15 @@ elif st.session_state.step_corrente == 'registrazione_animale':
 # STEP 3: DASHBOARD PRINCIPALE
 # ---------------------------------------------------------
 elif st.session_state.step_corrente == 'dashboard':
-    st.title(f"Libretto Sanitario di {st.session_state.dati_animale.get('nome', 'Animale')} 🐾")
+    col_header1, col_header2 = st.columns([3, 1])
+    with col_header1:
+        st.title(f"Libretto di {st.session_state.dati_animale.get('nome', 'Animale')} 🐾")
+    with col_header2:
+        if st.button("🚪 Logout"):
+            st.session_state.clear()
+            st.rerun()
+
+    st.caption(f"Proprietario: {st.session_state.user_nome} ({st.session_state.user_email})")
     
     st.markdown("### ⚡ Azioni Rapide")
     col_btn1, col_btn2 = st.columns(2)
@@ -143,35 +291,28 @@ elif st.session_state.step_corrente == 'dashboard':
                 st.markdown("---")
                 st.markdown("### 📎 Referti ed Esami Allegati")
                 if allegati:
-                    for file_idx, doc in enumerate(allegati):
-                        st.download_button(
-                            label=f"📄 Scarica {doc['nome']}",
-                            data=doc['bytes'],
-                            file_name=doc['nome'],
-                            mime=doc['tipo'],
-                            key=f"dl_{original_idx}_{file_idx}"
-                        )
+                    for doc in allegati:
+                        st.caption(f"📄 Documento salvato: **{doc.get('nome')}**")
                 else:
                     st.caption("Nessun documento allegato a questa visita.")
                 
                 st.markdown("#### 📤 Carica un nuovo referto PDF/Foto per questa visita")
                 nuovo_file = st.file_uploader(
-                    "Seleziona un file dal PC o dallo smartphone (Ecografia, Esami, RX)", 
+                    "Seleziona un file dal PC o dallo smartphone", 
                     type=['pdf', 'png', 'jpg', 'jpeg'], 
                     key=f"upload_retroactive_{original_idx}"
                 )
                 
                 if nuovo_file is not None:
                     if st.button("💾 Salva Referto in Questa Visita", key=f"btn_save_doc_{original_idx}"):
-                        file_data = {
-                            "nome": nuovo_file.name,
-                            "bytes": nuovo_file.getvalue(),
-                            "tipo": nuovo_file.type
-                        }
+                        file_data = {"nome": nuovo_file.name}
                         if 'Allegati' not in st.session_state.prestazioni[original_idx]:
                             st.session_state.prestazioni[original_idx]['Allegati'] = []
                             
                         st.session_state.prestazioni[original_idx]['Allegati'].append(file_data)
+                        
+                        # Salva in permanente nel database
+                        salva_sanitari_db(st.session_state.dati_animale['id'], st.session_state.prestazioni, st.session_state.terapie)
                         st.success(f"✅ Referto '{nuovo_file.name}' salvato con successo!")
                         st.rerun()
 
@@ -179,13 +320,11 @@ elif st.session_state.step_corrente == 'dashboard':
 # STEP 4A: INSERIMENTO PRESTAZIONE VETERINARIA
 # ---------------------------------------------------------
 elif st.session_state.step_corrente == 'aggiungi_prestazione':
-    # Pulsante di ritorno rapido in alto
     if st.button("⬅️ Torna alla Dashboard (Annulla)", key="top_back_prestazione"):
         st.session_state.step_corrente = 'dashboard'
         st.rerun()
         
     st.title("🩺 Registra Prestazione Veterinaria")
-    st.markdown(f"Aggiungi una visita, vaccino o controllo per **{st.session_state.dati_animale.get('nome', 'il tuo pet')}**.")
     
     col_a, col_b = st.columns(2)
     with col_a:
@@ -195,24 +334,18 @@ elif st.session_state.step_corrente == 'aggiungi_prestazione':
         
     nome_vet = st.text_input("Nome Clinica o Veterinario", placeholder="Es. Clinica Veterinaria San Siro - Dr. Rossi")
     
-    dettagli_prestazione = st.text_area(
-        "📝 Dettagli della visita / Esito clinico", 
-        placeholder="Scrivi qui cosa è stato fatto durante la visita...",
-        height=100
-    )
+    dettagli_prestazione = st.text_area("📝 Dettagli della visita / Esito clinico", height=100)
     
     st.markdown("### 📎 Allegati Contestuali (Opzionale)")
-    file_iniziale = st.file_uploader("Hai già il referto pronto? Caricalo ora (altrimenti potrai farlo in seguito)", type=['pdf', 'png', 'jpg', 'jpeg'], key="upload_iniziale")
+    file_iniziale = st.file_uploader("Hai già il referto pronto? Caricalo ora", type=['pdf', 'png', 'jpg', 'jpeg'], key="upload_iniziale")
     
     st.divider()
-    
     da_ripetere = st.checkbox("🔄 Questa prestazione richiede un controllo futuro o un richiamo?")
     data_scadenza = None
     if da_ripetere:
         data_scadenza = st.date_input("📅 Data del prossimo controllo / richiamo", datetime.date.today() + datetime.timedelta(days=365))
     
     st.divider()
-    
     st.markdown("### 🔐 Certificazione Ufficiale")
     certifica = st.checkbox("Certifica ora con PIN Veterinario")
     stato_certificazione = "🔴 Non Certificato (Dichiarato dal proprietario)"
@@ -225,28 +358,20 @@ elif st.session_state.step_corrente == 'aggiungi_prestazione':
             st.error("❌ PIN Errato.")
     
     st.divider()
-    
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown('<div class="btn-indietro">', unsafe_allow_html=True)
         if st.button("⬅️ Annulla / Indietro", key="bottom_cancel_prestazione"):
             st.session_state.step_corrente = 'dashboard'
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
         
     with col2:
-        st.markdown('<div class="btn-salva">', unsafe_allow_html=True)
         if st.button("Salva Prestazione"):
             if not nome_vet:
                 st.error("⚠️ Inserisci il nome del veterinario o della clinica!")
             else:
                 lista_allegati_iniziali = []
                 if file_iniziale is not None:
-                    lista_allegati_iniziali.append({
-                        "nome": file_iniziale.name,
-                        "bytes": file_iniziale.getvalue(),
-                        "tipo": file_iniziale.type
-                    })
+                    lista_allegati_iniziali.append({"nome": file_iniziale.name})
                 
                 nuova_prestazione = {
                     "Data": data_esecuzione.strftime("%d/%m/%Y"),
@@ -258,21 +383,22 @@ elif st.session_state.step_corrente == 'aggiungi_prestazione':
                     "Allegati": lista_allegati_iniziali
                 }
                 st.session_state.prestazioni.append(nuova_prestazione)
+                
+                # Salva in modo permanente nel Database SQLite
+                salva_sanitari_db(st.session_state.dati_animale['id'], st.session_state.prestazioni, st.session_state.terapie)
+                
                 st.session_state.step_corrente = 'dashboard'
                 st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # STEP 4B: INSERIMENTO TERAPIA / FARMACO
 # ---------------------------------------------------------
 elif st.session_state.step_corrente == 'aggiungi_terapia':
-    # Pulsante di ritorno rapido in alto
     if st.button("⬅️ Torna alla Dashboard (Annulla)", key="top_back_terapia"):
         st.session_state.step_corrente = 'dashboard'
         st.rerun()
         
     st.title("💊 Prescrivi / Registra Terapia")
-    st.markdown(f"Inserisci un farmaco o una cura da somministrare a **{st.session_state.dati_animale.get('nome', 'il tuo pet')}**.")
     
     nome_farmaco = st.text_input("Nome del Farmaco / Medicinale", placeholder="Es. Augmentin, Simparica...")
     
@@ -283,11 +409,9 @@ elif st.session_state.step_corrente == 'aggiungi_terapia':
         durata_terapia = st.text_input("Durata della Cura", placeholder="Es. 7 giorni, Continuativa...")
         
     nome_vet_prescrittore = st.text_input("Veterinario / Clinica Prescrittrice", placeholder="Es. Dr. Rossi")
-    
     posologia = st.text_area("📋 Posologia & Istruzioni", placeholder="Es. 1 compressa ogni 12 ore...", height=100)
     
     st.divider()
-    
     st.markdown("### 🔐 Certificazione Ufficiale Prescrizione")
     certifica_t = st.checkbox("Fai certificare la prescrizione con PIN Veterinario")
     stato_certificazione_t = "🔴 Non Certificato (Dichiarato dal proprietario)"
@@ -300,17 +424,13 @@ elif st.session_state.step_corrente == 'aggiungi_terapia':
             st.error("❌ PIN Errato.")
             
     st.divider()
-    
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown('<div class="btn-indietro">', unsafe_allow_html=True)
         if st.button("⬅️ Annulla / Indietro", key="bottom_cancel_terapia"):
             st.session_state.step_corrente = 'dashboard'
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
         
     with col2:
-        st.markdown('<div class="btn-salva">', unsafe_allow_html=True)
         if st.button("Salva Terapia"):
             if not nome_farmaco or not nome_vet_prescrittore:
                 st.error("⚠️ Compila i campi obbligatori!")
@@ -324,6 +444,9 @@ elif st.session_state.step_corrente == 'aggiungi_terapia':
                     "Stato": stato_certificazione_t
                 }
                 st.session_state.terapie.append(nuova_terapia)
+                
+                # Salva in modo permanente nel Database SQLite
+                salva_sanitari_db(st.session_state.dati_animale['id'], st.session_state.prestazioni, st.session_state.terapie)
+                
                 st.session_state.step_corrente = 'dashboard'
                 st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
