@@ -45,7 +45,7 @@ def init_db():
         )
     ''')
     
-    # Aggiornamento automatico per database esistenti (aggiunge le nuove colonne se non ci sono)
+    # Aggiornamento automatico per database esistenti
     try:
         c.execute("ALTER TABLE animali ADD COLUMN deceduto INTEGER DEFAULT 0")
         c.execute("ALTER TABLE animali ADD COLUMN data_decesso TEXT")
@@ -236,7 +236,6 @@ if not st.session_state.logged_in:
                         st.session_state.terapie = ter
                         st.session_state.step_corrente = 'dashboard'
                     elif st.session_state.lista_animali_angeli:
-                        # Se l'utente ha solo animali defunti, portalo nella sezione angeli
                         st.session_state.step_corrente = 'angeli'
                     else:
                         st.session_state.step_corrente = 'registrazione_animale'
@@ -338,7 +337,6 @@ if st.session_state.step_corrente == 'registrazione_animale':
             pet_id = salva_animale_db(st.session_state.user_email, nome_pet, specie, razza, microchip)
             aggiorna_sessione_animali(st.session_state.user_email)
             
-            # Trova l'animale appena creato
             nuovo_pet = [p for p in st.session_state.lista_animali_vivi if p['id'] == pet_id][0]
             st.session_state.dati_animale = nuovo_pet
             st.session_state.prestazioni = []
@@ -378,7 +376,7 @@ elif st.session_state.step_corrente == 'angeli':
                 tab_visite, tab_terapie, tab_fatture = st.tabs(["📜 Visite", "💊 Terapie", "🧾 Fatture"])
                 
                 with tab_visite:
-                    if non prestazioni_angelo:
+                    if not prestazioni_angelo:
                         st.write("Nessuna visita registrata.")
                     for item in reversed(prestazioni_angelo):
                         st.markdown(f"**{item.get('Data', '')} - {item.get('Prestazione', '')}**")
@@ -386,7 +384,7 @@ elif st.session_state.step_corrente == 'angeli':
                         st.markdown("---")
                 
                 with tab_terapie:
-                    if non terapie_angelo:
+                    if not terapie_angelo:
                         st.write("Nessuna terapia registrata.")
                     for t in reversed(terapie_angelo):
                         st.markdown(f"**{t.get('Farmaco', '')}** (Inizio: {t.get('Data_Inizio', '')})")
@@ -462,17 +460,15 @@ elif st.session_state.step_corrente == 'dashboard':
                     registra_decesso_db(st.session_state.dati_animale['id'], data_dec.strftime("%d/%m/%Y"), nome_file_cert)
                     
                     st.success("Operazione confermata. Cartella archiviata.")
-                    # Aggiorna le liste
                     aggiorna_sessione_animali(st.session_state.user_email)
                     
-                    # Vai alla sezione angeli per mostrare il trasferimento
                     st.session_state.step_corrente = 'angeli'
                     st.rerun()
                 else:
                     st.error("❌ PIN Veterinario errato.")
 
 # ---------------------------------------------------------
-# STEP 4A: INSERIMENTO PRESTAZIONE (Rimane invariato)
+# STEP 4A: INSERIMENTO PRESTAZIONE
 # ---------------------------------------------------------
 elif st.session_state.step_corrente == 'aggiungi_prestazione':
     if st.button("⬅️ Torna alla Dashboard"):
@@ -491,7 +487,7 @@ elif st.session_state.step_corrente == 'aggiungi_prestazione':
         st.rerun()
 
 # ---------------------------------------------------------
-# STEP 4B: INSERIMENTO TERAPIA (Rimane invariato)
+# STEP 4B: INSERIMENTO TERAPIA
 # ---------------------------------------------------------
 elif st.session_state.step_corrente == 'aggiungi_terapia':
     if st.button("⬅️ Torna alla Dashboard"):
@@ -507,7 +503,7 @@ elif st.session_state.step_corrente == 'aggiungi_terapia':
         st.rerun()
 
 # ---------------------------------------------------------
-# STEP 4C: INSERIMENTO FATTURA (Rimane invariato)
+# STEP 4C: INSERIMENTO FATTURA
 # ---------------------------------------------------------
 elif st.session_state.step_corrente == 'aggiungi_fattura':
     if st.button("⬅️ Torna alla Dashboard"):
