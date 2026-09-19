@@ -56,6 +56,12 @@ st.markdown("""
         color: #FFFFFF !important;
     }
 
+    /* FIX: Forza il colore NERO per il testo dell'animale selezionato nel Selectbox */
+    section[data-testid="stSidebar"] div[data-baseweb="select"] * {
+        color: #0f172a !important;
+        -webkit-text-fill-color: #0f172a !important;
+    }
+
     /* ----------------------------------------------------------------- */
     /* DESKTOP: BLOCCO SIDEBAR PERMANENTE (NASCONDE PULSANTE DI CHIUSURA) */
     /* ----------------------------------------------------------------- */
