@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS Custom mirato con Colore Rosso Statico per Tab e Fix Form Submit Button
+# CSS Custom mirato con Colore Rosso Statico Bloccato per Tab e Fix Form Submit Button
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
@@ -138,7 +138,7 @@ st.markdown("""
     }
 
     /* ----------------------------------------------------- */
-    /* STILE TAB (ACCEDI / REGISTRATI) - ROSSO STATICO */
+    /* STILE TAB (ACCEDI / REGISTRATI) - ROSSO STATICO BLOCCATO */
     /* ----------------------------------------------------- */
     div[data-testid="stTabs"] {
         background-color: transparent !important;
@@ -151,7 +151,10 @@ st.markdown("""
         justify-content: center !important;
     }
 
-    div[data-baseweb="tab"] {
+    /* Selettore Tab (Sia per elementi div che button) */
+    [data-baseweb="tab"],
+    button[data-baseweb="tab"],
+    button[role="tab"] {
         background-color: #FFFFFF !important;
         border-radius: 12px !important;
         padding: 8px 20px !important;
@@ -160,21 +163,26 @@ st.markdown("""
         cursor: pointer !important;
     }
 
-    /* TESTO ROSSO STATICO PERI TAB (Accedi e Registrati) */
-    div[data-baseweb="tab"] p, 
-    div[data-baseweb="tab"] span,
-    div[data-baseweb="tab"] div,
-    div[data-baseweb="tab"][aria-selected="true"] p, 
-    div[data-baseweb="tab"][aria-selected="true"] span,
-    div[data-baseweb="tab"]:hover p,
-    div[data-baseweb="tab"]:hover span {
+    /* TESTO ROSSO PERMANENTE IN TUTTI GLI STATI (Sia attiva che inattiva) */
+    [data-baseweb="tab"] *,
+    button[data-baseweb="tab"] *,
+    button[role="tab"] *,
+    [data-baseweb="tab"] p, 
+    [data-baseweb="tab"] span,
+    [data-baseweb="tab"] div,
+    [aria-selected="true"] p, 
+    [aria-selected="false"] p,
+    [aria-selected="true"] span,
+    [aria-selected="false"] span {
         color: #D32F2F !important;
+        -webkit-text-fill-color: #D32F2F !important;
         font-weight: 800 !important;
         font-size: 1rem !important;
     }
 
-    /* Evidenziazione tab selezionato con sfondo rossiccio chiaro */
-    div[data-baseweb="tab"][aria-selected="true"] {
+    /* Evidenziazione della scheda correntemente SELEZIONATA */
+    [data-baseweb="tab"][aria-selected="true"],
+    button[role="tab"][aria-selected="true"] {
         background-color: #FFEBEE !important;
         border: 2px solid #B71C1C !important;
     }
@@ -195,9 +203,11 @@ st.markdown("""
 
     div[data-testid="stFormSubmitButton"] > button p,
     div[data-testid="stFormSubmitButton"] > button span,
+    div[data-testid="stFormSubmitButton"] > button div,
     .stButton > button p,
     .stButton > button span {
         color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
         font-weight: 700 !important;
         font-size: 1rem !important;
     }
@@ -213,6 +223,7 @@ st.markdown("""
     .stButton > button:hover p,
     .stButton > button:hover span {
         color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
     }
 
     /* Pulsanti Sidebar */
