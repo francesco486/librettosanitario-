@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS Custom mirato per risolvere bug di Tab e Form Submit Button
+# CSS Custom mirato con Colore Rosso Statico per Tab e Fix Form Submit Button
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
@@ -137,51 +137,60 @@ st.markdown("""
         padding: 10px 14px !important;
     }
 
-    /* CORREZIONE PER I TAB (ACCEDI / REGISTRATI) */
+    /* ----------------------------------------------------- */
+    /* STILE TAB (ACCEDI / REGISTRATI) - ROSSO STATICO */
+    /* ----------------------------------------------------- */
     div[data-testid="stTabs"] {
         background-color: transparent !important;
     }
 
     div[data-baseweb="tab-list"] {
-        gap: 10px !important;
+        gap: 12px !important;
         background-color: transparent !important;
         border-bottom: none !important;
+        justify-content: center !important;
     }
 
     div[data-baseweb="tab"] {
-        background-color: #E2E8E4 !important;
-        border-radius: 20px !important;
-        padding: 8px 22px !important;
-        border: none !important;
+        background-color: #FFFFFF !important;
+        border-radius: 12px !important;
+        padding: 8px 20px !important;
+        border: 2px solid #D32F2F !important;
         height: auto !important;
+        cursor: pointer !important;
     }
 
+    /* TESTO ROSSO STATICO PERI TAB (Accedi e Registrati) */
     div[data-baseweb="tab"] p, 
-    div[data-baseweb="tab"] span {
-        color: #1E3A2B !important;
-        font-weight: 700 !important;
-        font-size: 0.95rem !important;
-    }
-
-    div[data-baseweb="tab"][aria-selected="true"] {
-        background-color: #1E3A2B !important;
-    }
-
+    div[data-baseweb="tab"] span,
+    div[data-baseweb="tab"] div,
     div[data-baseweb="tab"][aria-selected="true"] p, 
-    div[data-baseweb="tab"][aria-selected="true"] span {
-        color: #FFFFFF !important;
+    div[data-baseweb="tab"][aria-selected="true"] span,
+    div[data-baseweb="tab"]:hover p,
+    div[data-baseweb="tab"]:hover span {
+        color: #D32F2F !important;
+        font-weight: 800 !important;
+        font-size: 1rem !important;
     }
 
-    /* CORREZIONE PER I PULSANTI DEI FORM (ACCEDI AL PROFILO / REGISTRATI) */
+    /* Evidenziazione tab selezionato con sfondo rossiccio chiaro */
+    div[data-baseweb="tab"][aria-selected="true"] {
+        background-color: #FFEBEE !important;
+        border: 2px solid #B71C1C !important;
+    }
+
+    /* ----------------------------------------------------- */
+    /* CORREZIONE PER IL PULSANTE DI ACCESSO / REGISTRAZIONE */
+    /* ----------------------------------------------------- */
     div[data-testid="stFormSubmitButton"] > button,
     .stButton > button {
         background-color: #1E3A2B !important;
         border: 1px solid #1E3A2B !important;
-        border-radius: 25px !important;
-        padding: 0.6rem 1.5rem !important;
+        border-radius: 12px !important;
+        padding: 0.75rem 1.5rem !important;
         width: 100% !important;
         box-shadow: 0 4px 12px rgba(30, 58, 43, 0.15) !important;
-        transition: background-color 0.2s ease !important;
+        transition: all 0.2s ease !important;
     }
 
     div[data-testid="stFormSubmitButton"] > button p,
@@ -197,6 +206,13 @@ st.markdown("""
     .stButton > button:hover {
         background-color: #2D4A3E !important;
         border-color: #2D4A3E !important;
+    }
+
+    div[data-testid="stFormSubmitButton"] > button:hover p,
+    div[data-testid="stFormSubmitButton"] > button:hover span,
+    .stButton > button:hover p,
+    .stButton > button:hover span {
+        color: #FFFFFF !important;
     }
 
     /* Pulsanti Sidebar */
