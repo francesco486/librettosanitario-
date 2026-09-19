@@ -13,35 +13,34 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS Custom con Sidebar SEMPRE APERTA su Desktop e adattabile su Mobile
+# CSS Custom con Fix Specifico per stExpander
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
 
-    /* Font Globale e Sfondo Pagina */
+    /* Font Globale */
     html, body, .stApp {
         font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
         background-color: #F8F7F2 !important;
         color: #1e293b !important;
     }
 
-    /* Reset altezze linea per evitare sovrapposizioni */
-    p, span, label, h1, h2, h3, h4, h5, h6 {
+    /* Reset generico ma SENZA toccare gli elementi interni degli Expanders */
+    .stApp p:not([data-testid="stExpander"] *), 
+    .stApp label {
         font-family: 'Plus Jakarta Sans', sans-serif !important;
         line-height: 1.45 !important;
     }
 
-    /* Nascondi solo MainMenu e Footer */
     #MainMenu, footer {
         visibility: hidden;
     }
 
-    /* Header trasparente */
     header[data-testid="stHeader"] {
         background-color: transparent !important;
     }
 
-    /* Sidebar Scuro Verde Foresta */
+    /* Sidebar */
     section[data-testid="stSidebar"] {
         background-color: #1E3A2B !important;
         border-right: 1px solid #2D4A3E !important;
@@ -56,9 +55,6 @@ st.markdown("""
         color: #FFFFFF !important;
     }
 
-    /* ----------------------------------------------------------------- */
-    /* DESKTOP: BLOCCO SIDEBAR PERMANENTE (NASCONDE PULSANTE DI CHIUSURA) */
-    /* ----------------------------------------------------------------- */
     @media (min-width: 768px) {
         [data-testid="stSidebarCollapseButton"], 
         [data-testid="stSidebarToggle"], 
@@ -234,14 +230,6 @@ st.markdown("""
         border-color: #2D4A3E !important;
     }
 
-    div[data-testid="stFormSubmitButton"] > button:hover p,
-    div[data-testid="stFormSubmitButton"] > button:hover span,
-    .stButton > button:hover p,
-    .stButton > button:hover span {
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
-    }
-
     section[data-testid="stSidebar"] .stButton > button {
         background-color: #2D4A3E !important;
         border: 1px solid #3E6352 !important;
@@ -253,23 +241,26 @@ st.markdown("""
         background-color: #3E6352 !important;
     }
 
-    /* FIX PULITO EXPANDER (RISOLVE SOVRAPPOSIZIONE TESTO E FRECCIA) */
+    /* --------------------------------------------------------- */
+    /* FIX DEFINITIVO SOVRAPPOSIZIONE _arrow EXPANDER STREAMLIT  */
+    /* --------------------------------------------------------- */
     div[data-testid="stExpander"] {
         background-color: #ffffff !important;
         border: 1.5px solid #cbd5e1 !important;
         border-radius: 14px !important;
         margin-bottom: 12px !important;
-        overflow: hidden !important;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.02) !important;
     }
 
-    div[data-testid="stExpander"] summary {
-        padding: 12px 16px !important;
-        display: flex !important;
-        align-items: center !important;
-        gap: 10px !important;
+    div[data-testid="stExpander"] details summary {
+        padding: 14px 18px !important;
     }
 
-    div[data-testid="stExpander"] summary p {
+    div[data-testid="stExpander"] details summary div[data-testid="stMarkdownContainer"] {
+        padding-left: 8px !important;
+    }
+
+    div[data-testid="stExpander"] details summary div[data-testid="stMarkdownContainer"] p {
         color: #1E3A2B !important;
         -webkit-text-fill-color: #1E3A2B !important;
         font-weight: 700 !important;
@@ -277,14 +268,7 @@ st.markdown("""
         margin: 0 !important;
     }
 
-    /* Forza colore scuro dell'icona freccia senza nasconderla */
-    div[data-testid="stExpander"] summary svg {
-        fill: #1E3A2B !important;
-        color: #1E3A2B !important;
-        min-width: 18px !important;
-    }
-
-    /* FIX DEFINITIVO SELECTBOX SIDEBAR */
+    /* SELECTBOX SIDEBAR */
     section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div[data-baseweb="select"] span,
     section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div[data-baseweb="select"] div,
     section[data-testid="stSidebar"] div[data-testid="stSelectbox"] * {
@@ -793,7 +777,9 @@ elif st.session_state.step_corrente == 'dashboard':
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.divider()
-    with st.expander("⚠️ Area Riservata Medico Veterinario (Registra Decesso)"):
+    
+    # PULITA DEFINITIVA: Utilizziamo st.expander nativo protetto dal nuovo CSS
+    with st.expander("⚠️ Area Riservata Medico Veterinario (Registra Decesso)", expanded=False):
         st.warning("L'azione sottostante sposterà la cartella clinica di questo animale nella sezione 'I nostri angeli a 4 zampe'.")
         with st.form("form_decesso"):
             data_dec = st.date_input("Data del decesso", datetime.date.today())
