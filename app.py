@@ -13,20 +13,20 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS Custom con regole di spaziatura pulite e senza salti al passaggio del mouse
+# CSS Custom mirato per risolvere bug di Tab e Form Submit Button
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
 
-    /* Font Globale e Reset Pulito */
+    /* Font Globale e Sfondo Pagina */
     html, body, .stApp {
         font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
         background-color: #F8F7F2 !important;
         color: #1e293b !important;
     }
 
-    /* Prevenzione Sovrapposizione Testi (Line Height + Margini controllati) */
-    p, span, label, h1, h2, h3, h4, h5, h6, button, input, textarea, select {
+    /* Reset altezze linea per evitare sovrapposizioni */
+    p, span, label, h1, h2, h3, h4, h5, h6 {
         font-family: 'Plus Jakarta Sans', sans-serif !important;
         line-height: 1.45 !important;
     }
@@ -51,15 +51,7 @@ st.markdown("""
         color: #FFFFFF !important;
     }
 
-    /* Titoli Generali con spaziatura regolare */
-    h1, h2, h3, h4, h5, h6 {
-        color: #1E3A2B !important;
-        font-weight: 700 !important;
-        margin-top: 0.4rem !important;
-        margin-bottom: 0.6rem !important;
-    }
-
-    /* HERO BANNER (Intestazione Principale) */
+    /* HERO BANNER */
     .hero-card {
         background: linear-gradient(135deg, #1E3A2B 0%, #2D4A3E 100%);
         padding: 26px 24px;
@@ -75,7 +67,6 @@ st.markdown("""
         font-size: 2.1rem !important;
         font-weight: 800 !important;
         margin: 0 0 8px 0 !important;
-        line-height: 1.25 !important;
     }
 
     .hero-subtitle {
@@ -83,10 +74,9 @@ st.markdown("""
         font-size: 0.98rem !important;
         margin: 0 !important;
         font-weight: 400 !important;
-        line-height: 1.4 !important;
     }
 
-    /* WELLNESS CARD (Nessun salto visivo sull'hover!) */
+    /* WELLNESS CARD */
     .wellness-card {
         background-color: #FFFFFF !important;
         border-radius: 16px;
@@ -96,12 +86,7 @@ st.markdown("""
         margin-bottom: 16px;
     }
 
-    .wellness-card:hover {
-        border-color: #cbd5e1 !important;
-        box-shadow: 0 4px 14px rgba(30, 58, 43, 0.06) !important;
-    }
-
-    /* BADGES / TAGS NICEPAGE */
+    /* BADGES */
     .card-badge {
         display: inline-block;
         padding: 4px 12px;
@@ -129,40 +114,101 @@ st.markdown("""
         background-color: #fce7f3 !important;
         border-radius: 16px;
         border-left: 6px solid #db2777;
-        line-height: 1.5 !important;
     }
 
-    /* CAMPI DI INPUT E FORM (Testi sempre ben visibili) */
+    /* INPUT E FORM */
     label, div[data-testid="stWidgetLabel"] p {
         color: #1E3A2B !important;
         font-weight: 700 !important;
-        font-size: 0.9rem !important;
-        margin-bottom: 4px !important;
+        font-size: 0.92rem !important;
+        margin-bottom: 6px !important;
     }
 
-    .stTextInput > div > div > input, 
+    .stTextInput input, 
     .stTextArea textarea, 
     .stSelectbox > div > div, 
-    .stNumberInput > div > div > input,
+    .stNumberInput input,
     .stDateInput input {
         color: #0f172a !important;
         background-color: #ffffff !important;
         border: 1.5px solid #cbd5e1 !important;
         border-radius: 10px !important;
         font-weight: 500 !important;
-        padding: 8px 12px !important;
+        padding: 10px 14px !important;
     }
 
-    .stTextInput > div > div > input:focus, 
-    .stTextArea textarea:focus {
-        border-color: #1E3A2B !important;
-        box-shadow: 0 0 0 3px rgba(30, 58, 43, 0.12) !important;
+    /* CORREZIONE PER I TAB (ACCEDI / REGISTRATI) */
+    div[data-testid="stTabs"] {
+        background-color: transparent !important;
     }
 
-    /* Dropdown Menù */
-    div[data-baseweb="popover"] *, div[data-baseweb="menu"] * {
-        color: #0f172a !important;
-        background-color: #ffffff !important;
+    div[data-baseweb="tab-list"] {
+        gap: 10px !important;
+        background-color: transparent !important;
+        border-bottom: none !important;
+    }
+
+    div[data-baseweb="tab"] {
+        background-color: #E2E8E4 !important;
+        border-radius: 20px !important;
+        padding: 8px 22px !important;
+        border: none !important;
+        height: auto !important;
+    }
+
+    div[data-baseweb="tab"] p, 
+    div[data-baseweb="tab"] span {
+        color: #1E3A2B !important;
+        font-weight: 700 !important;
+        font-size: 0.95rem !important;
+    }
+
+    div[data-baseweb="tab"][aria-selected="true"] {
+        background-color: #1E3A2B !important;
+    }
+
+    div[data-baseweb="tab"][aria-selected="true"] p, 
+    div[data-baseweb="tab"][aria-selected="true"] span {
+        color: #FFFFFF !important;
+    }
+
+    /* CORREZIONE PER I PULSANTI DEI FORM (ACCEDI AL PROFILO / REGISTRATI) */
+    div[data-testid="stFormSubmitButton"] > button,
+    .stButton > button {
+        background-color: #1E3A2B !important;
+        border: 1px solid #1E3A2B !important;
+        border-radius: 25px !important;
+        padding: 0.6rem 1.5rem !important;
+        width: 100% !important;
+        box-shadow: 0 4px 12px rgba(30, 58, 43, 0.15) !important;
+        transition: background-color 0.2s ease !important;
+    }
+
+    div[data-testid="stFormSubmitButton"] > button p,
+    div[data-testid="stFormSubmitButton"] > button span,
+    .stButton > button p,
+    .stButton > button span {
+        color: #FFFFFF !important;
+        font-weight: 700 !important;
+        font-size: 1rem !important;
+    }
+
+    div[data-testid="stFormSubmitButton"] > button:hover,
+    .stButton > button:hover {
+        background-color: #2D4A3E !important;
+        border-color: #2D4A3E !important;
+    }
+
+    /* Pulsanti Sidebar */
+    section[data-testid="stSidebar"] .stButton > button {
+        background-color: #2D4A3E !important;
+        border: 1px solid #3E6352 !important;
+        border-radius: 12px !important;
+        box-shadow: none !important;
+    }
+
+    section[data-testid="stSidebar"] .stButton > button:hover {
+        background-color: #3E6352 !important;
     }
 
     /* EXPANDER (Accordion) */
@@ -176,61 +222,6 @@ st.markdown("""
     div[data-testid="stExpander"] summary p {
         color: #1E3A2B !important;
         font-weight: 700 !important;
-        font-size: 1rem !important;
-    }
-
-    /* PULSANTI (Transizione di colore fluida, SENZA movimenti) */
-    .stButton > button {
-        border-radius: 25px !important;
-        font-weight: 700 !important;
-        font-size: 0.92rem !important;
-        padding: 0.5rem 1.4rem !important;
-        border: 1px solid #1E3A2B !important;
-        background-color: #1E3A2B !important;
-        color: #ffffff !important;
-        transition: background-color 0.2s ease, border-color 0.2s ease !important;
-        box-shadow: 0 2px 6px rgba(30, 58, 43, 0.1) !important;
-    }
-
-    .stButton > button:hover {
-        background-color: #2D4A3E !important;
-        color: #ffffff !important;
-        border-color: #2D4A3E !important;
-    }
-
-    /* Pulsanti Sidebar */
-    section[data-testid="stSidebar"] .stButton > button {
-        background-color: #2D4A3E !important;
-        color: #ffffff !important;
-        border: 1px solid #3E6352 !important;
-        width: 100%;
-        border-radius: 12px !important;
-        box-shadow: none !important;
-    }
-
-    section[data-testid="stSidebar"] .stButton > button:hover {
-        background-color: #3E6352 !important;
-        border-color: #4E7864 !important;
-    }
-
-    /* TABS */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
-
-    .stTabs [data-baseweb="tab"] {
-        height: 42px;
-        background-color: #ffffff;
-        border-radius: 20px;
-        padding: 0px 20px;
-        color: #1E3A2B;
-        border: 1px solid #cbd5e1;
-        font-weight: 600;
-    }
-
-    .stTabs [aria-selected="true"] {
-        background-color: #1E3A2B !important;
-        color: #ffffff !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -444,52 +435,54 @@ if not st.session_state.logged_in:
         </div>
     """, unsafe_allow_html=True)
     
-    tab_login, tab_reg = st.tabs(["🔑 Accedi", "📝 Registrati"])
-    
-    with tab_login:
-        with st.form("form_login"):
-            email_log = st.text_input("E-mail")
-            pass_log = st.text_input("Password", type="password")
-            btn_log = st.form_submit_button("Accedi al Profilo ➔", use_container_width=True)
-            
-            if btn_log:
-                user = verifica_login_db(email_log, pass_log)
-                if user:
-                    st.session_state.logged_in = True
-                    st.session_state.user_email = email_log
-                    st.session_state.user_nome = user[0]
-                    
-                    aggiorna_sessione_animali(email_log)
-                    
-                    if st.session_state.lista_animali_vivi:
-                        st.session_state.dati_animale = st.session_state.lista_animali_vivi[0]
-                        prest, ter = carica_dati_sanitari_pet_db(st.session_state.dati_animale['id'])
-                        st.session_state.prestazioni = prest
-                        st.session_state.terapie = ter
-                        st.session_state.step_corrente = 'dashboard'
-                    elif st.session_state.lista_animali_angeli:
-                        st.session_state.step_corrente = 'angeli'
+    col_centered = st.columns([1, 2, 1])[1]
+    with col_centered:
+        tab_login, tab_reg = st.tabs(["🔑 Accedi", "📝 Registrati"])
+        
+        with tab_login:
+            with st.form("form_login"):
+                email_log = st.text_input("E-mail")
+                pass_log = st.text_input("Password", type="password")
+                btn_log = st.form_submit_button("Accedi al Profilo ➔", use_container_width=True)
+                
+                if btn_log:
+                    user = verifica_login_db(email_log, pass_log)
+                    if user:
+                        st.session_state.logged_in = True
+                        st.session_state.user_email = email_log
+                        st.session_state.user_nome = user[0]
+                        
+                        aggiorna_sessione_animali(email_log)
+                        
+                        if st.session_state.lista_animali_vivi:
+                            st.session_state.dati_animale = st.session_state.lista_animali_vivi[0]
+                            prest, ter = carica_dati_sanitari_pet_db(st.session_state.dati_animale['id'])
+                            st.session_state.prestazioni = prest
+                            st.session_state.terapie = ter
+                            st.session_state.step_corrente = 'dashboard'
+                        elif st.session_state.lista_animali_angeli:
+                            st.session_state.step_corrente = 'angeli'
+                        else:
+                            st.session_state.step_corrente = 'registrazione_animale'
+                        st.rerun()
                     else:
-                        st.session_state.step_corrente = 'registrazione_animale'
-                    st.rerun()
-                else:
-                    st.error("❌ E-mail o Password errate.")
-                    
-    with tab_reg:
-        with st.form("form_registrazione"):
-            nome_reg = st.text_input("Nome e Cognome")
-            email_reg = st.text_input("E-mail")
-            pass_reg = st.text_input("Password", type="password")
-            btn_reg = st.form_submit_button("Crea Account ➔", use_container_width=True)
-            
-            if btn_reg:
-                if nome_reg and email_reg and pass_reg:
-                    if registra_utente_db(nome_reg, email_reg, pass_reg):
-                        st.success("✅ Account creato con successo! Ora puoi effettuare il Login.")
+                        st.error("❌ E-mail o Password errate.")
+                        
+        with tab_reg:
+            with st.form("form_registrazione"):
+                nome_reg = st.text_input("Nome e Cognome")
+                email_reg = st.text_input("E-mail")
+                pass_reg = st.text_input("Password", type="password")
+                btn_reg = st.form_submit_button("Crea Account ➔", use_container_width=True)
+                
+                if btn_reg:
+                    if nome_reg and email_reg and pass_reg:
+                        if registra_utente_db(nome_reg, email_reg, pass_reg):
+                            st.success("✅ Account creato con successo! Ora puoi effettuare il Login.")
+                        else:
+                            st.error("⚠️ Questa e-mail risulta già registrata!")
                     else:
-                        st.error("⚠️ Questa e-mail risulta già registrata!")
-                else:
-                    st.warning("⚠️ Compila tutti i campi.")
+                        st.warning("⚠️ Compila tutti i campi.")
 
 # ---------------------------------------------------------
 # MENU LATERALE (SIDEBAR DARK VERDE FOREST)
@@ -523,7 +516,6 @@ if st.session_state.logged_in and st.session_state.step_corrente != 'registrazio
                 st.session_state.step_corrente = 'dashboard'
                 st.rerun()
             
-            # --- MENU DI NAVIGAZIONE ---
             if st.session_state.step_corrente != 'angeli':
                 st.divider()
                 st.markdown("<p style='font-size: 0.8rem; font-weight: 800; color: #D2E3D8 !important;'>SEZIONI</p>", unsafe_allow_html=True)
