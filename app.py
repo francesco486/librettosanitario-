@@ -166,12 +166,12 @@ def carica_fatture_db(pet_id):
     conn = sqlite3.connect('pethealth.db')
     c = conn.cursor()
     c.execute('''
-        SELECT numero_fattura, data_fattura, emittente, descrizione, importo, nome_file 
+        SELECT id, numero_fattura, data_fattura, emittente, descrizione, importo, nome_file 
         FROM fatture WHERE pet_id = ? ORDER BY id DESC
     ''', (pet_id,))
     rows = c.fetchall()
     conn.close()
-    return [{"numero": r[0], "data": r[1], "emittente": r[2], "descrizione": r[3], "importo": r[4], "file": r[5]} for r in rows]
+    return [{"id": r[0], "numero": r[1], "data": r[2], "emittente": r[3], "descrizione": r[4], "importo": r[5], "file": r[6]} for r in rows]
 
 def salva_fattura_db(pet_id, num, data, emittente, desc, importo, file_name):
     conn = sqlite3.connect('pethealth.db')
@@ -205,7 +205,6 @@ if 'prestazioni' not in st.session_state:
 if 'terapie' not in st.session_state:
     st.session_state.terapie = []
 
-# Aggiornamento Liste (Helper)
 def aggiorna_sessione_animali(email):
     vivi, angeli = carica_tutti_animali_db(email)
     st.session_state.lista_animali_vivi = vivi
@@ -266,14 +265,13 @@ if not st.session_state.logged_in:
                     st.warning("⚠️ Compila tutti i campi.")
 
 # ---------------------------------------------------------
-# MENU LATERALE (SIDEBAR)
+# MENU LATERALE (SIDEBAR) & NAVIGAZIONE PAGINE
 # ---------------------------------------------------------
 if st.session_state.logged_in and st.session_state.step_corrente != 'registrazione_animale':
     with st.sidebar:
         st.header(f"👤 Ciao, {st.session_state.user_nome}")
         st.divider()
         
-        # Sezione Animali Attivi
         if st.session_state.lista_animali_vivi:
             st.subheader("I tuoi animali 🐾")
             pet_dict = {p['nome']: p for p in st.session_state.lista_animali_vivi}
@@ -292,9 +290,26 @@ if st.session_state.logged_in and st.session_state.step_corrente != 'registrazio
                 st.session_state.terapie = ter
                 st.session_state.step_corrente = 'dashboard'
                 st.rerun()
+            
+            # --- MENU DI NAVIGAZIONE PER L'ANIMALE ATTIVO ---
+            if st.session_state.step_corrente != 'angeli':
+                st.divider()
+                st.markdown("**📌 Sezioni Libretto**")
+                if st.button("🏠 Riepilogo (Dashboard)", use_container_width=True):
+                    st.session_state.step_corrente = 'dashboard'
+                    st.rerun()
+                if st.button("🩺 Gestione Visite", use_container_width=True):
+                    st.session_state.step_corrente = 'pagina_visite'
+                    st.rerun()
+                if st.button("💊 Gestione Terapie", use_container_width=True):
+                    st.session_state.step_corrente = 'pagina_terapie'
+                    st.rerun()
+                if st.button("🧾 Gestione Fatture", use_container_width=True):
+                    st.session_state.step_corrente = 'pagina_fatture'
+                    st.rerun()
                 
             if st.session_state.step_corrente == 'angeli':
-                if st.button("🔙 Torna alla Dashboard (Animali attivi)", use_container_width=True):
+                if st.button("🔙 Torna alla Dashboard", use_container_width=True):
                     st.session_state.step_corrente = 'dashboard'
                     if st.session_state.lista_animali_vivi:
                         st.session_state.dati_animale = st.session_state.lista_animali_vivi[0]
@@ -303,14 +318,11 @@ if st.session_state.logged_in and st.session_state.step_corrente != 'registrazio
                         st.session_state.terapie = ter
                     st.rerun()
 
-        st.write("")
+        st.divider()
         if st.button("➕ Aggiungi animale", use_container_width=True):
             st.session_state.step_corrente = 'registrazione_animale'
             st.rerun()
             
-        st.divider()
-        
-        # Pulsante Sezione Angeli
         if st.session_state.lista_animali_angeli:
             if st.button("🕊️ I nostri angeli a 4 zampe", use_container_width=True):
                 st.session_state.step_corrente = 'angeli'
@@ -322,7 +334,7 @@ if st.session_state.logged_in and st.session_state.step_corrente != 'registrazio
             st.rerun()
 
 # ---------------------------------------------------------
-# STEP 2: REGISTRAZIONE ANIMALE
+# GESTIONE SCHERMATE PRINCIPALI
 # ---------------------------------------------------------
 if st.session_state.step_corrente == 'registrazione_animale':
     if st.session_state.lista_animali_vivi or st.session_state.lista_animali_angeli:
@@ -342,17 +354,15 @@ if st.session_state.step_corrente == 'registrazione_animale':
         if submit_pet and nome_pet:
             pet_id = salva_animale_db(st.session_state.user_email, nome_pet, specie, razza, microchip)
             aggiorna_sessione_animali(st.session_state.user_email)
-            
             nuovo_pet = [p for p in st.session_state.lista_animali_vivi if p['id'] == pet_id][0]
             st.session_state.dati_animale = nuovo_pet
             st.session_state.prestazioni = []
             st.session_state.terapie = []
-            
             st.session_state.step_corrente = 'dashboard'
             st.rerun()
 
 # ---------------------------------------------------------
-# SEZIONE: I NOSTRI ANGELI A 4 ZAMPE 🕊️
+# SEZIONE ANGELI
 # ---------------------------------------------------------
 elif st.session_state.step_corrente == 'angeli':
     st.title("I nostri angeli a 4 zampe 🕊️")
@@ -375,7 +385,6 @@ elif st.session_state.step_corrente == 'angeli':
                 st.divider()
                 st.markdown(f"### Archivio Clinico di {angelo['nome']}")
                 
-                # Carica dati in sola lettura
                 prestazioni_angelo, terapie_angelo = carica_dati_sanitari_pet_db(angelo['id'])
                 fatture_angelo = carica_fatture_db(angelo['id'])
                 
@@ -388,7 +397,6 @@ elif st.session_state.step_corrente == 'angeli':
                         st.markdown(f"**{item.get('Data', '')} - {item.get('Prestazione', '')}**")
                         st.caption(f"Vet: {item.get('Veterinario', '')} | {item.get('Dettagli', '')}")
                         st.markdown("---")
-                
                 with tab_terapie:
                     if not terapie_angelo:
                         st.write("Nessuna terapia registrata.")
@@ -396,7 +404,6 @@ elif st.session_state.step_corrente == 'angeli':
                         st.markdown(f"**{t.get('Farmaco', '')}** (Inizio: {t.get('Data_Inizio', '')})")
                         st.caption(f"Durata: {t.get('Durata', '')} | Posologia: {t.get('Posologia', '')}")
                         st.markdown("---")
-                        
                 with tab_fatture:
                     if not fatture_angelo:
                         st.write("Nessuna fattura registrata.")
@@ -405,7 +412,6 @@ elif st.session_state.step_corrente == 'angeli':
                         st.caption(f"Emittente: {f['emittente']} | Allegato: {f['file']}")
                         st.markdown("---")
                 
-                # --- ANNULLA DECESSO (AREA VETERINARIO) ---
                 st.divider()
                 with st.popover(f"🔄 Annulla registrazione decesso di {angelo['nome']}"):
                     st.warning("Usa questa funzione solo se la segnalazione di decesso è stata effettuata per errore.")
@@ -416,68 +422,44 @@ elif st.session_state.step_corrente == 'angeli':
                         if btn_undo:
                             if pin_undo == "1234":
                                 annulla_decesso_db(angelo['id'])
-                                st.success(f"Profilo di {angelo['nome']} ripristinato con successo tra gli animali attivi!")
-                                
-                                # Aggiorna le liste
+                                st.success(f"Profilo di {angelo['nome']} ripristinato con successo!")
                                 aggiorna_sessione_animali(st.session_state.user_email)
-                                
-                                # Imposta l'animale come selezionato nella dashboard
                                 st.session_state.dati_animale = angelo
                                 st.session_state.dati_animale['deceduto'] = 0
                                 st.session_state.prestazioni, st.session_state.terapie = carica_dati_sanitari_pet_db(angelo['id'])
-                                
                                 st.session_state.step_corrente = 'dashboard'
                                 st.rerun()
                             else:
                                 st.error("❌ PIN Veterinario errato.")
 
 # ---------------------------------------------------------
-# STEP 3: DASHBOARD PRINCIPALE
+# PAGINA: DASHBOARD (RIEPILOGO)
 # ---------------------------------------------------------
 elif st.session_state.step_corrente == 'dashboard':
     st.title(f"Libretto di {st.session_state.dati_animale.get('nome', 'Animale')} 🐾")
     st.caption(f"Specie: {st.session_state.dati_animale.get('specie')} | Razza: {st.session_state.dati_animale.get('razza')} | Microchip: {st.session_state.dati_animale.get('microchip')}")
     
-    st.markdown("### ⚡ Azioni Rapide")
-    col_btn1, col_btn2, col_btn3 = st.columns(3)
-    with col_btn1:
-        if st.button("➕ Nuova Visita", use_container_width=True):
-            st.session_state.step_corrente = 'aggiungi_prestazione'
-            st.rerun()
-    with col_btn2:
-        if st.button("💊 Nuova Terapia", use_container_width=True):
-            st.session_state.step_corrente = 'aggiungi_terapia'
-            st.rerun()
-    with col_btn3:
-        if st.button("🧾 Carica Fattura", use_container_width=True):
-            st.session_state.step_corrente = 'aggiungi_fattura'
-            st.rerun()
-
+    st.info("👈 Utilizza il menu laterale (Sezioni Libretto) per gestire Visite, Terapie e Fatture.")
     st.divider()
 
-    # --- SEZIONE TERAPIE E VISITE ---
-    st.subheader("💊 Terapie & Farmaci in Corso")
-    if len(st.session_state.terapie) == 0:
-        st.info("Nessun farmaco o terapia attiva al momento.")
-    else:
-        for t in reversed(st.session_state.terapie):
-            st.markdown(f"**{t.get('Farmaco', 'Farmaco')}** - Inizio: {t.get('Data_Inizio', 'N/D')}")
-            st.caption(f"Prescritto da: {t.get('Veterinario', 'N/D')} | Stato: {t.get('Stato', '')}")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("💊 Terapie in corso")
+        if len(st.session_state.terapie) == 0:
+            st.write("Nessun farmaco attivo.")
+        else:
+            for t in reversed(st.session_state.terapie[-3:]): # Mostra solo le ultime 3
+                st.markdown(f"🔹 **{t.get('Farmaco', 'Farmaco')}** (dal {t.get('Data_Inizio', 'N/D')})")
+
+    with col2:
+        st.subheader("📜 Ultime Visite")
+        if len(st.session_state.prestazioni) == 0:
+            st.write("Nessuna visita recente.")
+        else:
+            for p in reversed(st.session_state.prestazioni[-3:]): # Mostra solo le ultime 3
+                st.markdown(f"🔸 **{p.get('Data', 'N/D')}** - {p.get('Prestazione', 'Visita')}")
 
     st.divider()
-
-    st.subheader("📜 Cartella Clinica & Visite Veterinarie")
-    if len(st.session_state.prestazioni) == 0:
-        st.info("💡 Nessuna visita in archivio.")
-    else:
-        for item in reversed(st.session_state.prestazioni):
-            with st.expander(f"🔍 {item.get('Data', 'N/D')} - {item.get('Prestazione', 'Visita')}"):
-                st.write(f"**🏥 Clinica / Vet:** {item.get('Veterinario', 'N/D')}")
-                st.write(f"**📋 Note Cliniche:** {item.get('Dettagli', '')}")
-
-    st.divider()
-
-    # --- ZONA VETERINARIO: REGISTRA DECESSO ---
     with st.expander("⚠️ Area Riservata Medico Veterinario (Registra Decesso)"):
         st.warning("L'azione sottostante sposterà permanentemente la cartella clinica di questo animale nella sezione 'I nostri angeli a 4 zampe'.")
         with st.form("form_decesso"):
@@ -490,61 +472,93 @@ elif st.session_state.step_corrente == 'dashboard':
                 if pin_vet_dec == "1234":
                     nome_file_cert = cert_morte.name if cert_morte else "Nessun file"
                     registra_decesso_db(st.session_state.dati_animale['id'], data_dec.strftime("%d/%m/%Y"), nome_file_cert)
-                    
                     st.success("Operazione confermata. Cartella archiviata.")
                     aggiorna_sessione_animali(st.session_state.user_email)
-                    
                     st.session_state.step_corrente = 'angeli'
                     st.rerun()
                 else:
                     st.error("❌ PIN Veterinario errato.")
 
 # ---------------------------------------------------------
-# STEP 4A: INSERIMENTO PRESTAZIONE
+# PAGINA: GESTIONE VISITE
 # ---------------------------------------------------------
-elif st.session_state.step_corrente == 'aggiungi_prestazione':
-    if st.button("⬅️ Torna alla Dashboard"):
-        st.session_state.step_corrente = 'dashboard'
-        st.rerun()
-    st.title(f"🩺 Registra Visita per {st.session_state.dati_animale['nome']}")
-    tipo_prestazione = st.selectbox("Tipo di Prestazione", ["Visita Generale", "Vaccino", "Altro"])
-    data_esecuzione = st.date_input("Data Visita")
-    nome_vet = st.text_input("Nome Clinica o Veterinario")
-    dettagli = st.text_area("📝 Dettagli")
-    if st.button("Salva Prestazione"):
-        nuova_prestazione = {"Data": data_esecuzione.strftime("%d/%m/%Y"), "Prestazione": tipo_prestazione, "Veterinario": nome_vet, "Dettagli": dettagli}
-        st.session_state.prestazioni.append(nuova_prestazione)
-        salva_sanitari_db(st.session_state.dati_animale['id'], st.session_state.prestazioni, st.session_state.terapie)
-        st.session_state.step_corrente = 'dashboard'
-        st.rerun()
+elif st.session_state.step_corrente == 'pagina_visite':
+    st.title(f"🩺 Cartella Clinica: {st.session_state.dati_animale['nome']}")
+    
+    with st.expander("➕ Registra Nuova Visita", expanded=False):
+        with st.form("form_visita"):
+            tipo_prestazione = st.selectbox("Tipo di Prestazione", ["Visita Generale", "Vaccino", "Intervento", "Altro"])
+            data_esecuzione = st.date_input("Data Visita")
+            nome_vet = st.text_input("Nome Clinica o Veterinario")
+            dettagli = st.text_area("📝 Note e Dettagli Medici")
+            if st.form_submit_button("Salva Prestazione"):
+                nuova_prestazione = {"Data": data_esecuzione.strftime("%d/%m/%Y"), "Prestazione": tipo_prestazione, "Veterinario": nome_vet, "Dettagli": dettagli}
+                st.session_state.prestazioni.append(nuova_prestazione)
+                salva_sanitari_db(st.session_state.dati_animale['id'], st.session_state.prestazioni, st.session_state.terapie)
+                st.success("Visita salvata con successo!")
+                st.rerun()
+
+    st.divider()
+    st.subheader("Storico Visite e Prestazioni")
+    if len(st.session_state.prestazioni) == 0:
+        st.info("💡 Nessuna visita in archivio.")
+    else:
+        for item in reversed(st.session_state.prestazioni):
+            with st.container(border=True):
+                st.write(f"### {item.get('Data', 'N/D')} - {item.get('Prestazione', 'Visita')}")
+                st.write(f"**🏥 Clinica / Vet:** {item.get('Veterinario', 'N/D')}")
+                st.write(f"**📋 Note Cliniche:** {item.get('Dettagli', '')}")
 
 # ---------------------------------------------------------
-# STEP 4B: INSERIMENTO TERAPIA
+# PAGINA: GESTIONE TERAPIE
 # ---------------------------------------------------------
-elif st.session_state.step_corrente == 'aggiungi_terapia':
-    if st.button("⬅️ Torna alla Dashboard"):
-        st.session_state.step_corrente = 'dashboard'
-        st.rerun()
-    st.title("💊 Registra Terapia")
-    farmaco = st.text_input("Farmaco")
-    data_in = st.date_input("Data Inizio")
-    if st.button("Salva Terapia"):
-        st.session_state.terapie.append({"Farmaco": farmaco, "Data_Inizio": data_in.strftime("%d/%m/%Y")})
-        salva_sanitari_db(st.session_state.dati_animale['id'], st.session_state.prestazioni, st.session_state.terapie)
-        st.session_state.step_corrente = 'dashboard'
-        st.rerun()
+elif st.session_state.step_corrente == 'pagina_terapie':
+    st.title(f"💊 Terapie: {st.session_state.dati_animale['nome']}")
+    
+    with st.expander("➕ Aggiungi Nuova Terapia", expanded=False):
+        with st.form("form_terapia"):
+            farmaco = st.text_input("Nome del Farmaco")
+            data_in = st.date_input("Data di Inizio Terapia")
+            if st.form_submit_button("Salva Terapia"):
+                st.session_state.terapie.append({"Farmaco": farmaco, "Data_Inizio": data_in.strftime("%d/%m/%Y")})
+                salva_sanitari_db(st.session_state.dati_animale['id'], st.session_state.prestazioni, st.session_state.terapie)
+                st.success("Terapia salvata con successo!")
+                st.rerun()
+
+    st.divider()
+    st.subheader("Terapie in corso / Storico")
+    if len(st.session_state.terapie) == 0:
+        st.info("Nessun farmaco o terapia registrata.")
+    else:
+        for t in reversed(st.session_state.terapie):
+            with st.container(border=True):
+                st.write(f"### 💊 {t.get('Farmaco', 'Farmaco')}")
+                st.write(f"**Data Inizio:** {t.get('Data_Inizio', 'N/D')}")
 
 # ---------------------------------------------------------
-# STEP 4C: INSERIMENTO FATTURA
+# PAGINA: GESTIONE FATTURE
 # ---------------------------------------------------------
-elif st.session_state.step_corrente == 'aggiungi_fattura':
-    if st.button("⬅️ Torna alla Dashboard"):
-        st.session_state.step_corrente = 'dashboard'
-        st.rerun()
-    st.title("🧾 Registra Fattura")
-    num_fattura = st.text_input("N° Fattura")
-    importo = st.number_input("Importo (€)", min_value=0.0)
-    if st.button("Salva Fattura") and num_fattura:
-        salva_fattura_db(st.session_state.dati_animale['id'], num_fattura, "Oggi", "Vet", "Desc", importo, "")
-        st.session_state.step_corrente = 'dashboard'
-        st.rerun()
+elif st.session_state.step_corrente == 'pagina_fatture':
+    st.title(f"🧾 Fatture e Spese: {st.session_state.dati_animale['nome']}")
+    
+    with st.expander("➕ Carica Nuova Fattura", expanded=False):
+        with st.form("form_fattura"):
+            num_fattura = st.text_input("N° Fattura")
+            data_fattura = st.date_input("Data Fattura")
+            emittente = st.text_input("Emittente (es. Clinica Veterinaria)")
+            importo = st.number_input("Importo (€)", min_value=0.0)
+            if st.form_submit_button("Salva Fattura") and num_fattura:
+                salva_fattura_db(st.session_state.dati_animale['id'], num_fattura, data_fattura.strftime("%d/%m/%Y"), emittente, "", importo, "")
+                st.success("Fattura salvata con successo!")
+                st.rerun()
+
+    st.divider()
+    st.subheader("Storico Fatture")
+    fatture = carica_fatture_db(st.session_state.dati_animale['id'])
+    if not fatture:
+        st.info("Nessuna fattura registrata.")
+    else:
+        for f in fatture:
+            with st.container(border=True):
+                st.write(f"**Fattura N° {f['numero']}** del {f['data']}")
+                st.write(f"**Emittente:** {f['emittente']} | **Importo:** {f['importo']:.2f} €")
