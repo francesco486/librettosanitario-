@@ -253,20 +253,38 @@ st.markdown("""
         background-color: #3E6352 !important;
     }
 
-    /* EXPANDER */
+    /* FIX PULITO EXPANDER (RISOLVE SOVRAPPOSIZIONE TESTO E FRECCIA) */
     div[data-testid="stExpander"] {
         background-color: #ffffff !important;
         border: 1.5px solid #cbd5e1 !important;
         border-radius: 14px !important;
         margin-bottom: 12px !important;
+        overflow: hidden !important;
+    }
+
+    div[data-testid="stExpander"] summary {
+        padding: 12px 16px !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 10px !important;
     }
 
     div[data-testid="stExpander"] summary p {
         color: #1E3A2B !important;
+        -webkit-text-fill-color: #1E3A2B !important;
         font-weight: 700 !important;
+        font-size: 0.95rem !important;
+        margin: 0 !important;
     }
 
-    /* FIX DEFINITIVO: Forza il colore NERO per qualsiasi testo dentro il Selectbox della Sidebar */
+    /* Forza colore scuro dell'icona freccia senza nasconderla */
+    div[data-testid="stExpander"] summary svg {
+        fill: #1E3A2B !important;
+        color: #1E3A2B !important;
+        min-width: 18px !important;
+    }
+
+    /* FIX DEFINITIVO SELECTBOX SIDEBAR */
     section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div[data-baseweb="select"] span,
     section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div[data-baseweb="select"] div,
     section[data-testid="stSidebar"] div[data-testid="stSelectbox"] * {
@@ -275,7 +293,6 @@ st.markdown("""
         font-weight: 700 !important;
     }
     
-    /* Etichetta del menu a tendina (se visibile) del colore giusto */
     section[data-testid="stSidebar"] div[data-testid="stSelectbox"] label p {
         color: #D2E3D8 !important;
         -webkit-text-fill-color: #D2E3D8 !important;
