@@ -56,12 +56,6 @@ st.markdown("""
         color: #FFFFFF !important;
     }
 
-    /* FIX: Forza il colore NERO per il testo dell'animale selezionato nel Selectbox */
-    section[data-testid="stSidebar"] div[data-baseweb="select"] * {
-        color: #0f172a !important;
-        -webkit-text-fill-color: #0f172a !important;
-    }
-
     /* ----------------------------------------------------------------- */
     /* DESKTOP: BLOCCO SIDEBAR PERMANENTE (NASCONDE PULSANTE DI CHIUSURA) */
     /* ----------------------------------------------------------------- */
@@ -270,6 +264,21 @@ st.markdown("""
     div[data-testid="stExpander"] summary p {
         color: #1E3A2B !important;
         font-weight: 700 !important;
+    }
+
+    /* FIX DEFINITIVO: Forza il colore NERO per qualsiasi testo dentro il Selectbox della Sidebar */
+    section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div[data-baseweb="select"] span,
+    section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div[data-baseweb="select"] div,
+    section[data-testid="stSidebar"] div[data-testid="stSelectbox"] * {
+        color: #0f172a !important;
+        -webkit-text-fill-color: #0f172a !important;
+        font-weight: 700 !important;
+    }
+    
+    /* Etichetta del menu a tendina (se visibile) del colore giusto */
+    section[data-testid="stSidebar"] div[data-testid="stSelectbox"] label p {
+        color: #D2E3D8 !important;
+        -webkit-text-fill-color: #D2E3D8 !important;
     }
     </style>
 """, unsafe_allow_html=True)
