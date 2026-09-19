@@ -45,13 +45,12 @@ def init_db():
         )
     ''')
     
-    # Aggiornamento automatico per database esistenti
     try:
         c.execute("ALTER TABLE animali ADD COLUMN deceduto INTEGER DEFAULT 0")
         c.execute("ALTER TABLE animali ADD COLUMN data_decesso TEXT")
         c.execute("ALTER TABLE animali ADD COLUMN certificato_morte TEXT")
     except sqlite3.OperationalError:
-        pass # Le colonne esistono già
+        pass
         
     c.execute('''
         CREATE TABLE IF NOT EXISTS dati_sanitari (
@@ -116,6 +115,13 @@ def registra_decesso_db(pet_id, data_decesso, certificato):
     c = conn.cursor()
     c.execute("UPDATE animali SET deceduto = 1, data_decesso = ?, certificato_morte = ? WHERE id = ?",
               (data_decesso, certificato, pet_id))
+    conn.commit()
+    conn.close()
+
+def annulla_decesso_db(pet_id):
+    conn = sqlite3.connect('pethealth.db')
+    c = conn.cursor()
+    c.execute("UPDATE animali SET deceduto = 0, data_decesso = NULL, certificato_morte = NULL WHERE id = ?", (pet_id,))
     conn.commit()
     conn.close()
 
@@ -346,7 +352,7 @@ if st.session_state.step_corrente == 'registrazione_animale':
             st.rerun()
 
 # ---------------------------------------------------------
-# NUOVA SEZIONE: I NOSTRI ANGELI A 4 ZAMPE 🕊️
+# SEZIONE: I NOSTRI ANGELI A 4 ZAMPE 🕊️
 # ---------------------------------------------------------
 elif st.session_state.step_corrente == 'angeli':
     st.title("I nostri angeli a 4 zampe 🕊️")
@@ -398,6 +404,32 @@ elif st.session_state.step_corrente == 'angeli':
                         st.markdown(f"**Fattura N° {f['numero']} del {f['data']} - {f['importo']:.2f} €**")
                         st.caption(f"Emittente: {f['emittente']} | Allegato: {f['file']}")
                         st.markdown("---")
+                
+                # --- ANNULLA DECESSO (AREA VETERINARIO) ---
+                st.divider()
+                with st.popover(f"🔄 Annulla registrazione decesso di {angelo['nome']}"):
+                    st.warning("Usa questa funzione solo se la segnalazione di decesso è stata effettuata per errore.")
+                    with st.form(f"form_annulla_{angelo['id']}"):
+                        pin_undo = st.text_input("Inserisci PIN Veterinario (es. 1234)", type="password")
+                        btn_undo = st.form_submit_button("Annulla Decesso e Ripristina Profilo")
+                        
+                        if btn_undo:
+                            if pin_undo == "1234":
+                                annulla_decesso_db(angelo['id'])
+                                st.success(f"Profilo di {angelo['nome']} ripristinato con successo tra gli animali attivi!")
+                                
+                                # Aggiorna le liste
+                                aggiorna_sessione_animali(st.session_state.user_email)
+                                
+                                # Imposta l'animale come selezionato nella dashboard
+                                st.session_state.dati_animale = angelo
+                                st.session_state.dati_animale['deceduto'] = 0
+                                st.session_state.prestazioni, st.session_state.terapie = carica_dati_sanitari_pet_db(angelo['id'])
+                                
+                                st.session_state.step_corrente = 'dashboard'
+                                st.rerun()
+                            else:
+                                st.error("❌ PIN Veterinario errato.")
 
 # ---------------------------------------------------------
 # STEP 3: DASHBOARD PRINCIPALE
