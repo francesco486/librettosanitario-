@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS Custom mirato con Fix per Pulsante Riapertura Sidebar
+# CSS Custom mirato con Pulsante Riapertura Sidebar NERO BEN VISIBILE
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
@@ -31,7 +31,7 @@ st.markdown("""
         line-height: 1.45 !important;
     }
 
-    /* Nascondi solo MainMenu e Footer (NON l'header intero, altrimenti sparisce la freccia della Sidebar) */
+    /* Nascondi solo MainMenu e Footer */
     #MainMenu, footer {
         visibility: hidden;
     }
@@ -42,26 +42,37 @@ st.markdown("""
     }
 
     /* ----------------------------------------------------- */
-    /* FIX RIPRISTINO E STILE PULSANTE RIAPERTURA SIDEBAR    */
+    /* FIX STILE PULSANTE RIAPERTURA SIDEBAR (COLORE NERO)   */
     /* ----------------------------------------------------- */
     [data-testid="stSidebarCollapseButton"], 
     [data-testid="stSidebarToggle"], 
     [data-testid="collapsedControl"] {
         visibility: visible !important;
-        background-color: #FFFFFF !important;
-        border: 1.5px solid #1E3A2B !important;
-        border-radius: 8px !important;
-        color: #1E3A2B !important;
-        margin-top: 8px !important;
-        margin-left: 8px !important;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.1) !important;
+        background-color: #000000 !important;
+        border: 2px solid #000000 !important;
+        border-radius: 10px !important;
+        color: #FFFFFF !important;
+        margin-top: 10px !important;
+        margin-left: 10px !important;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25) !important;
+        transition: all 0.2s ease-in-out !important;
     }
 
+    /* Icona Freccia / Menu all'interno del tasto nero */
     [data-testid="stSidebarCollapseButton"] svg, 
     [data-testid="stSidebarToggle"] svg, 
     [data-testid="collapsedControl"] svg {
-        fill: #1E3A2B !important;
-        color: #1E3A2B !important;
+        fill: #FFFFFF !important;
+        color: #FFFFFF !important;
+    }
+
+    /* Effetto Hover (Passaggio del mouse sul tasto nero) */
+    [data-testid="stSidebarCollapseButton"]:hover, 
+    [data-testid="stSidebarToggle"]:hover, 
+    [data-testid="collapsedControl"]:hover {
+        background-color: #222222 !important;
+        border-color: #222222 !important;
+        transform: scale(1.05);
     }
 
     /* Sidebar Scuro Verde Foresta */
