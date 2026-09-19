@@ -4,76 +4,110 @@ import sqlite3
 import json
 
 # ---------------------------------------------------------
-# 1. CONFIGURAZIONE PAGINA & STILE PREMIUM AD ALTO CONTRASTO
+# 1. CONFIGURAZIONE PAGINA & STILE NICEPAGE WELLNESS & CARE
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="PetHealth - Libretto Digitale", 
+    page_title="PetHealth - Wellness & Care", 
     page_icon="🐾", 
-    layout="centered"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# CSS Custom ad altissima leggibilità
+# CSS Custom ad altissima visibilità e contrasto (Ispirato a Nicepage Wellness/Pilates Template)
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
 
-    /* Reset Globale e Tipografia */
+    /* Reset e Font Principale */
     html, body, [class*="css"], div, p, span {
         font-family: 'Plus Jakarta Sans', sans-serif !important;
         color: #1e293b;
     }
 
-    /* Nascondi header Streamlit standard */
+    /* Nascondi Elementi Standard Streamlit */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
 
-    /* Background Principale */
+    /* Sfondo Principale dell'Applicazione (Sabbia / Caldo morbido) */
     .stApp {
-        background-color: #f8fafc !important;
+        background-color: #F8F7F2 !important;
     }
 
-    /* Gestione Titoli */
+    /* Sidebar Scuro Verde Foresta (Luxury / Wellness) */
+    section[data-testid="stSidebar"] {
+        background-color: #1E3A2B !important;
+        border-right: 1px solid #2D4A3E !important;
+    }
+
+    section[data-testid="stSidebar"] p, 
+    section[data-testid="stSidebar"] h1, 
+    section[data-testid="stSidebar"] h2, 
+    section[data-testid="stSidebar"] h3, 
+    section[data-testid="stSidebar"] span,
+    section[data-testid="stSidebar"] label {
+        color: #FFFFFF !important;
+    }
+
+    /* Titoli Generali */
     h1, h2, h3, h4, h5, h6 {
-        font-family: 'Outfit', sans-serif !important;
-        color: #0f172a !important;
+        color: #1E3A2B !important;
         font-weight: 700 !important;
     }
 
-    /* HERO BANNER (Intestazione Principale) */
+    /* HERO BANNER (Intestazione Principale Verde Foresta) */
     .hero-card {
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-        padding: 30px;
+        background: linear-gradient(135deg, #1E3A2B 0%, #2D4A3E 100%);
+        padding: 32px 28px;
         border-radius: 20px;
-        box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.2);
+        color: #FFFFFF !important;
+        box-shadow: 0 10px 25px rgba(30, 58, 43, 0.15);
         margin-bottom: 25px;
-        border: 1px solid #334155;
+        border: 1px solid #2D4A3E;
     }
 
     .hero-title {
-        color: #ffffff !important;
+        color: #FFFFFF !important;
         font-size: 2.2rem !important;
         font-weight: 800 !important;
         margin: 0 0 8px 0 !important;
     }
 
     .hero-subtitle {
-        color: #94a3b8 !important;
-        font-size: 0.95rem !important;
+        color: #D2E3D8 !important;
+        font-size: 0.98rem !important;
         margin: 0 !important;
+        font-weight: 400 !important;
     }
 
-    /* CARD CLINICHE (Contenitori) */
-    .custom-card {
-        background-color: #ffffff !important;
+    /* WELLNESS CARD (Contenitori Bianchi) */
+    .wellness-card {
+        background-color: #FFFFFF !important;
         border-radius: 16px;
         padding: 22px;
-        border: 1px solid #cbd5e1 !important;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        border: 1px solid #E2E8E4 !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.03);
         margin-bottom: 18px;
     }
 
-    /* BANNER ANGELI */
+    /* BADGES / TAGS NICEPAGE */
+    .card-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        background-color: #E8F0EC;
+        color: #1E3A2B;
+        font-weight: 700;
+        font-size: 0.78rem;
+        border-radius: 20px;
+        margin-bottom: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .badge-rose { background-color: #fce7f3; color: #9d174d; }
+    .badge-blue { background-color: #dbeafe; color: #1e40af; }
+    .badge-purple { background-color: #f3e8ff; color: #6b21a8; }
+
+    /* BANNER SPAZIO ANGELI */
     .angeli-text {
         font-size: 1.05rem;
         font-style: italic;
@@ -87,20 +121,16 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(219, 39, 119, 0.08);
     }
 
-    /* --- RISOLUZIONE PROBLEMA TESTO INVISIBILE NEI FORM/INPUT --- */
-    /* Etichette dei Campi */
+    /* --- RISOLUZIONE GARANTITA DEI TESTI INVISIBILI (FORM & INPUT) --- */
     label, div[data-testid="stWidgetLabel"] p {
-        color: #0f172a !important;
+        color: #1E3A2B !important;
         font-weight: 700 !important;
         font-size: 0.9rem !important;
     }
 
-    /* Input di Testo, TextArea, Selectbox, Number Input */
     input, textarea, select {
         color: #0f172a !important;
         background-color: #ffffff !important;
-        border: 1px solid #94a3b8 !important;
-        border-radius: 10px !important;
     }
 
     .stTextInput > div > div > input, 
@@ -117,11 +147,11 @@ st.markdown("""
 
     .stTextInput > div > div > input:focus, 
     .stTextArea textarea:focus {
-        border-color: #2563eb !important;
-        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15) !important;
+        border-color: #1E3A2B !important;
+        box-shadow: 0 0 0 3px rgba(30, 58, 43, 0.15) !important;
     }
 
-    /* Dropdown / Menu a Tendenza Opzioni */
+    /* Menu a tendina Opzioni e Dropdown */
     div[data-baseweb="popover"] *, div[data-baseweb="menu"] * {
         color: #0f172a !important;
         background-color: #ffffff !important;
@@ -136,89 +166,71 @@ st.markdown("""
     }
 
     div[data-testid="stExpander"] summary p {
-        color: #0f172a !important;
+        color: #1E3A2B !important;
         font-weight: 700 !important;
         font-size: 1rem !important;
     }
 
-    /* PULSANTI GENERATION */
+    /* PULSANTI STILE NICEPAGE (Pill Buttons) */
     .stButton > button {
-        border-radius: 12px !important;
+        border-radius: 25px !important;
         font-weight: 700 !important;
         font-size: 0.92rem !important;
-        padding: 0.6rem 1.2rem !important;
-        border: 1px solid #cbd5e1 !important;
-        background-color: #ffffff !important;
-        color: #0f172a !important;
-        transition: all 0.2s ease !important;
+        padding: 0.5rem 1.4rem !important;
+        border: 1px solid #1E3A2B !important;
+        background-color: #1E3A2B !important;
+        color: #ffffff !important;
+        transition: all 0.25s ease !important;
+        box-shadow: 0 4px 12px rgba(30, 58, 43, 0.15) !important;
     }
 
     .stButton > button:hover {
-        border-color: #2563eb !important;
-        color: #2563eb !important;
-        background-color: #eff6ff !important;
-    }
-
-    /* Pulsante submit dei Form (Pulsante Primario Azione) */
-    div[data-testid="stForm"] .stButton > button {
-        background-color: #2563eb !important;
+        background-color: #2D4A3E !important;
         color: #ffffff !important;
-        border: none !important;
-        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25) !important;
+        border-color: #2D4A3E !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 16px rgba(30, 58, 43, 0.25) !important;
     }
 
-    div[data-testid="stForm"] .stButton > button:hover {
-        background-color: #1d4ed8 !important;
-        color: #ffffff !important;
-        box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35) !important;
-    }
-
-    /* BADGES & TAGS */
-    .badge {
-        display: inline-block;
-        padding: 4px 12px;
-        border-radius: 20px;
-        font-size: 0.78rem;
-        font-weight: 800;
-        letter-spacing: 0.03em;
-        text-transform: uppercase;
-        margin-bottom: 10px;
-    }
-    .badge-blue { background-color: #dbeafe; color: #1e40af; }
-    .badge-green { background-color: #d1fae5; color: #065f46; }
-    .badge-purple { background-color: #f3e8ff; color: #6b21a8; }
-    .badge-rose { background-color: #ffe4e6; color: #9f1239; }
-
-    /* SIDEBAR LUXURY DARK */
-    section[data-testid="stSidebar"] {
-        background-color: #0f172a !important;
-        border-right: 1px solid #1e293b !important;
-    }
-
-    section[data-testid="stSidebar"] p, 
-    section[data-testid="stSidebar"] h2, 
-    section[data-testid="stSidebar"] span,
-    section[data-testid="stSidebar"] label {
-        color: #ffffff !important;
-    }
-
+    /* Pulsanti Sidebar */
     section[data-testid="stSidebar"] .stButton > button {
-        background-color: #1e293b !important;
+        background-color: #2D4A3E !important;
         color: #ffffff !important;
-        border: 1px solid #334155 !important;
+        border: 1px solid #3E6352 !important;
         width: 100%;
+        border-radius: 12px !important;
+        box-shadow: none !important;
     }
 
     section[data-testid="stSidebar"] .stButton > button:hover {
-        background-color: #2563eb !important;
+        background-color: #3E6352 !important;
+        border-color: #4E7864 !important;
+    }
+
+    /* TABS PERSONALIZZATE STILE NICEPAGE */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        height: 42px;
+        background-color: #ffffff;
+        border-radius: 20px;
+        padding: 0px 20px;
+        color: #1E3A2B;
+        border: 1px solid #cbd5e1;
+        font-weight: 600;
+    }
+
+    .stTabs [aria-selected="true"] {
+        background-color: #1E3A2B !important;
         color: #ffffff !important;
-        border-color: #2563eb !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# 2. GESTIONE DATABASE SQLITE (MEMORIA PERMANENTE)
+# 2. GESTIONE DATABASE SQLITE
 # ---------------------------------------------------------
 def init_db():
     conn = sqlite3.connect('pethealth.db')
@@ -278,7 +290,7 @@ def init_db():
 
 init_db()
 
-# --- Funzioni DB ---
+# --- FUNZIONI DATABASE ---
 def registra_utente_db(nome, email, password):
     conn = sqlite3.connect('pethealth.db')
     c = conn.cursor()
@@ -384,7 +396,7 @@ def salva_fattura_db(pet_id, num, data, emittente, desc, importo, file_name):
     conn.close()
 
 # ---------------------------------------------------------
-# 3. SESSION STATE INITIALIZATION
+# 3. GESTIONE STATO DELLA SESSIONE (SESSION STATE)
 # ---------------------------------------------------------
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
@@ -411,17 +423,17 @@ def aggiorna_sessione_animali(email):
     st.session_state.lista_animali_angeli = angeli
 
 # ---------------------------------------------------------
-# STEP 1: SCHERMATA LOGIN / REGISTRAZIONE
+# STEP 1: LOGIN E REGISTRAZIONE UTENTE
 # ---------------------------------------------------------
 if not st.session_state.logged_in:
     st.markdown("""
         <div style="text-align: center; padding: 2rem 0 1rem 0;">
-            <div style="display: inline-block; padding: 6px 16px; background-color: #dbeafe; border-radius: 50px; margin-bottom: 12px; border: 1px solid #bfdbfe;">
-                <span style="color: #1e40af; font-weight: 800; font-size: 0.8rem; letter-spacing: 0.05em;">LIBRETTO VETERINARIO DIGITALE</span>
+            <div style="display: inline-block; padding: 6px 16px; background-color: #E8F0EC; border-radius: 50px; margin-bottom: 12px; border: 1px solid #d1e2d8;">
+                <span style="color: #1E3A2B; font-weight: 800; font-size: 0.8rem; letter-spacing: 0.05em;">WELLNESS & CARE VETERINARIO</span>
             </div>
-            <h1 style="font-size: 2.6rem; font-weight: 800; color: #0f172a; margin-bottom: 6px;">PetHealth 🐾</h1>
+            <h1 style="font-size: 2.6rem; font-weight: 800; color: #1E3A2B; margin-bottom: 6px;">PetHealth 🐾</h1>
             <p style="color: #475569; font-size: 1rem; max-width: 480px; margin: 0 auto; font-weight: 500;">
-                Accedi al tuo profilo per gestire in modo semplice, sicuro ed elegante la salute dei tuoi animali.
+                Accedi al tuo centro salute digitale per gestire in modo semplice, curato ed elegante la vita dei tuoi animali.
             </p>
         </div>
     """, unsafe_allow_html=True)
@@ -474,20 +486,20 @@ if not st.session_state.logged_in:
                     st.warning("⚠️ Compila tutti i campi.")
 
 # ---------------------------------------------------------
-# MENU LATERALE (SIDEBAR DARK LUXURY)
+# MENU LATERALE (SIDEBAR DARK VERDE FOREST)
 # ---------------------------------------------------------
 if st.session_state.logged_in and st.session_state.step_corrente != 'registrazione_animale':
     with st.sidebar:
         st.markdown(f"""
             <div style="padding: 10px 0 15px 0;">
-                <p style="font-size: 0.78rem; color: #94a3b8 !weight: 700; margin:0;">BENTORNATO/A</p>
+                <p style="font-size: 0.78rem; color: #D2E3D8 !important; font-weight: 700; margin:0;">BENTORNATO/A</p>
                 <h2 style="font-size: 1.3rem; color: #ffffff !important; margin:0;">{st.session_state.user_nome}</h2>
             </div>
         """, unsafe_allow_html=True)
         st.divider()
         
         if st.session_state.lista_animali_vivi:
-            st.markdown("<p style='font-size: 0.8rem; font-weight: 800; color: #94a3b8 !important;'>LIBRETTO ATTIVO</p>", unsafe_allow_html=True)
+            st.markdown("<p style='font-size: 0.8rem; font-weight: 800; color: #D2E3D8 !important;'>LIBRETTO ATTIVO</p>", unsafe_allow_html=True)
             pet_dict = {p['nome']: p for p in st.session_state.lista_animali_vivi}
             lista_nomi = list(pet_dict.keys())
             
@@ -508,7 +520,7 @@ if st.session_state.logged_in and st.session_state.step_corrente != 'registrazio
             # --- MENU DI NAVIGAZIONE ---
             if st.session_state.step_corrente != 'angeli':
                 st.divider()
-                st.markdown("<p style='font-size: 0.8rem; font-weight: 800; color: #94a3b8 !important;'>SEZIONI DISPONIBILI</p>", unsafe_allow_html=True)
+                st.markdown("<p style='font-size: 0.8rem; font-weight: 800; color: #D2E3D8 !important;'>SEZIONI</p>", unsafe_allow_html=True)
                 if st.button("🏠 Riepilogo (Dashboard)", use_container_width=True):
                     st.session_state.step_corrente = 'dashboard'
                     st.rerun()
@@ -559,9 +571,9 @@ if st.session_state.step_corrente == 'registrazione_animale':
             
     st.markdown("""
         <div class="hero-card">
-            <span class="badge badge-green">Nuovo Profilo</span>
+            <span class="card-badge">Nuovo Profilo</span>
             <h1 class="hero-title">Aggiungi un Animale 🐾</h1>
-            <p class="hero-subtitle">Inserisci i dati principali per generare il libretto sanitario digitale</p>
+            <p class="hero-subtitle">Inserisci i dati per attivare la nuova cartella clinica</p>
         </div>
     """, unsafe_allow_html=True)
     
@@ -570,7 +582,7 @@ if st.session_state.step_corrente == 'registrazione_animale':
         specie = st.selectbox("Specie", ["Cane 🐶", "Gatto 🐱", "Coniglio 🐰", "Altro"])
         razza = st.text_input("Razza")
         microchip = st.text_input("Numero Microchip")
-        submit_pet = st.form_submit_button("Crea Libretto Digitale ➔", use_container_width=True)
+        submit_pet = st.form_submit_button("Crea Cartella Clinica ➔", use_container_width=True)
         
         if submit_pet and nome_pet:
             pet_id = salva_animale_db(st.session_state.user_email, nome_pet, specie, razza, microchip)
@@ -667,7 +679,7 @@ elif st.session_state.step_corrente == 'angeli':
 elif st.session_state.step_corrente == 'dashboard':
     st.markdown(f"""
         <div class="hero-card">
-            <span class="badge badge-green">Profilo Sanitario Attivo</span>
+            <span class="card-badge">Profilo Sanitario Attivo</span>
             <h1 class="hero-title">{st.session_state.dati_animale.get('nome', 'Animale')}</h1>
             <p class="hero-subtitle">
                 Specie: <strong style="color:#ffffff;">{st.session_state.dati_animale.get('specie')}</strong> &bull; 
@@ -680,9 +692,9 @@ elif st.session_state.step_corrente == 'dashboard':
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("""
-            <div class="custom-card">
-                <span class="badge badge-purple">Terapie Attive</span>
-                <h3 style="margin-top: 5px; margin-bottom: 12px; font-size: 1.2rem;">💊 In Somministrazione</h3>
+            <div class="wellness-card">
+                <span class="card-badge badge-purple">Terapie Attive</span>
+                <h3 style="margin-top: 5px; margin-bottom: 12px; font-size: 1.2rem; color:#1E3A2B;">💊 In Somministrazione</h3>
         """, unsafe_allow_html=True)
         
         if len(st.session_state.terapie) == 0:
@@ -695,9 +707,9 @@ elif st.session_state.step_corrente == 'dashboard':
 
     with col2:
         st.markdown("""
-            <div class="custom-card">
-                <span class="badge badge-blue">Storico Recente</span>
-                <h3 style="margin-top: 5px; margin-bottom: 12px; font-size: 1.2rem;">📜 Ultime Visite</h3>
+            <div class="wellness-card">
+                <span class="card-badge badge-blue">Storico Recente</span>
+                <h3 style="margin-top: 5px; margin-bottom: 12px; font-size: 1.2rem; color:#1E3A2B;">📜 Ultime Visite</h3>
         """, unsafe_allow_html=True)
         
         if len(st.session_state.prestazioni) == 0:
@@ -734,7 +746,7 @@ elif st.session_state.step_corrente == 'dashboard':
 elif st.session_state.step_corrente == 'pagina_visite':
     st.markdown(f"""
         <div class="hero-card">
-            <span class="badge badge-blue">Gestione Clinica</span>
+            <span class="card-badge badge-blue">Gestione Clinica</span>
             <h1 class="hero-title">Visite & Prestazioni</h1>
             <p class="hero-subtitle">Paziente: <strong style="color:#ffffff;">{st.session_state.dati_animale['nome']}</strong> &bull; Registra referti, diagnosi e controlli</p>
         </div>
@@ -761,7 +773,7 @@ elif st.session_state.step_corrente == 'pagina_visite':
     else:
         for item in reversed(st.session_state.prestazioni):
             with st.container(border=True):
-                st.markdown(f"<h3 style='margin-bottom:6px;'>🩺 {item.get('Prestazione', 'Visita')} &bull; <span style='color: #2563eb;'>{item.get('Data', 'N/D')}</span></h3>", unsafe_allow_html=True)
+                st.markdown(f"<h3 style='margin-bottom:6px; color:#1E3A2B;'>🩺 {item.get('Prestazione', 'Visita')} &bull; <span style='color: #2563eb;'>{item.get('Data', 'N/D')}</span></h3>", unsafe_allow_html=True)
                 st.markdown(f"**🏥 Clinica / Medico:** <span style='color:#0f172a;'>{item.get('Veterinario', 'N/D')}</span>", unsafe_allow_html=True)
                 if item.get('Dettagli'):
                     st.markdown(f"**📋 Dettagli Medici:** <span style='color:#334155;'>{item.get('Dettagli')}</span>", unsafe_allow_html=True)
@@ -772,7 +784,7 @@ elif st.session_state.step_corrente == 'pagina_visite':
 elif st.session_state.step_corrente == 'pagina_terapie':
     st.markdown(f"""
         <div class="hero-card">
-            <span class="badge badge-purple">Farmacologia</span>
+            <span class="card-badge badge-purple">Farmacologia</span>
             <h1 class="hero-title">Gestione Terapie</h1>
             <p class="hero-subtitle">Paziente: <strong style="color:#ffffff;">{st.session_state.dati_animale['nome']}</strong> &bull; Registra farmaci, dosaggi e trattamenti</p>
         </div>
@@ -796,7 +808,7 @@ elif st.session_state.step_corrente == 'pagina_terapie':
     else:
         for t in reversed(st.session_state.terapie):
             with st.container(border=True):
-                st.markdown(f"<h3 style='margin-bottom:6px;'>💊 {t.get('Farmaco', 'Farmaco')}</h3>", unsafe_allow_html=True)
+                st.markdown(f"<h3 style='margin-bottom:6px; color:#1E3A2B;'>💊 {t.get('Farmaco', 'Farmaco')}</h3>", unsafe_allow_html=True)
                 st.markdown(f"**🗓️ Data Inizio Somministrazione:** <span style='color:#0f172a;'>{t.get('Data_Inizio', 'N/D')}</span>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
@@ -805,7 +817,7 @@ elif st.session_state.step_corrente == 'pagina_terapie':
 elif st.session_state.step_corrente == 'pagina_fatture':
     st.markdown(f"""
         <div class="hero-card">
-            <span class="badge badge-rose">Contabilità & Documenti</span>
+            <span class="card-badge badge-rose">Contabilità & Documenti</span>
             <h1 class="hero-title">Fatture e Ricevute</h1>
             <p class="hero-subtitle">Paziente: <strong style="color:#ffffff;">{st.session_state.dati_animale['nome']}</strong> &bull; Archivio spese veterinarie</p>
         </div>
@@ -831,6 +843,6 @@ elif st.session_state.step_corrente == 'pagina_fatture':
     else:
         for f in fatture:
             with st.container(border=True):
-                st.markdown(f"<h3 style='margin-bottom:6px;'>🧾 Fattura N° {f['numero']} <span style='font-size: 0.95rem; color: #64748b;'>del {f['data']}</span></h3>", unsafe_allow_html=True)
+                st.markdown(f"<h3 style='margin-bottom:6px; color:#1E3A2B;'>🧾 Fattura N° {f['numero']} <span style='font-size: 0.95rem; color: #64748b;'>del {f['data']}</span></h3>", unsafe_allow_html=True)
                 st.markdown(f"**🏥 Emittente:** <span style='color:#0f172a;'>{f['emittente']}</span>", unsafe_allow_html=True)
                 st.markdown(f"**💶 Importo:** <span style='font-size: 1.15rem; font-weight: 800; color: #059669;'>{f['importo']:.2f} €</span>", unsafe_allow_html=True)
