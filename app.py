@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS Custom mirato con Colore Rosso Statico Bloccato per Tab e Fix Form Submit Button
+# CSS Custom mirato con Fix per Pulsante Riapertura Sidebar
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
@@ -31,9 +31,37 @@ st.markdown("""
         line-height: 1.45 !important;
     }
 
-    /* Nascondi Elementi Standard Streamlit */
-    #MainMenu, footer, header {
+    /* Nascondi solo MainMenu e Footer (NON l'header intero, altrimenti sparisce la freccia della Sidebar) */
+    #MainMenu, footer {
         visibility: hidden;
+    }
+
+    /* Header trasparente */
+    header[data-testid="stHeader"] {
+        background-color: transparent !important;
+    }
+
+    /* ----------------------------------------------------- */
+    /* FIX RIPRISTINO E STILE PULSANTE RIAPERTURA SIDEBAR    */
+    /* ----------------------------------------------------- */
+    [data-testid="stSidebarCollapseButton"], 
+    [data-testid="stSidebarToggle"], 
+    [data-testid="collapsedControl"] {
+        visibility: visible !important;
+        background-color: #FFFFFF !important;
+        border: 1.5px solid #1E3A2B !important;
+        border-radius: 8px !important;
+        color: #1E3A2B !important;
+        margin-top: 8px !important;
+        margin-left: 8px !important;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.1) !important;
+    }
+
+    [data-testid="stSidebarCollapseButton"] svg, 
+    [data-testid="stSidebarToggle"] svg, 
+    [data-testid="collapsedControl"] svg {
+        fill: #1E3A2B !important;
+        color: #1E3A2B !important;
     }
 
     /* Sidebar Scuro Verde Foresta */
@@ -137,9 +165,7 @@ st.markdown("""
         padding: 10px 14px !important;
     }
 
-    /* ----------------------------------------------------- */
     /* STILE TAB (ACCEDI / REGISTRATI) - ROSSO STATICO BLOCCATO */
-    /* ----------------------------------------------------- */
     div[data-testid="stTabs"] {
         background-color: transparent !important;
     }
@@ -151,7 +177,6 @@ st.markdown("""
         justify-content: center !important;
     }
 
-    /* Selettore Tab (Sia per elementi div che button) */
     [data-baseweb="tab"],
     button[data-baseweb="tab"],
     button[role="tab"] {
@@ -163,7 +188,6 @@ st.markdown("""
         cursor: pointer !important;
     }
 
-    /* TESTO ROSSO PERMANENTE IN TUTTI GLI STATI (Sia attiva che inattiva) */
     [data-baseweb="tab"] *,
     button[data-baseweb="tab"] *,
     button[role="tab"] *,
@@ -180,16 +204,13 @@ st.markdown("""
         font-size: 1rem !important;
     }
 
-    /* Evidenziazione della scheda correntemente SELEZIONATA */
     [data-baseweb="tab"][aria-selected="true"],
     button[role="tab"][aria-selected="true"] {
         background-color: #FFEBEE !important;
         border: 2px solid #B71C1C !important;
     }
 
-    /* ----------------------------------------------------- */
     /* CORREZIONE PER IL PULSANTE DI ACCESSO / REGISTRAZIONE */
-    /* ----------------------------------------------------- */
     div[data-testid="stFormSubmitButton"] > button,
     .stButton > button {
         background-color: #1E3A2B !important;
