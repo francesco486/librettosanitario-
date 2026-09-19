@@ -4,16 +4,202 @@ import sqlite3
 import json
 
 # ---------------------------------------------------------
-# 1. CONFIGURAZIONE PAGINA & STILE
+# 1. CONFIGURAZIONE PAGINA & STILE PREMIUM "WOW"
 # ---------------------------------------------------------
-st.set_page_config(page_title="PetHealth - Libretto Digitale", page_icon="🐾", layout="centered")
+st.set_page_config(
+    page_title="PetHealth - Libretto Digitale", 
+    page_icon="🐾", 
+    layout="centered"
+)
 
+# CSS Custom con Google Fonts, Gradients, Cards ed effetti Hover
 st.markdown("""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+
+    /* Reset e Tipografia Globale */
+    html, body, [class*="css"], div, p, span, button, input, select, textarea {
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+        font-family: 'Outfit', sans-serif !important;
+        font-weight: 700 !important;
+        letter-spacing: -0.02em !important;
+    }
+
+    /* Nascondi Elementi di Default Streamlit */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    .stMetric {background-color: #f8f9fa; padding: 10px; border-radius: 8px; border: 1px solid #e9ecef;}
-    .angeli-text {font-size: 1.15rem; font-style: italic; color: #555; text-align: center; margin-bottom: 2rem; padding: 15px; background-color: #fdf2f8; border-radius: 10px; border-left: 5px solid #f472b6;}
+    header {visibility: hidden;}
+
+    /* Background App */
+    .stApp {
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    }
+
+    /* Hero Card Superiore */
+    .hero-card {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        color: #ffffff;
+        padding: 28px;
+        border-radius: 24px;
+        box-shadow: 0 20px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.1);
+        margin-bottom: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .hero-title {
+        color: #ffffff !important;
+        font-size: 2.2rem !important;
+        font-weight: 800 !important;
+        margin-bottom: 6px !important;
+        background: linear-gradient(90deg, #ffffff, #cbd5e1);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .hero-subtitle {
+        color: #94a3b8;
+        font-size: 0.95rem;
+        font-weight: 500;
+        margin: 0;
+    }
+
+    /* Card Personalizzate */
+    .custom-card {
+        background: #ffffff;
+        border-radius: 18px;
+        padding: 20px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03), 0 2px 4px -2px rgba(0, 0, 0, 0.03);
+        transition: transform 0.25s ease, box-shadow 0.25s ease;
+        margin-bottom: 16px;
+    }
+
+    .custom-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 20px -3px rgba(0, 0, 0, 0.08);
+    }
+
+    /* Banner Ricordo Angeli */
+    .angeli-text {
+        font-size: 1.05rem;
+        font-style: italic;
+        color: #831843;
+        text-align: center;
+        margin-bottom: 2rem;
+        padding: 22px;
+        background: linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%);
+        border-radius: 20px;
+        border-left: 6px solid #ec4899;
+        box-shadow: 0 10px 15px -3px rgba(236, 72, 153, 0.1);
+    }
+
+    /* Pulsanti */
+    .stButton > button {
+        border-radius: 14px !important;
+        font-weight: 600 !important;
+        font-size: 0.95rem !important;
+        padding: 0.65rem 1.25rem !important;
+        transition: all 0.25s ease !important;
+        border: 1px solid #e2e8f0 !important;
+        background: #ffffff !important;
+        color: #1e293b !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02) !important;
+    }
+
+    .stButton > button:hover {
+        border-color: #2563eb !important;
+        color: #2563eb !important;
+        box-shadow: 0 6px 16px rgba(37, 99, 235, 0.12) !important;
+        transform: translateY(-1px) !important;
+    }
+
+    /* Pulsanti dentro i Form (Primary Call to Action) */
+    div[data-testid="stForm"] .stButton > button {
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+        color: white !important;
+        border: none !important;
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35) !important;
+    }
+
+    div[data-testid="stForm"] .stButton > button:hover {
+        background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%) !important;
+        box-shadow: 0 6px 20px rgba(37, 99, 235, 0.45) !important;
+        transform: translateY(-1px) !important;
+    }
+
+    /* Sidebar Luxury */
+    section[data-testid="stSidebar"] {
+        background-color: #0f172a !important;
+        border-right: 1px solid #1e293b !important;
+    }
+
+    section[data-testid="stSidebar"] * {
+        color: #f8fafc !important;
+    }
+
+    section[data-testid="stSidebar"] .stButton > button {
+        background: rgba(255, 255, 255, 0.06) !important;
+        color: #f1f5f9 !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    }
+
+    section[data-testid="stSidebar"] .stButton > button:hover {
+        background: rgba(255, 255, 255, 0.18) !important;
+        border-color: rgba(255, 255, 255, 0.3) !important;
+        color: #ffffff !important;
+    }
+
+    /* Styling Schede (Tabs) */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 10px;
+        border-bottom: 2px solid #e2e8f0;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 12px 12px 0 0;
+        padding: 10px 22px;
+        font-weight: 600;
+        color: #64748b;
+        border: none !important;
+    }
+
+    .stTabs [aria-selected="true"] {
+        background-color: #ffffff !important;
+        color: #2563eb !important;
+        border-bottom: 3px solid #2563eb !important;
+    }
+
+    /* Input & Form Styling */
+    .stTextInput > div > div > input, .stSelectbox > div > div, .stTextArea textarea, .stNumberInput > div > div > input {
+        border-radius: 12px !important;
+        border: 1px solid #cbd5e1 !important;
+        padding: 10px 14px !important;
+        background-color: #ffffff !important;
+    }
+
+    .stTextInput > div > div > input:focus, .stTextArea textarea:focus {
+        border-color: #2563eb !important;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15) !important;
+    }
+
+    /* Badges Eleganti */
+    .badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 9999px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+    }
+    .badge-blue { background-color: #dbeafe; color: #1e40af; }
+    .badge-emerald { background-color: #d1fae5; color: #065f46; }
+    .badge-purple { background-color: #f3e8ff; color: #6b21a8; }
+    .badge-rose { background-color: #ffe4e6; color: #9f1239; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -214,8 +400,17 @@ def aggiorna_sessione_animali(email):
 # STEP 1: SCHERMATA LOGIN / REGISTRAZIONE
 # ---------------------------------------------------------
 if not st.session_state.logged_in:
-    st.title("Benvenuto su PetHealth 🐾")
-    st.markdown("Accedi al tuo profilo o registrati per gestire i libretti dei tuoi animali.")
+    st.markdown("""
+        <div style="text-align: center; padding: 2.5rem 0 1.5rem 0;">
+            <div style="display: inline-block; padding: 8px 18px; background: linear-gradient(135deg, #dbeafe 0%, #eff6ff 100%); border-radius: 50px; margin-bottom: 12px; border: 1px solid #bfdbfe;">
+                <span style="color: #1e40af; font-weight: 700; font-size: 0.82rem; letter-spacing: 0.05em;">PLATTAFORMA VETERINARIA DIGITALE</span>
+            </div>
+            <h1 style="font-size: 2.8rem; font-weight: 800; color: #0f172a; margin-bottom: 8px;">PetHealth 🐾</h1>
+            <p style="color: #64748b; font-size: 1.05rem; max-width: 480px; margin: 0 auto;">
+                Il libretto sanitario digitale progettato con eleganza e precisione per i tuoi compagni di vita.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
     
     tab_login, tab_reg = st.tabs(["🔑 Accedi", "📝 Registrati"])
     
@@ -223,7 +418,7 @@ if not st.session_state.logged_in:
         with st.form("form_login"):
             email_log = st.text_input("E-mail")
             pass_log = st.text_input("Password", type="password")
-            btn_log = st.form_submit_button("Accedi ➔")
+            btn_log = st.form_submit_button("Accedi al Profilo ➔", use_container_width=True)
             
             if btn_log:
                 user = verifica_login_db(email_log, pass_log)
@@ -253,7 +448,7 @@ if not st.session_state.logged_in:
             nome_reg = st.text_input("Nome e Cognome")
             email_reg = st.text_input("E-mail")
             pass_reg = st.text_input("Password", type="password")
-            btn_reg = st.form_submit_button("Crea Account ➔")
+            btn_reg = st.form_submit_button("Crea il tuo Account ➔", use_container_width=True)
             
             if btn_reg:
                 if nome_reg and email_reg and pass_reg:
@@ -265,22 +460,27 @@ if not st.session_state.logged_in:
                     st.warning("⚠️ Compila tutti i campi.")
 
 # ---------------------------------------------------------
-# MENU LATERALE (SIDEBAR) & NAVIGAZIONE PAGINE
+# MENU LATERALE (SIDEBAR LUXURY)
 # ---------------------------------------------------------
 if st.session_state.logged_in and st.session_state.step_corrente != 'registrazione_animale':
     with st.sidebar:
-        st.header(f"👤 Ciao, {st.session_state.user_nome}")
+        st.markdown(f"""
+            <div style="padding: 10px 0 20px 0;">
+                <span style="font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Bentornato</span>
+                <h2 style="font-size: 1.4rem; color: #ffffff; margin: 0;">{st.session_state.user_nome}</h2>
+            </div>
+        """, unsafe_allow_html=True)
         st.divider()
         
         if st.session_state.lista_animali_vivi:
-            st.subheader("I tuoi animali 🐾")
+            st.markdown("<p style='font-size: 0.85rem; font-weight: 700; color: #94a3b8;'>SELEZIONA ANIMALE</p>", unsafe_allow_html=True)
             pet_dict = {p['nome']: p for p in st.session_state.lista_animali_vivi}
             lista_nomi = list(pet_dict.keys())
             
             nome_attuale = st.session_state.dati_animale.get('nome', '') if not st.session_state.dati_animale.get('deceduto', 0) else ''
             idx_corrente = lista_nomi.index(nome_attuale) if nome_attuale in lista_nomi else 0
             
-            animale_selezionato = st.selectbox("Libretto attivo:", lista_nomi, index=idx_corrente)
+            animale_selezionato = st.selectbox("Libretto attivo:", lista_nomi, index=idx_corrente, label_visibility="collapsed")
             
             if st.session_state.step_corrente != 'angeli' and animale_selezionato != nome_attuale:
                 nuovo_pet = pet_dict[animale_selezionato]
@@ -291,24 +491,25 @@ if st.session_state.logged_in and st.session_state.step_corrente != 'registrazio
                 st.session_state.step_corrente = 'dashboard'
                 st.rerun()
             
-            # --- MENU DI NAVIGAZIONE PER L'ANIMALE ATTIVO ---
+            # --- NAVIGAZIONE ---
             if st.session_state.step_corrente != 'angeli':
                 st.divider()
-                st.markdown("**📌 Sezioni Libretto**")
-                if st.button("🏠 Riepilogo (Dashboard)", use_container_width=True):
+                st.markdown("<p style='font-size: 0.85rem; font-weight: 700; color: #94a3b8;'>SEZIONI LIBRETTO</p>", unsafe_allow_html=True)
+                if st.button("🏠 Riepilogo Dashboard", use_container_width=True):
                     st.session_state.step_corrente = 'dashboard'
                     st.rerun()
-                if st.button("🩺 Gestione Visite", use_container_width=True):
+                if st.button("🩺 Visite e Clinica", use_container_width=True):
                     st.session_state.step_corrente = 'pagina_visite'
                     st.rerun()
-                if st.button("💊 Gestione Terapie", use_container_width=True):
+                if st.button("💊 Terapie e Farmaci", use_container_width=True):
                     st.session_state.step_corrente = 'pagina_terapie'
                     st.rerun()
-                if st.button("🧾 Gestione Fatture", use_container_width=True):
+                if st.button("🧾 Fatture e Spese", use_container_width=True):
                     st.session_state.step_corrente = 'pagina_fatture'
                     st.rerun()
                 
             if st.session_state.step_corrente == 'angeli':
+                st.divider()
                 if st.button("🔙 Torna alla Dashboard", use_container_width=True):
                     st.session_state.step_corrente = 'dashboard'
                     if st.session_state.lista_animali_vivi:
@@ -319,12 +520,12 @@ if st.session_state.logged_in and st.session_state.step_corrente != 'registrazio
                     st.rerun()
 
         st.divider()
-        if st.button("➕ Aggiungi animale", use_container_width=True):
+        if st.button("➕ Registra Nuovo Animale", use_container_width=True):
             st.session_state.step_corrente = 'registrazione_animale'
             st.rerun()
             
         if st.session_state.lista_animali_angeli:
-            if st.button("🕊️ I nostri angeli a 4 zampe", use_container_width=True):
+            if st.button("🕊️ Angeli a 4 Zampe", use_container_width=True):
                 st.session_state.step_corrente = 'angeli'
                 st.rerun()
                 
@@ -334,7 +535,7 @@ if st.session_state.logged_in and st.session_state.step_corrente != 'registrazio
             st.rerun()
 
 # ---------------------------------------------------------
-# GESTIONE SCHERMATE PRINCIPALI
+# STEP: REGISTRAZIONE ANIMALE
 # ---------------------------------------------------------
 if st.session_state.step_corrente == 'registrazione_animale':
     if st.session_state.lista_animali_vivi or st.session_state.lista_animali_angeli:
@@ -342,14 +543,20 @@ if st.session_state.step_corrente == 'registrazione_animale':
             st.session_state.step_corrente = 'dashboard' if st.session_state.lista_animali_vivi else 'angeli'
             st.rerun()
             
-    st.title("Aggiungi un Animale 🐾")
+    st.markdown("""
+        <div class="hero-card">
+            <span class="badge badge-emerald">Nuovo Profilo</span>
+            <h1 class="hero-title">Aggiungi un Animale 🐾</h1>
+            <p class="hero-subtitle">Crea un nuovo libretto sanitario digitale in pochi semplici passaggi</p>
+        </div>
+    """, unsafe_allow_html=True)
     
     with st.form("form_animale"):
         nome_pet = st.text_input("Nome dell'animale")
         specie = st.selectbox("Specie", ["Cane 🐶", "Gatto 🐱", "Coniglio 🐰", "Altro"])
         razza = st.text_input("Razza")
         microchip = st.text_input("Numero Microchip")
-        submit_pet = st.form_submit_button("Crea Libretto ➔")
+        submit_pet = st.form_submit_button("Crea Libretto Digitale ➔", use_container_width=True)
         
         if submit_pet and nome_pet:
             pet_id = salva_animale_db(st.session_state.user_email, nome_pet, specie, razza, microchip)
@@ -362,11 +569,19 @@ if st.session_state.step_corrente == 'registrazione_animale':
             st.rerun()
 
 # ---------------------------------------------------------
-# SEZIONE ANGELI
+# STEP: MEMORIAL ANGELI
 # ---------------------------------------------------------
 elif st.session_state.step_corrente == 'angeli':
-    st.title("I nostri angeli a 4 zampe 🕊️")
-    st.markdown(f'<div class="angeli-text">Ricorda {st.session_state.user_nome}, per quanto doloroso, i nostri amici non ci abbandonano mai veramente ma ci proteggono da lassù ❤️</div>', unsafe_allow_html=True)
+    st.markdown("""
+        <div style="text-align: center; padding: 1rem 0 1rem 0;">
+            <div style="display: inline-block; padding: 6px 16px; background: #fce7f3; border-radius: 50px; margin-bottom: 10px;">
+                <span style="color: #be185d; font-weight: 700; font-size: 0.82rem; letter-spacing: 0.05em;">IN MEMORIA PERMANENTE</span>
+            </div>
+            <h1 style="font-size: 2.5rem; font-weight: 800; color: #831843; margin-bottom: 8px;">I nostri angeli a 4 zampe 🕊️</h1>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown(f'<div class="angeli-text">Ricorda {st.session_state.user_nome}, per quanto doloroso, i nostri compagni di vita non ci abbandonano mai veramente. Il loro ricordo resta al sicuro qui con noi ❤️</div>', unsafe_allow_html=True)
     
     if not st.session_state.lista_animali_angeli:
         st.info("Non ci sono animali registrati in questa sezione.")
@@ -383,7 +598,7 @@ elif st.session_state.step_corrente == 'angeli':
                         st.write("**Certificato di Morte:** Non allegato")
                 
                 st.divider()
-                st.markdown(f"### Archivio Clinico di {angelo['nome']}")
+                st.markdown(f"### Storico Clinico Archiviato di {angelo['nome']}")
                 
                 prestazioni_angelo, terapie_angelo = carica_dati_sanitari_pet_db(angelo['id'])
                 fatture_angelo = carica_fatture_db(angelo['id'])
@@ -436,37 +651,57 @@ elif st.session_state.step_corrente == 'angeli':
 # PAGINA: DASHBOARD (RIEPILOGO)
 # ---------------------------------------------------------
 elif st.session_state.step_corrente == 'dashboard':
-    st.title(f"Libretto di {st.session_state.dati_animale.get('nome', 'Animale')} 🐾")
-    st.caption(f"Specie: {st.session_state.dati_animale.get('specie')} | Razza: {st.session_state.dati_animale.get('razza')} | Microchip: {st.session_state.dati_animale.get('microchip')}")
-    
-    st.info("👈 Utilizza il menu laterale (Sezioni Libretto) per gestire Visite, Terapie e Fatture.")
-    st.divider()
+    st.markdown(f"""
+        <div class="hero-card">
+            <span class="badge badge-emerald">Libretto Sanitario Attivo</span>
+            <h1 class="hero-title">{st.session_state.dati_animale.get('nome', 'Animale')}</h1>
+            <p class="hero-subtitle">
+                {st.session_state.dati_animale.get('specie')} &bull; 
+                Razza: <strong>{st.session_state.dati_animale.get('razza') or 'Non specificata'}</strong> &bull; 
+                Microchip: <strong>{st.session_state.dati_animale.get('microchip') or 'Non inserito'}</strong>
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("💊 Terapie in corso")
+        st.markdown("""
+            <div class="custom-card">
+                <span class="badge badge-purple">Farmaci e Terapie</span>
+                <h3 style="margin-top: 5px; margin-bottom: 15px;">💊 In somministrazione</h3>
+        """, unsafe_allow_html=True)
+        
         if len(st.session_state.terapie) == 0:
-            st.write("Nessun farmaco attivo.")
+            st.write("Nessun farmaco attivo al momento.")
         else:
-            for t in reversed(st.session_state.terapie[-3:]): # Mostra solo le ultime 3
-                st.markdown(f"🔹 **{t.get('Farmaco', 'Farmaco')}** (dal {t.get('Data_Inizio', 'N/D')})")
+            for t in reversed(st.session_state.terapie[-3:]):
+                st.markdown(f"🔹 **{t.get('Farmaco', 'Farmaco')}** *(dal {t.get('Data_Inizio', 'N/D')})*")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
 
     with col2:
-        st.subheader("📜 Ultime Visite")
+        st.markdown("""
+            <div class="custom-card">
+                <span class="badge badge-blue">Storico Clinico</span>
+                <h3 style="margin-top: 5px; margin-bottom: 15px;">📜 Ultime Visite</h3>
+        """, unsafe_allow_html=True)
+        
         if len(st.session_state.prestazioni) == 0:
-            st.write("Nessuna visita recente.")
+            st.write("Nessuna visita recente in archivio.")
         else:
-            for p in reversed(st.session_state.prestazioni[-3:]): # Mostra solo le ultime 3
+            for p in reversed(st.session_state.prestazioni[-3:]):
                 st.markdown(f"🔸 **{p.get('Data', 'N/D')}** - {p.get('Prestazione', 'Visita')}")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
 
     st.divider()
     with st.expander("⚠️ Area Riservata Medico Veterinario (Registra Decesso)"):
-        st.warning("L'azione sottostante sposterà permanentemente la cartella clinica di questo animale nella sezione 'I nostri angeli a 4 zampe'.")
+        st.warning("L'azione sottostante sposterà la cartella clinica di questo animale nella sezione 'I nostri angeli a 4 zampe'.")
         with st.form("form_decesso"):
             data_dec = st.date_input("Data del decesso", datetime.date.today())
             cert_morte = st.file_uploader("Allega Certificato di Morte (PDF/Foto)", type=['pdf', 'png', 'jpg'])
             pin_vet_dec = st.text_input("PIN Veterinario per confermare (es. 1234)", type="password")
-            submit_dec = st.form_submit_button("Conferma Decesso")
+            submit_dec = st.form_submit_button("Conferma e Archivia Registro")
             
             if submit_dec:
                 if pin_vet_dec == "1234":
@@ -483,82 +718,105 @@ elif st.session_state.step_corrente == 'dashboard':
 # PAGINA: GESTIONE VISITE
 # ---------------------------------------------------------
 elif st.session_state.step_corrente == 'pagina_visite':
-    st.title(f"🩺 Cartella Clinica: {st.session_state.dati_animale['nome']}")
+    st.markdown(f"""
+        <div class="hero-card">
+            <span class="badge badge-blue">Cartella Clinica</span>
+            <h1 class="hero-title">Visite & Prestazioni</h1>
+            <p class="hero-subtitle">Paziente: <strong>{st.session_state.dati_animale['nome']}</strong> &bull; Registra diagnosi, controlli e interventi</p>
+        </div>
+    """, unsafe_allow_html=True)
     
-    with st.expander("➕ Registra Nuova Visita", expanded=False):
+    with st.expander("➕ Registra Nuova Visita Medica", expanded=False):
         with st.form("form_visita"):
-            tipo_prestazione = st.selectbox("Tipo di Prestazione", ["Visita Generale", "Vaccino", "Intervento", "Altro"])
-            data_esecuzione = st.date_input("Data Visita")
-            nome_vet = st.text_input("Nome Clinica o Veterinario")
-            dettagli = st.text_area("📝 Note e Dettagli Medici")
-            if st.form_submit_button("Salva Prestazione"):
+            tipo_prestazione = st.selectbox("Tipo di Prestazione", ["Visita Generale", "Vaccino", "Intervento Chirurgico", "Controllo Periodico", "Esami del Sangue", "Altro"])
+            data_esecuzione = st.date_input("Data Visita", datetime.date.today())
+            nome_vet = st.text_input("Nome Clinica o Medico Veterinario")
+            dettagli = st.text_area("📝 Note Cliniche, Diagnosi o Referti")
+            
+            if st.form_submit_button("Salva Prestazione Clinica ➔", use_container_width=True):
                 nuova_prestazione = {"Data": data_esecuzione.strftime("%d/%m/%Y"), "Prestazione": tipo_prestazione, "Veterinario": nome_vet, "Dettagli": dettagli}
                 st.session_state.prestazioni.append(nuova_prestazione)
                 salva_sanitari_db(st.session_state.dati_animale['id'], st.session_state.prestazioni, st.session_state.terapie)
-                st.success("Visita salvata con successo!")
+                st.success("Visita salvata correttamente!")
                 st.rerun()
 
     st.divider()
-    st.subheader("Storico Visite e Prestazioni")
+    st.subheader("Archivio Storico Visite")
     if len(st.session_state.prestazioni) == 0:
-        st.info("💡 Nessuna visita in archivio.")
+        st.info("💡 Nessuna visita medica registrata finora.")
     else:
         for item in reversed(st.session_state.prestazioni):
             with st.container(border=True):
-                st.write(f"### {item.get('Data', 'N/D')} - {item.get('Prestazione', 'Visita')}")
-                st.write(f"**🏥 Clinica / Vet:** {item.get('Veterinario', 'N/D')}")
-                st.write(f"**📋 Note Cliniche:** {item.get('Dettagli', '')}")
+                st.markdown(f"### 🩺 {item.get('Prestazione', 'Visita')} - <span style='color: #2563eb;'>{item.get('Data', 'N/D')}</span>", unsafe_allow_html=True)
+                st.write(f"**🏥 Clinica / Medico:** {item.get('Veterinario', 'N/D')}")
+                if item.get('Dettagli'):
+                    st.write(f"**📋 Dettagli Medici:** {item.get('Dettagli')}")
 
 # ---------------------------------------------------------
 # PAGINA: GESTIONE TERAPIE
 # ---------------------------------------------------------
 elif st.session_state.step_corrente == 'pagina_terapie':
-    st.title(f"💊 Terapie: {st.session_state.dati_animale['nome']}")
+    st.markdown(f"""
+        <div class="hero-card">
+            <span class="badge badge-purple">Farmacologia & Cura</span>
+            <h1 class="hero-title">Gestione Terapie</h1>
+            <p class="hero-subtitle">Paziente: <strong>{st.session_state.dati_animale['nome']}</strong> &bull; Prescrizioni, dosaggi e piani terapeutici</p>
+        </div>
+    """, unsafe_allow_html=True)
     
-    with st.expander("➕ Aggiungi Nuova Terapia", expanded=False):
+    with st.expander("➕ Aggiungi Nuova Terapia Farmacologica", expanded=False):
         with st.form("form_terapia"):
-            farmaco = st.text_input("Nome del Farmaco")
-            data_in = st.date_input("Data di Inizio Terapia")
-            if st.form_submit_button("Salva Terapia"):
+            farmaco = st.text_input("Nome del Farmaco / Principi Attivi")
+            data_in = st.date_input("Data Inizio Terapia", datetime.date.today())
+            
+            if st.form_submit_button("Salva Terapia Farmacologica ➔", use_container_width=True):
                 st.session_state.terapie.append({"Farmaco": farmaco, "Data_Inizio": data_in.strftime("%d/%m/%Y")})
                 salva_sanitari_db(st.session_state.dati_animale['id'], st.session_state.prestazioni, st.session_state.terapie)
-                st.success("Terapia salvata con successo!")
+                st.success("Terapia aggiunta al registro!")
                 st.rerun()
 
     st.divider()
-    st.subheader("Terapie in corso / Storico")
+    st.subheader("Terapie Registrate")
     if len(st.session_state.terapie) == 0:
-        st.info("Nessun farmaco o terapia registrata.")
+        st.info("💡 Nessun farmaco o terapia inserita.")
     else:
         for t in reversed(st.session_state.terapie):
             with st.container(border=True):
-                st.write(f"### 💊 {t.get('Farmaco', 'Farmaco')}")
-                st.write(f"**Data Inizio:** {t.get('Data_Inizio', 'N/D')}")
+                st.markdown(f"### 💊 {t.get('Farmaco', 'Farmaco')}")
+                st.write(f"**🗓️ Data Inizio Somministrazione:** {t.get('Data_Inizio', 'N/D')}")
 
 # ---------------------------------------------------------
 # PAGINA: GESTIONE FATTURE
 # ---------------------------------------------------------
 elif st.session_state.step_corrente == 'pagina_fatture':
-    st.title(f"🧾 Fatture e Spese: {st.session_state.dati_animale['nome']}")
+    st.markdown(f"""
+        <div class="hero-card">
+            <span class="badge badge-rose">Contabilità & Documenti</span>
+            <h1 class="hero-title">Fatture e Ricevute</h1>
+            <p class="hero-subtitle">Paziente: <strong>{st.session_state.dati_animale['nome']}</strong> &bull; Archivio spese veterinarie e rendicontazione</p>
+        </div>
+    """, unsafe_allow_html=True)
     
-    with st.expander("➕ Carica Nuova Fattura", expanded=False):
+    with st.expander("➕ Inserisci Nuova Fattura Spesa", expanded=False):
         with st.form("form_fattura"):
-            num_fattura = st.text_input("N° Fattura")
-            data_fattura = st.date_input("Data Fattura")
-            emittente = st.text_input("Emittente (es. Clinica Veterinaria)")
-            importo = st.number_input("Importo (€)", min_value=0.0)
-            if st.form_submit_button("Salva Fattura") and num_fattura:
+            num_fattura = st.text_input("N° Documento / Fattura")
+            data_fattura = st.date_input("Data Documento", datetime.date.today())
+            emittente = st.text_input("Emittente (es. Clinica Veterinaria San Francesco)")
+            importo = st.number_input("Importo Complessivo (€)", min_value=0.0, step=10.0)
+            
+            if st.form_submit_button("Salva Fattura in Archivio ➔", use_container_width=True) and num_fattura:
                 salva_fattura_db(st.session_state.dati_animale['id'], num_fattura, data_fattura.strftime("%d/%m/%Y"), emittente, "", importo, "")
-                st.success("Fattura salvata con successo!")
+                st.success("Fattura archiviata con successo!")
                 st.rerun()
 
     st.divider()
-    st.subheader("Storico Fatture")
+    st.subheader("Registro Documenti Fiscali")
     fatture = carica_fatture_db(st.session_state.dati_animale['id'])
     if not fatture:
-        st.info("Nessuna fattura registrata.")
+        st.info("💡 Nessun documento contabile presente.")
     else:
         for f in fatture:
             with st.container(border=True):
-                st.write(f"**Fattura N° {f['numero']}** del {f['data']}")
-                st.write(f"**Emittente:** {f['emittente']} | **Importo:** {f['importo']:.2f} €")
+                st.markdown(f"### 🧾 Fattura N° {f['numero']} <span style='font-size: 1rem; color: #64748b;'>del {f['data']}</span>", unsafe_allow_html=True)
+                st.write(f"**🏥 Emittente:** {f['emittente']}")
+                st.markdown(f"**💶 Importo:** <span style='font-size: 1.2rem; font-weight: 700; color: #059669;'>{f['importo']:.2f} €</span>", unsafe_allow_html=True)
