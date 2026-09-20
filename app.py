@@ -303,19 +303,68 @@ if st.session_state.sezione_attiva == "dashboard":
                 st.error("Inserire un PIN Veterinario valido per procedere.")
 
 elif st.session_state.sezione_attiva == "visite":
-    st.markdown("<h2 style='color: #1E3A2B;'>🏥 Visite e Clinica</h2>", unsafe_allow_html=True)
-    st.info("Qui verranno elencati lo storico delle visite cliniche, i controlli e i referti per " + pet_selected)
+    st.markdown(f"<h2 style='color: #1E3A2B;'>🏥 Visite e Clinica - {pet_selected}</h2>", unsafe_allow_html=True)
+    
+    with st.expander("➕ Aggiungi Nuova Visita Medica", expanded=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            data_visita = st.date_input("Data Visita")
+            tipo_visita = st.selectbox("Tipo di Visita", ["Controllo Generale", "Vaccinazione", "Visita Specialistica", "Urgenza", "Controllo Post-Operatorio"])
+            veterinario = st.text_input("Medico Veterinario / Clinica")
+        with col2:
+            diagnosi = st.text_area("Diagnosi / Note Cliniche", placeholder="Descrivi il motivo della visita e l'esito...")
+            referto = st.file_uploader("Allega Referto o Esami (Opzionale)", type=["pdf", "png", "jpg"], key="visita_ref")
+            fattura_visita = st.file_uploader("Allega Ricevuta / Fattura (Opzionale)", type=["pdf", "png", "jpg"], key="visita_fat")
+        
+        if st.button("Salva Visita Medica"):
+            st.success(f"Visita medica registrata con successo per {pet_selected}!")
 
 elif st.session_state.sezione_attiva == "terapie":
-    st.markdown("<h2 style='color: #1E3A2B;'>💊 Terapie e Farmaci</h2>", unsafe_allow_html=True)
-    st.info("Qui potrai gestire i farmaci attivi, i dosaggi e i promemoria delle somministrazioni.")
+    st.markdown(f"<h2 style='color: #1E3A2B;'>💊 Terapie e Farmaci - {pet_selected}</h2>", unsafe_allow_html=True)
+    
+    with st.expander("➕ Nuova Terapia o Prescrizione", expanded=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            nome_farmaco = st.text_input("Nome del Farmaco / Principio Attivo")
+            dosaggio = st.text_input("Dosaggio (es. 1 compressa ogni 12 ore)")
+            data_inizio = st.date_input("Data Inizio Terapia")
+            data_fine = st.date_input("Data Fine Terapia (Presunta)")
+        with col2:
+            note_somministrazione = st.text_area("Istruzioni e Note", placeholder="Es. Somministrare a stomaco pieno...")
+            ricetta = st.file_uploader("Allega Ricetta Medica / Prescrizione (Opzionale)", type=["pdf", "png", "jpg"], key="terapia_ric")
+            fattura_farmaco = st.file_uploader("Allega Scontrino / Fattura Acquisto (Opzionale)", type=["pdf", "png", "jpg"], key="terapia_fat")
+            
+        if st.button("Salva Terapia"):
+            st.success(f"Terapia registrata con successo per {pet_selected}!")
 
 elif st.session_state.sezione_attiva == "fatture":
-    st.markdown("<h2 style='color: #1E3A2B;'>📄 Fatture e Spese</h2>", unsafe_allow_html=True)
-    st.info("Gestione e archivio di tutte le ricevute fiscali e le spese veterinarie sostenute.")
+    st.markdown(f"<h2 style='color: #1E3A2B;'>📄 Fatture e Spese - {pet_selected}</h2>", unsafe_allow_html=True)
+    
+    with st.expander("➕ Carica Nuova Fattura o Ricevuta", expanded=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            data_spesa = st.date_input("Data Documento")
+            categoria_spesa = st.selectbox("Categoria Spesa", ["Visita Veterinaria", "Farmaci", "Esami di Laboratorio", "Chirurgia", "Cibo / Integratori", "Altro"])
+            importo = st.number_input("Importo (€)", min_value=0.0, step=0.5, format="%.2f")
+        with col2:
+            fornitore = st.text_input("Clinica / Farmacia / Fornitore")
+            file_fattura = st.file_uploader("Allega Documento Fattura / Ricevuta", type=["pdf", "png", "jpg"], key="spesa_fat")
+            note_spesa = st.text_input("Note Aggiuntive (Opzionale)")
+            
+        if st.button("Salva Fattura"):
+            st.success("Fattura / Spesa registrata con successo!")
 
 elif st.session_state.sezione_attiva == "nuovo_animale":
     st.markdown("<h2 style='color: #1E3A2B;'>🐾 Registra Nuovo Animale</h2>", unsafe_allow_html=True)
-    st.text_input("Nome dell'animale")
-    st.selectbox("Specie", ["Cane", "Gatto", "Altro"])
-    st.button("Salva Scheda Animale")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.text_input("Nome dell'animale")
+        st.selectbox("Specie", ["Cane", "Gatto", "Coniglio", "Altro"])
+        st.text_input("Razza")
+    with col2:
+        st.date_input("Data di Nascita Presunta")
+        st.text_input("Numero Microchip (Opzionale)")
+        st.file_uploader("Foto Profilo Animale (Opzionale)", type=["png", "jpg"])
+        
+    if st.button("Salva Scheda Animale"):
+        st.success("Nuovo scheda animale creata con successo!")
