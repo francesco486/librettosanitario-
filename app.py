@@ -316,6 +316,18 @@ elif st.session_state.sezione_attiva == "visite":
             referto = st.file_uploader("Allega Referto o Esami (Opzionale)", type=["pdf", "png", "jpg"], key="visita_ref")
             fattura_visita = st.file_uploader("Allega Ricevuta / Fattura (Opzionale)", type=["pdf", "png", "jpg"], key="visita_fat")
         
+        st.markdown("---")
+        # SEZIONE PROGRAMMAZIONE CONTROLLO / RIPETIZIONE PRESTAZIONE
+        richiede_controllo = st.checkbox("🔄 Questa prestazione richiede un controllo successivo o va ripetuta?")
+        
+        if richiede_controllo:
+            col_ctrl1, col_ctrl2 = st.columns(2)
+            with col_ctrl1:
+                data_prossimo_controllo = st.date_input("Data Prossimo Controllo / Ripetizione")
+            with col_ctrl2:
+                tipo_prestazione_ripetere = st.text_input("Tipo di Prestazione da Eseguire", placeholder="Es. Richiamo Vaccino, Controllo Ecografico, Esami del Sangue...")
+        
+        st.write("")
         if st.button("Salva Visita Medica"):
             st.success(f"Visita medica registrata con successo per {pet_selected}!")
 
@@ -334,6 +346,18 @@ elif st.session_state.sezione_attiva == "terapie":
             ricetta = st.file_uploader("Allega Ricetta Medica / Prescrizione (Opzionale)", type=["pdf", "png", "jpg"], key="terapia_ric")
             fattura_farmaco = st.file_uploader("Allega Scontrino / Fattura Acquisto (Opzionale)", type=["pdf", "png", "jpg"], key="terapia_fat")
             
+        st.markdown("---")
+        # SEZIONE PROGRAMMAZIONE CONTROLLO TERAPIA
+        richiede_controllo_terapia = st.checkbox("🔄 La terapia richiede una verifica intermedia o un richiamo?")
+        
+        if richiede_controllo_terapia:
+            col_tctrl1, col_tctrl2 = st.columns(2)
+            with col_tctrl1:
+                data_prossimo_controllo_t = st.date_input("Data Controllo Terapia / Visita di Verifica")
+            with col_tctrl2:
+                tipo_prestazione_terapia = st.text_input("Tipo di Controllo Richiesto", placeholder="Es. Controllo valori ematici, Visita di controllo efficacia...")
+
+        st.write("")
         if st.button("Salva Terapia"):
             st.success(f"Terapia registrata con successo per {pet_selected}!")
 
