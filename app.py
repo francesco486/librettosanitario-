@@ -8,6 +8,10 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Inizializzazione dello stato per la navigazione tra le sezioni
+if "sezione_attiva" not in st.session_state:
+    st.session_state.sezione_attiva = "dashboard"
+
 # 2. CSS Custom Completo con Fix Dark Mode e Stili Layout
 st.markdown("""
     <style>
@@ -226,7 +230,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 3. BARRA LATERALE (SIDEBAR)
+# 3. BARRA LATERALE (SIDEBAR CON GESTIONE DEGLI EVENTI DI CLICK)
 with st.sidebar:
     st.caption("BENTORNATO/A")
     st.markdown("### francesco Veraldi")
@@ -237,47 +241,81 @@ with st.sidebar:
     
     st.write("")
     st.markdown("**SEZIONI**")
-    st.button("🏠 Riepilogo (Dashboard)")
-    st.button("🏥 Visite e Clinica")
-    st.button("💊 Terapie e Farmaci")
-    st.button("📄 Fatture e Spese")
+    
+    if st.button("🏠 Riepilogo (Dashboard)"):
+        st.session_state.sezione_attiva = "dashboard"
+        st.rerun()
+        
+    if st.button("🏥 Visite e Clinica"):
+        st.session_state.sezione_attiva = "visite"
+        st.rerun()
+        
+    if st.button("💊 Terapie e Farmaci"):
+        st.session_state.sezione_attiva = "terapie"
+        st.rerun()
+        
+    if st.button("📄 Fatture e Spese"):
+        st.session_state.sezione_attiva = "fatture"
+        st.rerun()
     
     st.write("")
-    st.button("Registra Nuovo Animale")
+    if st.button("Registra Nuovo Animale"):
+        st.session_state.sezione_attiva = "nuovo_animale"
+        st.rerun()
 
-# 4. CONTENUTO PRINCIPALE (DASHBOARD)
-col1, col2 = st.columns(2)
+# 4. CONTENUTO DINAMICO DELL'APPLICAZIONE IN BASE ALLA SELEZIONE
 
-with col1:
-    st.markdown("""
-        <div class="wellness-card">
-            <span class="card-badge badge-purple">TERAPIE ATTIVE</span>
-            <h3 style="margin-top: 5px; margin-bottom: 15px; color: #1E3A2B;">💊 In Somministrazione</h3>
-            <p style="color: #64748b; font-size: 0.95rem;">Nessuna terapia attiva al momento.</p>
-        </div>
-    """, unsafe_allow_html=True)
+if st.session_state.sezione_attiva == "dashboard":
+    col1, col2 = st.columns(2)
 
-with col2:
-    st.markdown("""
-        <div class="wellness-card">
-            <span class="card-badge badge-blue">STORICO RECENTE</span>
-            <h3 style="margin-top: 5px; margin-bottom: 15px; color: #1E3A2B;">🪵 Ultime Visite</h3>
-            <p style="color: #64748b; font-size: 0.95rem;">Nessuna visita recente registrata.</p>
-        </div>
-    """, unsafe_allow_html=True)
+    with col1:
+        st.markdown("""
+            <div class="wellness-card">
+                <span class="card-badge badge-purple">TERAPIE ATTIVE</span>
+                <h3 style="margin-top: 5px; margin-bottom: 15px; color: #1E3A2B;">💊 In Somministrazione</h3>
+                <p style="color: #64748b; font-size: 0.95rem;">Nessuna terapia attiva al momento.</p>
+            </div>
+        """, unsafe_allow_html=True)
 
-st.write("")
+    with col2:
+        st.markdown("""
+            <div class="wellness-card">
+                <span class="card-badge badge-blue">STORICO RECENTE</span>
+                <h3 style="margin-top: 5px; margin-bottom: 15px; color: #1E3A2B;">🪵 Ultime Visite</h3>
+                <p style="color: #64748b; font-size: 0.95rem;">Nessuna visita recente registrata.</p>
+            </div>
+        """, unsafe_allow_html=True)
 
-# 5. AREA RISERVATA VETERINARIO (EXPANDER E FORM)
-with st.expander("⚠️ Area Riservata Medico Veterinario (Registro Decesso)"):
-    st.warning("⚠️ Attenzione: questa procedura registrerà ufficialmente il decesso dell'animale. L'azione è irreversibile e richiede la conferma con PIN Veterinario.")
-    
-    date_decesso = st.date_input("Data del decesso")
-    certificato = st.file_uploader("Allega Certificato di Morte (PDF/Foto)", type=["pdf", "png", "jpg"])
-    pin_vet = st.text_input("PIN Veterinario per confermare (es. 1234)", type="password")
-    
-    if st.button("Conferma e Archivia Registro"):
-        if pin_vet:
-            st.success("Operazione completata e registro archiviato con successo.")
-        else:
-            st.error("Inserire un PIN Veterinario valido per procedere.")
+    st.write("")
+
+    # AREA RISERVATA VETERINARIO
+    with st.expander("⚠️ Area Riservata Medico Veterinario (Registro Decesso)"):
+        st.warning("⚠️ Attenzione: questa procedura registrerà ufficialmente il decesso dell'animale. L'azione è irreversibile e richiede la conferma con PIN Veterinario.")
+        
+        date_decesso = st.date_input("Data del decesso")
+        certificato = st.file_uploader("Allega Certificato di Morte (PDF/Foto)", type=["pdf", "png", "jpg"])
+        pin_vet = st.text_input("PIN Veterinario per confermare (es. 1234)", type="password")
+        
+        if st.button("Conferma e Archivia Registro"):
+            if pin_vet:
+                st.success("Operazione completata e registro archiviato con successo.")
+            else:
+                st.error("Inserire un PIN Veterinario valido per procedere.")
+
+elif st.session_state.sezione_attiva == "visite":
+    st.markdown("<h2 style='color: #1E3A2B;'>🏥 Visite e Clinica</h2>", unsafe_allow_html=True)
+    st.info("Qui verranno elencati lo storico delle visite cliniche, i controlli e i referti per " + pet_selected)
+
+elif st.session_state.sezione_attiva == "terapie":
+    st.markdown("<h2 style='color: #1E3A2B;'>💊 Terapie e Farmaci</h2>", unsafe_allow_html=True)
+    st.info("Qui potrai gestire i farmaci attivi, i dosaggi e i promemoria delle somministrazioni.")
+
+elif st.session_state.sezione_attiva == "fatture":
+    st.markdown("<h2 style='color: #1E3A2B;'>📄 Fatture e Spese</h2>", unsafe_allow_html=True)
+    st.info("Gestione e archivio di tutte le ricevute fiscali e le spese veterinarie sostenute.")
+
+elif st.session_state.sezione_attiva == "nuovo_animale":
+    st.markdown("<h2 style='color: #1E3A2B;'>🐾 Registra Nuovo Animale</h2>", unsafe_allow_html=True)
+    st.text_input("Nome dell'animale")
+    st.selectbox("Specie", ["Cane", "Gatto", "Altro"])
+    st.button("Salva Scheda Animale")
