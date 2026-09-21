@@ -20,7 +20,7 @@ if "lista_animali" not in st.session_state:
 if "pet_selezionato" not in st.session_state:
     st.session_state.pet_selezionato = st.session_state.lista_animali[0]
 
-# 2. CSS Custom Completo con Fix Dark Mode e Stili Layout
+# 2. CSS Custom Completo con Fix Dark Mode, Stili Layout e Fix Selectbox
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
@@ -116,10 +116,9 @@ st.markdown("""
         margin-bottom: 6px !important;
     }
 
-    /* Input generici, Date Input e File Uploader */
+    /* Input generici e Date Input */
     .stTextInput input, 
     .stTextArea textarea, 
-    .stSelectbox > div > div, 
     .stNumberInput input,
     .stDateInput input,
     div[data-baseweb="input"] {
@@ -128,6 +127,19 @@ st.markdown("""
         border: 1.5px solid #cbd5e1 !important;
         border-radius: 10px !important;
         font-weight: 500 !important;
+    }
+
+    /* FIX SELECTBOX NEL CORPO PRINCIPALE DELL'APP */
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] {
+        background-color: #ffffff !important;
+        border: 1.5px solid #cbd5e1 !important;
+        border-radius: 10px !important;
+    }
+
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] * {
+        color: #0f172a !important;
+        -webkit-text-fill-color: #0f172a !important;
+        font-weight: 600 !important;
     }
 
     /* FIX FILE UPLOADER SCURO */
@@ -222,15 +234,7 @@ st.markdown("""
         font-size: 0.95rem !important;
     }
 
-    /* SELECTBOX SIDEBAR */
-    section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div[data-baseweb="select"] span,
-    section[data-testid="stSidebar"] div[data-testid="stSelectbox"] div[data-baseweb="select"] div,
-    section[data-testid="stSidebar"] div[data-testid="stSelectbox"] * {
-        color: #0f172a !important;
-        -webkit-text-fill-color: #0f172a !important;
-        font-weight: 700 !important;
-    }
-    
+    /* SELECTBOX SIDEBAR SPECIFICA */
     section[data-testid="stSidebar"] div[data-testid="stSelectbox"] label p {
         color: #D2E3D8 !important;
         -webkit-text-fill-color: #D2E3D8 !important;
