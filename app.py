@@ -12,6 +12,14 @@ st.set_page_config(
 if "sezione_attiva" not in st.session_state:
     st.session_state.sezione_attiva = "dashboard"
 
+# Inizializzazione della lista degli animali registrati
+if "lista_animali" not in st.session_state:
+    st.session_state.lista_animali = ["Orlando"]
+
+# Inizializzazione dell'animale attivo selezionato
+if "pet_selezionato" not in st.session_state:
+    st.session_state.pet_selezionato = st.session_state.lista_animali[0]
+
 # 2. CSS Custom Completo con Fix Dark Mode e Stili Layout
 st.markdown("""
     <style>
@@ -237,7 +245,20 @@ with st.sidebar:
     st.write("")
     
     st.markdown("**LIBRETTO ATTIVO**")
-    pet_selected = st.selectbox("", ["Orlando"], key="pet_select")
+    
+    # Assicuriamoci che l'indice selezionato sia valido
+    index_selezionato = 0
+    if st.session_state.pet_selezionato in st.session_state.lista_animali:
+        index_selezionato = st.session_state.lista_animali.index(st.session_state.pet_selezionato)
+        
+    pet_selected = st.selectbox(
+        "", 
+        st.session_state.lista_animali, 
+        index=index_selezionato,
+        key="pet_select"
+    )
+    # Aggiorniamo la selezione globale
+    st.session_state.pet_selezionato = pet_selected
     
     st.write("")
     st.markdown("**SEZIONI**")
@@ -269,28 +290,28 @@ if st.session_state.sezione_attiva == "dashboard":
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("""
+        st.markdown(f"""
             <div class="wellness-card">
                 <span class="card-badge badge-purple">TERAPIE ATTIVE</span>
                 <h3 style="margin-top: 5px; margin-bottom: 15px; color: #1E3A2B;">💊 In Somministrazione</h3>
-                <p style="color: #64748b; font-size: 0.95rem;">Nessuna terapia attiva al momento.</p>
+                <p style="color: #64748b; font-size: 0.95rem;">Nessuna terapia attiva al momento per {pet_selected}.</p>
             </div>
         """, unsafe_allow_html=True)
 
     with col2:
-        st.markdown("""
+        st.markdown(f"""
             <div class="wellness-card">
                 <span class="card-badge badge-blue">STORICO RECENTE</span>
                 <h3 style="margin-top: 5px; margin-bottom: 15px; color: #1E3A2B;">🪵 Ultime Visite</h3>
-                <p style="color: #64748b; font-size: 0.95rem;">Nessuna visita recente registrata.</p>
+                <p style="color: #64748b; font-size: 0.95rem;">Nessuna visita recente registrata per {pet_selected}.</p>
             </div>
         """, unsafe_allow_html=True)
 
     st.write("")
 
     # AREA RISERVATA VETERINARIO
-    with st.expander("⚠️ Area Riservata Medico Veterinario (Registro Decesso)"):
-        st.warning("⚠️ Attenzione: questa procedura registrerà ufficialmente il decesso dell'animale. L'azione è irreversibile e richiede la conferma con PIN Veterinario.")
+    with st.expander(f"⚠️ Area Riservata Medico Veterinario (Registro Decesso - {pet_selected})"):
+        st.warning(f"⚠️ Attenzione: questa procedura registrerà ufficialmente il decesso dell'animale {pet_selected}. L'azione è irreversibile e richiede la conferma con PIN Veterinario.")
         
         date_decesso = st.date_input("Data del decesso")
         certificato = st.file_uploader("Allega Certificato di Morte (PDF/Foto)", type=["pdf", "png", "jpg"])
@@ -317,7 +338,6 @@ elif st.session_state.sezione_attiva == "visite":
             fattura_visita = st.file_uploader("Allega Ricevuta / Fattura (Opzionale)", type=["pdf", "png", "jpg"], key="visita_fat")
         
         st.markdown("---")
-        # SEZIONE PROGRAMMAZIONE CONTROLLO / RIPETIZIONE PRESTAZIONE
         richiede_controllo = st.checkbox("🔄 Questa prestazione richiede un controllo successivo o va ripetuta?")
         
         if richiede_controllo:
@@ -347,7 +367,6 @@ elif st.session_state.sezione_attiva == "terapie":
             fattura_farmaco = st.file_uploader("Allega Scontrino / Fattura Acquisto (Opzionale)", type=["pdf", "png", "jpg"], key="terapia_fat")
             
         st.markdown("---")
-        # SEZIONE PROGRAMMAZIONE CONTROLLO TERAPIA
         richiede_controllo_terapia = st.checkbox("🔄 La terapia richiede una verifica intermedia o un richiamo?")
         
         if richiede_controllo_terapia:
@@ -380,15 +399,31 @@ elif st.session_state.sezione_attiva == "fatture":
 
 elif st.session_state.sezione_attiva == "nuovo_animale":
     st.markdown("<h2 style='color: #1E3A2B;'>🐾 Registra Nuovo Animale</h2>", unsafe_allow_html=True)
-    col1, col2 = st.columns(2)
-    with col1:
-        st.text_input("Nome dell'animale")
-        st.selectbox("Specie", ["Cane", "Gatto", "Coniglio", "Altro"])
-        st.text_input("Razza")
-    with col2:
-        st.date_input("Data di Nascita Presunta")
-        st.text_input("Numero Microchip (Opzionale)")
-        st.file_uploader("Foto Profilo Animale (Opzionale)", type=["png", "jpg"])
+    
+    with st.form("form_nuovo_animale"):
+        col1, col2 = st.columns(2)
+        with col1:
+            nome_animale = st.text_input("Nome dell'animale*")
+            specie = st.selectbox("Specie", ["Cane", "Gatto", "Coniglio", "Altro"])
+            razza = st.text_input("Razza")
+        with col2:
+            data_nascita = st.date_input("Data di Nascita Presunta")
+            microchip = st.text_input("Numero Microchip (Opzionale)")
+            foto_profilo = st.file_uploader("Foto Profilo Animale (Opzionale)", type=["png", "jpg"])
+            
+        submit_animale = st.form_submit_button("Salva Scheda Animale")
         
-    if st.button("Salva Scheda Animale"):
-        st.success("Nuovo scheda animale creata con successo!")
+        if submit_animale:
+            if nome_animale.strip() != "":
+                # Aggiungiamo l'animale alla lista se non è già presente
+                if nome_animale not in st.session_state.lista_animali:
+                    st.session_state.lista_animali.append(nome_animale)
+                
+                # Impostiamo il nuovo animale come quello attivo
+                st.session_state.pet_selezionato = nome_animale
+                # Riportiamo l'utente alla dashboard
+                st.session_state.sezione_attiva = "dashboard"
+                st.success(f"Scheda di {nome_animale} creata con successo!")
+                st.rerun()
+            else:
+                st.error("Inserisci un nome valido per l'animale.")
