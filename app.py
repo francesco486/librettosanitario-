@@ -20,7 +20,7 @@ if "lista_animali" not in st.session_state:
 if "pet_selezionato" not in st.session_state:
     st.session_state.pet_selezionato = st.session_state.lista_animali[0]
 
-# 2. CSS Custom Completo con Fix Dark Mode, Stili Layout e Fix Selectbox
+# 2. CSS Custom Completo con Fix Dark Mode, Stili Layout e Fix Form Nuovo Animale Scuro
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
@@ -108,7 +108,7 @@ st.markdown("""
     .badge-purple { background-color: #f3e8ff; color: #6b21a8; }
     .badge-blue { background-color: #dbeafe; color: #1e40af; }
 
-    /* INPUT E FORM - CORREZIONE COLORI E SFONDI */
+    /* INPUT E FORM GENERICS */
     label, div[data-testid="stWidgetLabel"] p {
         color: #1E3A2B !important;
         font-weight: 700 !important;
@@ -116,7 +116,6 @@ st.markdown("""
         margin-bottom: 6px !important;
     }
 
-    /* Input generici e Date Input */
     .stTextInput input, 
     .stTextArea textarea, 
     .stNumberInput input,
@@ -129,7 +128,7 @@ st.markdown("""
         font-weight: 500 !important;
     }
 
-    /* FIX SELECTBOX NEL CORPO PRINCIPALE DELL'APP */
+    /* FIX SELECTBOX GENERICA */
     div[data-testid="stSelectbox"] div[data-baseweb="select"] {
         background-color: #ffffff !important;
         border: 1.5px solid #cbd5e1 !important;
@@ -238,6 +237,48 @@ st.markdown("""
     section[data-testid="stSidebar"] div[data-testid="stSelectbox"] label p {
         color: #D2E3D8 !important;
         -webkit-text-fill-color: #D2E3D8 !important;
+    }
+
+    /* =========================================================
+       STILI SPECIFICI SCURI PER LA SEZIONE "REGISTRA NUOVO ANIMALE"
+       ========================================================= */
+    
+    /* Input di testo e date nella sezione nuovo animale */
+    .form-nuovo-animale input {
+        background-color: #1E293B !important;
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
+        border: 1px solid #334155 !important;
+        border-radius: 10px !important;
+    }
+
+    /* Selectbox nella sezione nuovo animale */
+    .form-nuovo-animale div[data-testid="stSelectbox"] div[data-baseweb="select"] {
+        background-color: #1E293B !important;
+        border: 1px solid #334155 !important;
+        border-radius: 10px !important;
+    }
+
+    .form-nuovo-animale div[data-testid="stSelectbox"] div[data-baseweb="select"] * {
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
+    }
+
+    /* File uploader nella sezione nuovo animale */
+    .form-nuovo-animale div[data-testid="stFileUploader"] {
+        background-color: #1E293B !important;
+        border: 1.5px dashed #334155 !important;
+    }
+
+    .form-nuovo-animale div[data-testid="stFileUploader"] * {
+        color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
+    }
+
+    .form-nuovo-animale div[data-testid="stFileUploader"] button {
+        background-color: #334155 !important;
+        border: 1px solid #475569 !important;
+        color: #FFFFFF !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -404,6 +445,9 @@ elif st.session_state.sezione_attiva == "fatture":
 elif st.session_state.sezione_attiva == "nuovo_animale":
     st.markdown("<h2 style='color: #1E3A2B;'>🐾 Registra Nuovo Animale</h2>", unsafe_allow_html=True)
     
+    # Applichiamo il wrapper CSS scuro solo per questa sezione
+    st.markdown('<div class="form-nuovo-animale">', unsafe_allow_html=True)
+    
     with st.form("form_nuovo_animale"):
         col1, col2 = st.columns(2)
         with col1:
@@ -431,3 +475,5 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
                 st.rerun()
             else:
                 st.error("Inserisci un nome valido per l'animale.")
+                
+    st.markdown('</div>', unsafe_allow_html=True)
