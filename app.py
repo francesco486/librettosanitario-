@@ -37,7 +37,7 @@ if "db_fatture" not in st.session_state:
 if "angeli_archiviati" not in st.session_state:
     st.session_state.angeli_archiviati = {} 
 
-# 2. CSS CUSTOM COMPLETO
+# 2. CSS CUSTOM COMPLETO CON TARGETING BLINDATO PER IL TESTO ROSSO
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
@@ -116,9 +116,12 @@ st.markdown("""
         margin-bottom: 20px;
     }
 
-    /* FIX FORZATO PER LA TAB TERAPIE IN COLORE ROSSO FISSO */
-    button[data-baseweb="tab"]:nth-child(2),
-    button[data-baseweb="tab"]:nth-child(2) * {
+    /* FIX DEFINITIVO E BLINDATO PER IL COLORE ROSSO FISSO DELLA SECONDA TAB (TERAPIE REGISTRATE) */
+    div[data-baseweb="tab-list"] button:nth-of-type(2),
+    div[data-baseweb="tab-list"] button:nth-of-type(2) *,
+    div[data-baseweb="tab-list"] button:nth-of-type(2) p,
+    div[data-baseweb="tab-list"] button:nth-of-type(2) span,
+    div[data-baseweb="tab-list"] button:nth-of-type(2) div {
         color: #DC2626 !important;
         -webkit-text-fill-color: #DC2626 !important;
         font-weight: 800 !important;
@@ -551,20 +554,16 @@ elif st.session_state.sezione_attiva == "angeli":
             st.write("")
             # FUNZIONE PER RIPRISTINARE L'ANIMALE
             if st.button("🔄 Ripristina Animale Attivo"):
-                # Ripristiniamo l'animale nella lista degli attivi
                 if angelo_selezionato not in st.session_state.lista_animali:
                     st.session_state.lista_animali.append(angelo_selezionato)
                 
-                # Ripristiniamo la sua cartella clinica
                 dati_ripristinati = st.session_state.angeli_archiviati.pop(angelo_selezionato)
                 st.session_state.db_visite[angelo_selezionato] = dati_ripristinati["visite"]
                 st.session_state.db_terapie[angelo_selezionato] = dati_ripristinati["terapie"]
                 st.session_state.db_fatture[angelo_selezionato] = dati_ripristinati["fatture"]
                 
-                # Impostiamo l'animale ripristinato come quello selezionato
                 st.session_state.pet_selezionato = angelo_selezionato
                 
-                # Se non ci sono più angeli archiviati, torniamo alla dashboard
                 if len(st.session_state.angeli_archiviati) == 0:
                     st.session_state.sezione_attiva = "dashboard"
                     
