@@ -8,36 +8,52 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Inizializzazione dello stato per la navigazione tra le sezioni
+# --- INIZIALIZZAZIONE DEGLI STATI DELLA SESSIONE ---
 if "sezione_attiva" not in st.session_state:
     st.session_state.sezione_attiva = "dashboard"
 
-# Inizializzazione della lista degli animali registrati
+if "nome_utente" not in st.session_state:
+    st.session_state.nome_utente = "Francesco"
+
+# Lista animali attivi
 if "lista_animali" not in st.session_state:
     st.session_state.lista_animali = ["Orlando"]
 
-# Inizializzazione dell'animale attivo selezionato
+# Animale attivo selezionato
 if "pet_selezionato" not in st.session_state:
     st.session_state.pet_selezionato = st.session_state.lista_animali[0]
 
-# 2. CSS Custom Completo con Fix Dark Mode, Stili Layout e Fix Form Nuovo Animale Scuro
+# Database in memoria per registrare visite, terapie e fatture degli animali attivi
+if "db_visite" not in st.session_state:
+    st.session_state.db_visite = {"Orlando": []}
+
+if "db_terapie" not in st.session_state:
+    st.session_state.db_terapie = {"Orlando": []}
+
+if "db_fatture" not in st.session_state:
+    st.session_state.db_fatture = {"Orlando": []}
+
+# Registro e Archivio per "I nostri angeli a 4 zampe"
+if "angeli_archiviati" not in st.session_state:
+    st.session_state.angeli_archiviati = {} 
+    # Struttura: {"NomeAnimale": {"data_decesso": ..., "visite": [...], "terapie": [...], "fatture": [...]}}
+
+
+# 2. CSS CUSTOM COMPLETO
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
 
-    /* Forziamo il tema chiaro su tutto l'applicativo */
     :root {
         color-scheme: light !important;
     }
 
-    /* Font Globale e Sfondo App */
     html, body, .stApp {
         font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
         background-color: #F8F7F2 !important;
         color: #1e293b !important;
     }
 
-    /* Reset generico per paragrafi e label */
     .stApp p:not([data-testid="stExpander"] *), 
     .stApp label {
         font-family: 'Plus Jakarta Sans', sans-serif !important;
@@ -92,6 +108,16 @@ st.markdown("""
         margin-bottom: 16px;
     }
 
+    /* ANGELS CARD SPECIFICA */
+    .angels-card {
+        background-color: #FFFFFF !important;
+        border-radius: 16px;
+        padding: 24px;
+        border: 1.5px solid #CBD5E1 !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+        margin-bottom: 20px;
+    }
+
     /* BADGES */
     .card-badge {
         display: inline-block;
@@ -107,6 +133,7 @@ st.markdown("""
     }
     .badge-purple { background-color: #f3e8ff; color: #6b21a8; }
     .badge-blue { background-color: #dbeafe; color: #1e40af; }
+    .badge-memorial { background-color: #F1F5F9; color: #475569; }
 
     /* INPUT E FORM GENERICS */
     label, div[data-testid="stWidgetLabel"] p {
@@ -128,7 +155,6 @@ st.markdown("""
         font-weight: 500 !important;
     }
 
-    /* FIX SELECTBOX GENERICA */
     div[data-testid="stSelectbox"] div[data-baseweb="select"] {
         background-color: #ffffff !important;
         border: 1.5px solid #cbd5e1 !important;
@@ -141,7 +167,6 @@ st.markdown("""
         font-weight: 600 !important;
     }
 
-    /* FIX FILE UPLOADER SCURO */
     div[data-testid="stFileUploader"] {
         background-color: #ffffff !important;
         border: 1.5px dashed #cbd5e1 !important;
@@ -159,7 +184,6 @@ st.markdown("""
         color: #1e293b !important;
     }
 
-    /* FIX RIQUADRO GIALLO (st.warning / st.alert) */
     div[data-testid="stAlert"] {
         background-color: #fefce8 !important;
         border: 1px solid #fef08a !important;
@@ -171,7 +195,7 @@ st.markdown("""
         font-weight: 600 !important;
     }
 
-    /* PULSANTI FORM E SIDEBAR */
+    /* PULSANTI */
     div[data-testid="stFormSubmitButton"] > button,
     .stButton > button {
         background-color: #1E3A2B !important;
@@ -211,7 +235,6 @@ st.markdown("""
         background-color: #3E6352 !important;
     }
 
-    /* FIX COMPLETO EXPANDER E HEADER SCURI */
     div[data-testid="stExpander"] {
         background-color: #ffffff !important;
         border: 1.5px solid #cbd5e1 !important;
@@ -233,17 +256,12 @@ st.markdown("""
         font-size: 0.95rem !important;
     }
 
-    /* SELECTBOX SIDEBAR SPECIFICA */
     section[data-testid="stSidebar"] div[data-testid="stSelectbox"] label p {
         color: #D2E3D8 !important;
         -webkit-text-fill-color: #D2E3D8 !important;
     }
 
-    /* =========================================================
-       STILI SPECIFICI SCURI PER LA SEZIONE "REGISTRA NUOVO ANIMALE"
-       ========================================================= */
-    
-    /* Input di testo e date nella sezione nuovo animale */
+    /* STILI SCURI SEZIONE REGISTRA NUOVO ANIMALE */
     .form-nuovo-animale input {
         background-color: #1E293B !important;
         color: #FFFFFF !important;
@@ -252,7 +270,6 @@ st.markdown("""
         border-radius: 10px !important;
     }
 
-    /* Selectbox nella sezione nuovo animale */
     .form-nuovo-animale div[data-testid="stSelectbox"] div[data-baseweb="select"] {
         background-color: #1E293B !important;
         border: 1px solid #334155 !important;
@@ -264,7 +281,6 @@ st.markdown("""
         -webkit-text-fill-color: #FFFFFF !important;
     }
 
-    /* File uploader nella sezione nuovo animale */
     .form-nuovo-animale div[data-testid="stFileUploader"] {
         background-color: #1E293B !important;
         border: 1.5px dashed #334155 !important;
@@ -283,27 +299,30 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 3. BARRA LATERALE (SIDEBAR CON GESTIONE DEGLI EVENTI DI CLICK)
+# 3. BARRA LATERALE (SIDEBAR)
 with st.sidebar:
     st.caption("BENTORNATO/A")
-    st.markdown("### francesco Veraldi")
+    st.markdown(f"### {st.session_state.nome_utente} Veraldi")
     st.write("")
     
     st.markdown("**LIBRETTO ATTIVO**")
     
-    # Assicuriamoci che l'indice selezionato sia valido
-    index_selezionato = 0
-    if st.session_state.pet_selezionato in st.session_state.lista_animali:
-        index_selezionato = st.session_state.lista_animali.index(st.session_state.pet_selezionato)
+    # Se ci sono animali attivi mostriamo la selectbox
+    if len(st.session_state.lista_animali) > 0:
+        index_selezionato = 0
+        if st.session_state.pet_selezionato in st.session_state.lista_animali:
+            index_selezionato = st.session_state.lista_animali.index(st.session_state.pet_selezionato)
         
-    pet_selected = st.selectbox(
-        "", 
-        st.session_state.lista_animali, 
-        index=index_selezionato,
-        key="pet_select"
-    )
-    # Aggiorniamo la selezione globale
-    st.session_state.pet_selezionato = pet_selected
+        pet_selected = st.selectbox(
+            "", 
+            st.session_state.lista_animali, 
+            index=index_selezionato,
+            key="pet_select"
+        )
+        st.session_state.pet_selezionato = pet_selected
+    else:
+        st.info("Nessun animale attivo al momento.")
+        pet_selected = None
     
     st.write("")
     st.markdown("**SEZIONI**")
@@ -323,129 +342,256 @@ with st.sidebar:
     if st.button("📄 Fatture e Spese"):
         st.session_state.sezione_attiva = "fatture"
         st.rerun()
+        
+    # SEZIONE ANGELI (Compare se c'è almeno un animale archiviato)
+    if len(st.session_state.angeli_archiviati) > 0:
+        st.write("")
+        if st.button("🌈 I nostri angeli a 4 zampe"):
+            st.session_state.sezione_attiva = "angeli"
+            st.rerun()
     
     st.write("")
     if st.button("Registra Nuovo Animale"):
         st.session_state.sezione_attiva = "nuovo_animale"
         st.rerun()
 
-# 4. CONTENUTO DINAMICO DELL'APPLICAZIONE IN BASE ALLA SELEZIONE
+# 4. CONTENUTO DINAMICO DELL'APPLICAZIONE
 
 if st.session_state.sezione_attiva == "dashboard":
-    col1, col2 = st.columns(2)
+    if pet_selected:
+        col1, col2 = st.columns(2)
 
-    with col1:
-        st.markdown(f"""
-            <div class="wellness-card">
-                <span class="card-badge badge-purple">TERAPIE ATTIVE</span>
-                <h3 style="margin-top: 5px; margin-bottom: 15px; color: #1E3A2B;">💊 In Somministrazione</h3>
-                <p style="color: #64748b; font-size: 0.95rem;">Nessuna terapia attiva al momento per {pet_selected}.</p>
-            </div>
-        """, unsafe_allow_html=True)
+        with col1:
+            st.markdown(f"""
+                <div class="wellness-card">
+                    <span class="card-badge badge-purple">TERAPIE ATTIVE</span>
+                    <h3 style="margin-top: 5px; margin-bottom: 15px; color: #1E3A2B;">💊 In Somministrazione</h3>
+                    <p style="color: #64748b; font-size: 0.95rem;">Nessuna terapia attiva al momento per {pet_selected}.</p>
+                </div>
+            """, unsafe_allow_html=True)
 
-    with col2:
-        st.markdown(f"""
-            <div class="wellness-card">
-                <span class="card-badge badge-blue">STORICO RECENTE</span>
-                <h3 style="margin-top: 5px; margin-bottom: 15px; color: #1E3A2B;">🪵 Ultime Visite</h3>
-                <p style="color: #64748b; font-size: 0.95rem;">Nessuna visita recente registrata per {pet_selected}.</p>
-            </div>
-        """, unsafe_allow_html=True)
+        with col2:
+            st.markdown(f"""
+                <div class="wellness-card">
+                    <span class="card-badge badge-blue">STORICO RECENTE</span>
+                    <h3 style="margin-top: 5px; margin-bottom: 15px; color: #1E3A2B;">🪵 Ultime Visite</h3>
+                    <p style="color: #64748b; font-size: 0.95rem;">Nessuna visita recente registrata per {pet_selected}.</p>
+                </div>
+            """, unsafe_allow_html=True)
 
-    st.write("")
+        st.write("")
 
-    # AREA RISERVATA VETERINARIO
-    with st.expander(f"⚠️ Area Riservata Medico Veterinario (Registro Decesso - {pet_selected})"):
-        st.warning(f"⚠️ Attenzione: questa procedura registrerà ufficialmente il decesso dell'animale {pet_selected}. L'azione è irreversibile e richiede la conferma con PIN Veterinario.")
-        
-        date_decesso = st.date_input("Data del decesso")
-        certificato = st.file_uploader("Allega Certificato di Morte (PDF/Foto)", type=["pdf", "png", "jpg"])
-        pin_vet = st.text_input("PIN Veterinario per confermare (es. 1234)", type="password")
-        
-        if st.button("Conferma e Archivia Registro"):
-            if pin_vet:
-                st.success("Operazione completata e registro archiviato con successo.")
-            else:
-                st.error("Inserire un PIN Veterinario valido per procedere.")
+        # AREA RISERVATA VETERINARIO - REGISTRO DECESSO
+        with st.expander(f"⚠️ Area Riservata Medico Veterinario (Registro Decesso - {pet_selected})"):
+            st.warning(f"⚠️ Attenzione: questa procedura registrerà ufficialmente il decesso dell'animale {pet_selected}. L'azione è irreversibile e sposterà l'intera cartella clinica nella sezione 'I nostri angeli a 4 zampe'.")
+            
+            date_decesso = st.date_input("Data del decesso")
+            certificato = st.file_uploader("Allega Certificato di Morte (PDF/Foto)", type=["pdf", "png", "jpg"], key="cert_morte")
+            pin_vet = st.text_input("PIN Veterinario per confermare (es. 1234)", type="password", key="pin_morte")
+            
+            if st.button("Conferma e Archivia Registro"):
+                if pin_vet == "1234":  # PIN di test
+                    animale_da_archiviare = pet_selected
+                    
+                    # Archiviazione dati e documenti
+                    st.session_state.angeli_archiviati[animale_da_archiviare] = {
+                        "data_decesso": str(date_decesso),
+                        "certificato": certificato.name if certificato else "Non allegato",
+                        "visite": st.session_state.db_visite.get(animale_da_archiviare, []),
+                        "terapie": st.session_state.db_terapie.get(animale_da_archiviare, []),
+                        "fatture": st.session_state.db_fatture.get(animale_da_archiviare, [])
+                    }
+                    
+                    # Rimuoviamo l'animale dalla lista degli attivi
+                    st.session_state.lista_animali.remove(animale_da_archiviare)
+                    
+                    # Impostiamo il prossimo animale attivo o nessuno
+                    if len(st.session_state.lista_animali) > 0:
+                        st.session_state.pet_selezionato = st.session_state.lista_animali[0]
+                    else:
+                        st.session_state.pet_selezionato = None
+                        
+                    st.success(f"Registro archiviato con successo. {animale_da_archiviare} è stato spostato con rispetto nella sezione 'I nostri angeli a 4 zampe'.")
+                    st.session_state.sezione_attiva = "angeli"
+                    st.rerun()
+                else:
+                    st.error("PIN Veterinario non valido. Inserire un PIN corretto per procedere.")
+    else:
+        st.info("Registra un nuovo animale o consulta la sezione 'I nostri angeli a 4 zampe'.")
 
 elif st.session_state.sezione_attiva == "visite":
-    st.markdown(f"<h2 style='color: #1E3A2B;'>🏥 Visite e Clinica - {pet_selected}</h2>", unsafe_allow_html=True)
-    
-    with st.expander("➕ Aggiungi Nuova Visita Medica", expanded=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            data_visita = st.date_input("Data Visita")
-            tipo_visita = st.selectbox("Tipo di Visita", ["Controllo Generale", "Vaccinazione", "Visita Specialistica", "Urgenza", "Controllo Post-Operatorio"])
-            veterinario = st.text_input("Medico Veterinario / Clinica")
-        with col2:
-            diagnosi = st.text_area("Diagnosi / Note Cliniche", placeholder="Descrivi il motivo della visita e l'esito...")
-            referto = st.file_uploader("Allega Referto o Esami (Opzionale)", type=["pdf", "png", "jpg"], key="visita_ref")
-            fattura_visita = st.file_uploader("Allega Ricevuta / Fattura (Opzionale)", type=["pdf", "png", "jpg"], key="visita_fat")
+    if pet_selected:
+        st.markdown(f"<h2 style='color: #1E3A2B;'>🏥 Visite e Clinica - {pet_selected}</h2>", unsafe_allow_html=True)
         
-        st.markdown("---")
-        richiede_controllo = st.checkbox("🔄 Questa prestazione richiede un controllo successivo o va ripetuta?")
-        
-        if richiede_controllo:
-            col_ctrl1, col_ctrl2 = st.columns(2)
-            with col_ctrl1:
-                data_prossimo_controllo = st.date_input("Data Prossimo Controllo / Ripetizione")
-            with col_ctrl2:
-                tipo_prestazione_ripetere = st.text_input("Tipo di Prestazione da Eseguire", placeholder="Es. Richiamo Vaccino, Controllo Ecografico, Esami del Sangue...")
-        
-        st.write("")
-        if st.button("Salva Visita Medica"):
-            st.success(f"Visita medica registrata con successo per {pet_selected}!")
+        with st.expander("➕ Aggiungi Nuova Visita Medica", expanded=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                data_visita = st.date_input("Data Visita")
+                tipo_visita = st.selectbox("Tipo di Visita", ["Controllo Generale", "Vaccinazione", "Visita Specialistica", "Urgenza", "Controllo Post-Operatorio"])
+                veterinario = st.text_input("Medico Veterinario / Clinica")
+            with col2:
+                diagnosi = st.text_area("Diagnosi / Note Cliniche", placeholder="Descrivi il motivo della visita e l'esito...")
+                referto = st.file_uploader("Allega Referto o Esami (Opzionale)", type=["pdf", "png", "jpg"], key="visita_ref")
+                fattura_visita = st.file_uploader("Allega Ricevuta / Fattura (Opzionale)", type=["pdf", "png", "jpg"], key="visita_fat")
+            
+            st.markdown("---")
+            richiede_controllo = st.checkbox("🔄 Questa prestazione richiede un controllo successivo o va ripetuta?")
+            
+            if richiede_controllo:
+                col_ctrl1, col_ctrl2 = st.columns(2)
+                with col_ctrl1:
+                    data_prossimo_controllo = st.date_input("Data Prossimo Controllo / Ripetizione")
+                with col_ctrl2:
+                    tipo_prestazione_ripetere = st.text_input("Tipo di Prestazione da Eseguire", placeholder="Es. Richiamo Vaccino, Controllo Ecografico, Esami del Sangue...")
+            
+            st.write("")
+            if st.button("Salva Visita Medica"):
+                # Salvataggio nel database locale per la cartella clinica
+                nuova_visita = {
+                    "data": str(data_visita),
+                    "tipo": tipo_visita,
+                    "veterinario": veterinario,
+                    "diagnosi": diagnosi,
+                    "referto": referto.name if referto else None
+                }
+                st.session_state.db_visite[pet_selected].append(nuova_visita)
+                st.success(f"Visita medica registrata con successo per {pet_selected}!")
+    else:
+        st.warning("Seleziona o registra un animale attivo per gestire le visite.")
 
 elif st.session_state.sezione_attiva == "terapie":
-    st.markdown(f"<h2 style='color: #1E3A2B;'>💊 Terapie e Farmaci - {pet_selected}</h2>", unsafe_allow_html=True)
-    
-    with st.expander("➕ Nuova Terapia o Prescrizione", expanded=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            nome_farmaco = st.text_input("Nome del Farmaco / Principio Attivo")
-            dosaggio = st.text_input("Dosaggio (es. 1 compressa ogni 12 ore)")
-            data_inizio = st.date_input("Data Inizio Terapia")
-            data_fine = st.date_input("Data Fine Terapia (Presunta)")
-        with col2:
-            note_somministrazione = st.text_area("Istruzioni e Note", placeholder="Es. Somministrare a stomaco pieno...")
-            ricetta = st.file_uploader("Allega Ricetta Medica / Prescrizione (Opzionale)", type=["pdf", "png", "jpg"], key="terapia_ric")
-            fattura_farmaco = st.file_uploader("Allega Scontrino / Fattura Acquisto (Opzionale)", type=["pdf", "png", "jpg"], key="terapia_fat")
-            
-        st.markdown("---")
-        richiede_controllo_terapia = st.checkbox("🔄 La terapia richiede una verifica intermedia o un richiamo?")
+    if pet_selected:
+        st.markdown(f"<h2 style='color: #1E3A2B;'>💊 Terapie e Farmaci - {pet_selected}</h2>", unsafe_allow_html=True)
         
-        if richiede_controllo_terapia:
-            col_tctrl1, col_tctrl2 = st.columns(2)
-            with col_tctrl1:
-                data_prossimo_controllo_t = st.date_input("Data Controllo Terapia / Visita di Verifica")
-            with col_tctrl2:
-                tipo_prestazione_terapia = st.text_input("Tipo di Controllo Richiesto", placeholder="Es. Controllo valori ematici, Visita di controllo efficacia...")
+        with st.expander("➕ Nuova Terapia o Prescrizione", expanded=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                nome_farmaco = st.text_input("Nome del Farmaco / Principio Attivo")
+                dosaggio = st.text_input("Dosaggio (es. 1 compressa ogni 12 ore)")
+                data_inizio = st.date_input("Data Inizio Terapia")
+                data_fine = st.date_input("Data Fine Terapia (Presunta)")
+            with col2:
+                note_somministrazione = st.text_area("Istruzioni e Note", placeholder="Es. Somministrare a stomaco pieno...")
+                ricetta = st.file_uploader("Allega Ricetta Medica / Prescrizione (Opzionale)", type=["pdf", "png", "jpg"], key="terapia_ric")
+                fattura_farmaco = st.file_uploader("Allega Scontrino / Fattura Acquisto (Opzionale)", type=["pdf", "png", "jpg"], key="terapia_fat")
+                
+            st.markdown("---")
+            richiede_controllo_terapia = st.checkbox("🔄 La terapia richiede una verifica intermedia o un richiamo?")
+            
+            if richiede_controllo_terapia:
+                col_tctrl1, col_tctrl2 = st.columns(2)
+                with col_tctrl1:
+                    data_prossimo_controllo_t = st.date_input("Data Controllo Terapia / Visita di Verifica")
+                with col_tctrl2:
+                    tipo_prestazione_terapia = st.text_input("Tipo di Controllo Richiesto", placeholder="Es. Controllo valori ematici, Visita di controllo efficacia...")
 
-        st.write("")
-        if st.button("Salva Terapia"):
-            st.success(f"Terapia registrata con successo per {pet_selected}!")
+            st.write("")
+            if st.button("Salva Terapia"):
+                nuova_terapia = {
+                    "farmaco": nome_farmaco,
+                    "dosaggio": dosaggio,
+                    "periodo": f"{data_inizio} - {data_fine}",
+                    "note": note_somministrazione,
+                    "ricetta": ricetta.name if ricetta else None
+                }
+                st.session_state.db_terapie[pet_selected].append(nuova_terapia)
+                st.success(f"Terapia registrata con successo per {pet_selected}!")
+    else:
+        st.warning("Seleziona o registra un animale attivo per gestire le terapie.")
 
 elif st.session_state.sezione_attiva == "fatture":
-    st.markdown(f"<h2 style='color: #1E3A2B;'>📄 Fatture e Spese - {pet_selected}</h2>", unsafe_allow_html=True)
+    if pet_selected:
+        st.markdown(f"<h2 style='color: #1E3A2B;'>📄 Fatture e Spese - {pet_selected}</h2>", unsafe_allow_html=True)
+        
+        with st.expander("➕ Carica Nuova Fattura o Ricevuta", expanded=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                data_spesa = st.date_input("Data Documento")
+                categoria_spesa = st.selectbox("Categoria Spesa", ["Visita Veterinaria", "Farmaci", "Esami di Laboratorio", "Chirurgia", "Cibo / Integratori", "Altro"])
+                importo = st.number_input("Importo (€)", min_value=0.0, step=0.5, format="%.2f")
+            with col2:
+                fornitore = st.text_input("Clinica / Farmacia / Fornitore")
+                file_fattura = st.file_uploader("Allega Documento Fattura / Ricevuta", type=["pdf", "png", "jpg"], key="spesa_fat")
+                note_spesa = st.text_input("Note Aggiuntive (Opzionale)")
+                
+            if st.button("Salva Fattura"):
+                nuova_fattura = {
+                    "data": str(data_spesa),
+                    "categoria": categoria_spesa,
+                    "importo": importo,
+                    "fornitore": fornitore,
+                    "documento": file_fattura.name if file_fattura else None
+                }
+                st.session_state.db_fatture[pet_selected].append(nuova_fattura)
+                st.success("Fattura / Spesa registrata con successo!")
+    else:
+        st.warning("Seleziona o registra un animale attivo per gestire le fatture.")
+
+elif st.session_state.sezione_attiva == "angeli":
+    # --- SEZIONE I NOSTRI ANGELI A 4 ZAMPE ---
+    st.markdown("<h2 style='color: #1E3A2B;'>🌈 I Nostri Angeli a 4 Zampe</h2>", unsafe_allow_html=True)
     
-    with st.expander("➕ Carica Nuova Fattura o Ricevuta", expanded=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            data_spesa = st.date_input("Data Documento")
-            categoria_spesa = st.selectbox("Categoria Spesa", ["Visita Veterinaria", "Farmaci", "Esami di Laboratorio", "Chirurgia", "Cibo / Integratori", "Altro"])
-            importo = st.number_input("Importo (€)", min_value=0.0, step=0.5, format="%.2f")
-        with col2:
-            fornitore = st.text_input("Clinica / Farmacia / Fornitore")
-            file_fattura = st.file_uploader("Allega Documento Fattura / Ricevuta", type=["pdf", "png", "jpg"], key="spesa_fat")
-            note_spesa = st.text_input("Note Aggiuntive (Opzionale)")
-            
-        if st.button("Salva Fattura"):
-            st.success("Fattura / Spesa registrata con successo!")
+    # MESSAGGIO D'AFFETTO DEDICATO
+    st.markdown(f"""
+        <div class="angels-card">
+            <span class="card-badge badge-memorial">MEMORIALE</span>
+            <p style="font-size: 1.1rem; color: #334155; font-weight: 600; line-height: 1.6; margin-top: 10px; margin-bottom: 0;">
+                Ricorda <strong>{st.session_state.nome_utente}</strong>, per quanto doloroso i nostri amici a 4 zampe non ci abbandonano mai veramente, ma ci proteggono da lassù 🐾
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # SELETTORE DELL'ARCHIVIO ANGELI
+    lista_angeli = list(st.session_state.angeli_archiviati.keys())
+    
+    if len(lista_angeli) > 0:
+        angelo_selezionato = st.selectbox("Seleziona un angelo per consultare la sua cartella clinica archiviata:", lista_angeli)
+        
+        dati_angelo = st.session_state.angeli_archiviati[angelo_selezionato]
+        
+        st.write("")
+        st.markdown(f"### 📁 Cartella Clinica Archiviata: **{angelo_selezionato}**")
+        st.caption(f"Data del decesso registrata: {dati_angelo['data_decesso']} | Certificato allegato: {dati_angelo['certificato']}")
+        st.markdown("---")
+        
+        tab_visite, tab_terapie, tab_fatture = st.tabs(["🏥 Storico Visite", "💊 Terapie Registrate", "📄 Fatture e Documenti"])
+        
+        with tab_visite:
+            if dati_angelo["visite"]:
+                for v in dati_angelo["visite"]:
+                    st.write(f"• **Data:** {v['data']} | **Tipo:** {v['tipo']} | **Vet:** {v['veterinario']}")
+                    st.write(f"  *Diagnosi:* {v['diagnosi']}")
+                    if v['referto']:
+                        st.caption(f"  📄 Documento referto allegato: {v['referto']}")
+                    st.write("---")
+            else:
+                st.info("Nessuna visita salvata nello storico al momento dell'archiviazione.")
+                
+        with tab_terapie:
+            if dati_angelo["terapie"]:
+                for t in dati_angelo["terapie"]:
+                    st.write(f"• **Farmaco:** {t['farmaco']} | **Dosaggio:** {t['dosaggio']} | **Periodo:** {t['periodo']}")
+                    st.write(f"  *Note:* {t['note']}")
+                    if t['ricetta']:
+                        st.caption(f"  📄 Documento ricetta allegato: {t['ricetta']}")
+                    st.write("---")
+            else:
+                st.info("Nessuna terapia salvata nello storico al momento dell'archiviazione.")
+                
+        with tab_fatture:
+            if dati_angelo["fatture"]:
+                for f in dati_angelo["fatture"]:
+                    st.write(f"• **Data:** {f['data']} | **Categoria:** {f['categoria']} | **Importo:** €{f['importo']:.2f}")
+                    st.write(f"  *Fornitore:* {f['fornitore']}")
+                    if f['documento']:
+                        st.caption(f"  📄 Ricevuta/Fattura allegata: {f['documento']}")
+                    st.write("---")
+            else:
+                st.info("Nessuna fattura salvata nello storico al momento dell'archiviazione.")
 
 elif st.session_state.sezione_attiva == "nuovo_animale":
     st.markdown("<h2 style='color: #1E3A2B;'>🐾 Registra Nuovo Animale</h2>", unsafe_allow_html=True)
     
-    # Applichiamo il wrapper CSS scuro solo per questa sezione
     st.markdown('<div class="form-nuovo-animale">', unsafe_allow_html=True)
     
     with st.form("form_nuovo_animale"):
@@ -463,13 +609,15 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
         
         if submit_animale:
             if nome_animale.strip() != "":
-                # Aggiungiamo l'animale alla lista se non è già presente
                 if nome_animale not in st.session_state.lista_animali:
                     st.session_state.lista_animali.append(nome_animale)
+                    
+                    # Inizializziamo il database vuoto per il nuovo animale
+                    st.session_state.db_visite[nome_animale] = []
+                    st.session_state.db_terapie[nome_animale] = []
+                    st.session_state.db_fatture[nome_animale] = []
                 
-                # Impostiamo il nuovo animale come quello attivo
                 st.session_state.pet_selezionato = nome_animale
-                # Riportiamo l'utente alla dashboard
                 st.session_state.sezione_attiva = "dashboard"
                 st.success(f"Scheda di {nome_animale} creata con successo!")
                 st.rerun()
