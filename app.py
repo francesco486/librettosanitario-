@@ -37,7 +37,7 @@ if "db_fatture" not in st.session_state:
 if "angeli_archiviati" not in st.session_state:
     st.session_state.angeli_archiviati = {} 
 
-# 2. CSS CUSTOM COMPLETO CON TARGETING BLINDATO PER IL TESTO ROSSO
+# 2. CSS CUSTOM COMPLETO
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
@@ -114,17 +114,6 @@ st.markdown("""
         border: 1.5px solid #CBD5E1 !important;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
         margin-bottom: 20px;
-    }
-
-    /* FIX DEFINITIVO E BLINDATO PER IL COLORE ROSSO FISSO DELLA SECONDA TAB (TERAPIE REGISTRATE) */
-    div[data-baseweb="tab-list"] button:nth-of-type(2),
-    div[data-baseweb="tab-list"] button:nth-of-type(2) *,
-    div[data-baseweb="tab-list"] button:nth-of-type(2) p,
-    div[data-baseweb="tab-list"] button:nth-of-type(2) span,
-    div[data-baseweb="tab-list"] button:nth-of-type(2) div {
-        color: #DC2626 !important;
-        -webkit-text-fill-color: #DC2626 !important;
-        font-weight: 800 !important;
     }
 
     /* BADGES */
@@ -552,7 +541,6 @@ elif st.session_state.sezione_attiva == "angeli":
         with col_restore:
             st.write("")
             st.write("")
-            # FUNZIONE PER RIPRISTINARE L'ANIMALE
             if st.button("🔄 Ripristina Animale Attivo"):
                 if angelo_selezionato not in st.session_state.lista_animali:
                     st.session_state.lista_animali.append(angelo_selezionato)
@@ -578,7 +566,12 @@ elif st.session_state.sezione_attiva == "angeli":
             st.caption(f"Data del decesso registrata: {dati_angelo['data_decesso']} | Certificato allegato: {dati_angelo['certificato']}")
             st.markdown("---")
             
-            tab_visite, tab_terapie, tab_fatture = st.tabs(["🏥 Storico Visite", "💊 Terapie Registrate", "📄 Fatture e Documenti"])
+            # --- APPLICAZIONE DIRETTA HTML PER RENDERE IL TESTO ROSSO FISSO INDIPENDENTEMENTE DALLO STATO ---
+            tab_visite, tab_terapie, tab_fatture = st.tabs([
+                "🏥 Storico Visite", 
+                ":red[💊 Terapie Registrate]", 
+                "📄 Fatture e Documenti"
+            ])
             
             with tab_visite:
                 if dati_angelo["visite"]:
