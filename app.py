@@ -357,7 +357,6 @@ if st.session_state.sezione_attiva == "dashboard":
     if pet_selected:
         col1, col2 = st.columns(2)
 
-        # recupero dati per il pet selezionato
         terapie_pet = st.session_state.db_terapie.get(pet_selected, [])
         visite_pet = st.session_state.db_visite.get(pet_selected, [])
 
@@ -370,12 +369,19 @@ if st.session_state.sezione_attiva == "dashboard":
             """, unsafe_allow_html=True)
             
             if terapie_pet:
-                for t in terapie_pet:
-                    st.markdown(f"**💊 {t['farmaco']}**")
-                    st.caption(f"Dosaggio: {t['dosaggio']} | Periodo: {t['periodo']}")
-                    if t['note']:
-                        st.write(f"_*Note:* {t['note']}_")
-                    st.write("---")
+                for idx, t in enumerate(terapie_pet):
+                    with st.expander(f"💊 {t['farmaco']} ({t['periodo']})"):
+                        st.write(f"**Dosaggio:** {t['dosaggio']}")
+                        st.write(f"**Periodo:** {t['periodo']}")
+                        if t['note']:
+                            st.write(f"**Note:** {t['note']}")
+                        if t.get('ricetta'):
+                            st.caption(f"📄 Ricetta: {t['ricetta']}")
+                        
+                        if st.button("🗑️ Elimina Terapia", key=f"del_ter_dash_{idx}"):
+                            st.session_state.db_terapie[pet_selected].pop(idx)
+                            st.success("Terapia eliminata con successo!")
+                            st.rerun()
             else:
                 st.info(f"Nessuna terapia attiva al momento per {pet_selected}.")
 
@@ -388,13 +394,20 @@ if st.session_state.sezione_attiva == "dashboard":
             """, unsafe_allow_html=True)
             
             if visite_pet:
-                for v in visite_pet[-3:]:  # Mostra le ultime 3 visite
-                    st.markdown(f"**🏥 {v['tipo']}** ({v['data']})")
-                    if v['veterinario']:
-                        st.caption(f"Vet: {v['veterinario']}")
-                    if v['diagnosi']:
-                        st.write(f"_*Diagnosi:* {v['diagnosi']}_")
-                    st.write("---")
+                for idx, v in enumerate(reversed(visite_pet)):
+                    real_idx = len(visite_pet) - 1 - idx
+                    with st.expander(f"🏥 {v['tipo']} - {v['data']}"):
+                        if v['veterinario']:
+                            st.write(f"**Veterinario:** {v['veterinario']}")
+                        if v['diagnosi']:
+                            st.write(f"**Diagnosi:** {v['diagnosi']}")
+                        if v.get('referto'):
+                            st.caption(f"📄 Referto: {v['referto']}")
+                            
+                        if st.button("🗑️ Elimina Visita", key=f"del_vis_dash_{real_idx}"):
+                            st.session_state.db_visite[pet_selected].pop(real_idx)
+                            st.success("Visita eliminata con successo!")
+                            st.rerun()
             else:
                 st.info(f"Nessuna visita recente registrata per {pet_selected}.")
 
@@ -475,6 +488,22 @@ elif st.session_state.sezione_attiva == "visite":
                 st.session_state.db_visite[pet_selected].append(nuova_visita)
                 st.success(f"Visita medica registrata con successo per {pet_selected}!")
                 st.rerun()
+
+        st.markdown("### 📋 Visite Registrate")
+        visite_list = st.session_state.db_visite.get(pet_selected, [])
+        if visite_list:
+            for idx, v in enumerate(visite_list):
+                with st.expander(f"🏥 {v['data']} - {v['tipo']} ({v['veterinario']})"):
+                    st.write(f"**Diagnosi:** {v['diagnosi']}")
+                    if v.get('referto'):
+                        st.caption(f"📄 Referto: {v['referto']}")
+                    if st.button("🗑️ Elimina Questa Visita", key=f"del_vis_page_{idx}"):
+                        st.session_state.db_visite[pet_selected].pop(idx)
+                        st.success("Visita eliminata!")
+                        st.rerun()
+        else:
+            st.info("Nessuna visita salvata al momento.")
+
     else:
         st.warning("Seleziona o registra un animale attivo per gestire le visite.")
 
@@ -520,6 +549,23 @@ elif st.session_state.sezione_attiva == "terapie":
                 st.session_state.db_terapie[pet_selected].append(nuova_terapia)
                 st.success(f"Terapia registrata con successo per {pet_selected}!")
                 st.rerun()
+
+        st.markdown("### 📋 Terapie Registrate")
+        terapie_list = st.session_state.db_terapie.get(pet_selected, [])
+        if terapie_list:
+            for idx, t in enumerate(terapie_list):
+                with st.expander(f"💊 {t['farmaco']} ({t['periodo']})"):
+                    st.write(f"**Dosaggio:** {t['dosaggio']}")
+                    st.write(f"**Note:** {t['note']}")
+                    if t.get('ricetta'):
+                        st.caption(f"📄 Ricetta: {t['ricetta']}")
+                    if st.button("🗑️ Elimina Questa Terapia", key=f"del_ter_page_{idx}"):
+                        st.session_state.db_terapie[pet_selected].pop(idx)
+                        st.success("Terapia eliminata!")
+                        st.rerun()
+        else:
+            st.info("Nessuna terapia salvata al momento.")
+
     else:
         st.warning("Seleziona o registra un animale attivo per gestire le terapie.")
 
@@ -553,6 +599,22 @@ elif st.session_state.sezione_attiva == "fatture":
                 st.session_state.db_fatture[pet_selected].append(nuova_fattura)
                 st.success("Fattura / Spesa registrata con successo!")
                 st.rerun()
+
+        st.markdown("### 📋 Fatture Registrate")
+        fatture_list = st.session_state.db_fatture.get(pet_selected, [])
+        if fatture_list:
+            for idx, f in enumerate(fatture_list):
+                with st.expander(f"📄 €{f['importo']:.2f} - {f['categoria']} ({f['data']})"):
+                    st.write(f"**Fornitore:** {f['fornitore']}")
+                    if f.get('documento'):
+                        st.caption(f"📄 Documento: {f['documento']}")
+                    if st.button("🗑️ Elimina Fattura", key=f"del_fat_page_{idx}"):
+                        st.session_state.db_fatture[pet_selected].pop(idx)
+                        st.success("Fattura eliminata!")
+                        st.rerun()
+        else:
+            st.info("Nessuna fattura salvata al momento.")
+
     else:
         st.warning("Seleziona o registra un animale attivo per gestire le fatture.")
 
@@ -615,7 +677,7 @@ elif st.session_state.sezione_attiva == "angeli":
                     for v in dati_angelo["visite"]:
                         st.write(f"• **Data:** {v['data']} | **Tipo:** {v['tipo']} | **Vet:** {v['veterinario']}")
                         st.write(f"  *Diagnosi:* {v['diagnosi']}")
-                        if v['referto']:
+                        if v.get('referto'):
                             st.caption(f"  📄 Documento referto allegato: {v['referto']}")
                         st.write("---")
                 else:
@@ -626,7 +688,7 @@ elif st.session_state.sezione_attiva == "angeli":
                     for t in dati_angelo["terapie"]:
                         st.write(f"• **Farmaco:** {t['farmaco']} | **Dosaggio:** {t['dosaggio']} | **Periodo:** {t['periodo']}")
                         st.write(f"  *Note:* {t['note']}")
-                        if t['ricetta']:
+                        if t.get('ricetta'):
                             st.caption(f"  📄 Documento ricetta allegato: {t['ricetta']}")
                         st.write("---")
                 else:
@@ -637,7 +699,7 @@ elif st.session_state.sezione_attiva == "angeli":
                     for f in dati_angelo["fatture"]:
                         st.write(f"• **Data:** {f['data']} | **Categoria:** {f['categoria']} | **Importo:** €{f['importo']:.2f}")
                         st.write(f"  *Fornitore:* {f['fornitore']}")
-                        if f['documento']:
+                        if f.get('documento'):
                             st.caption(f"  📄 Ricevuta/Fattura allegata: {f['documento']}")
                         st.write("---")
                 else:
