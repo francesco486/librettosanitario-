@@ -357,23 +357,46 @@ if st.session_state.sezione_attiva == "dashboard":
     if pet_selected:
         col1, col2 = st.columns(2)
 
+        # recupero dati per il pet selezionato
+        terapie_pet = st.session_state.db_terapie.get(pet_selected, [])
+        visite_pet = st.session_state.db_visite.get(pet_selected, [])
+
         with col1:
             st.markdown(f"""
                 <div class="wellness-card">
                     <span class="card-badge badge-purple">TERAPIE ATTIVE</span>
                     <h3 style="margin-top: 5px; margin-bottom: 15px; color: #1E3A2B;">💊 In Somministrazione</h3>
-                    <p style="color: #64748b; font-size: 0.95rem;">Nessuna terapia attiva al momento per {pet_selected}.</p>
                 </div>
             """, unsafe_allow_html=True)
+            
+            if terapie_pet:
+                for t in terapie_pet:
+                    st.markdown(f"**💊 {t['farmaco']}**")
+                    st.caption(f"Dosaggio: {t['dosaggio']} | Periodo: {t['periodo']}")
+                    if t['note']:
+                        st.write(f"_*Note:* {t['note']}_")
+                    st.write("---")
+            else:
+                st.info(f"Nessuna terapia attiva al momento per {pet_selected}.")
 
         with col2:
             st.markdown(f"""
                 <div class="wellness-card">
                     <span class="card-badge badge-blue">STORICO RECENTE</span>
                     <h3 style="margin-top: 5px; margin-bottom: 15px; color: #1E3A2B;">🪵 Ultime Visite</h3>
-                    <p style="color: #64748b; font-size: 0.95rem;">Nessuna visita recente registrata per {pet_selected}.</p>
                 </div>
             """, unsafe_allow_html=True)
+            
+            if visite_pet:
+                for v in visite_pet[-3:]:  # Mostra le ultime 3 visite
+                    st.markdown(f"**🏥 {v['tipo']}** ({v['data']})")
+                    if v['veterinario']:
+                        st.caption(f"Vet: {v['veterinario']}")
+                    if v['diagnosi']:
+                        st.write(f"_*Diagnosi:* {v['diagnosi']}_")
+                    st.write("---")
+            else:
+                st.info(f"Nessuna visita recente registrata per {pet_selected}.")
 
         st.write("")
 
@@ -445,8 +468,13 @@ elif st.session_state.sezione_attiva == "visite":
                     "diagnosi": diagnosi,
                     "referto": referto.name if referto else None
                 }
+                
+                if pet_selected not in st.session_state.db_visite:
+                    st.session_state.db_visite[pet_selected] = []
+                    
                 st.session_state.db_visite[pet_selected].append(nuova_visita)
                 st.success(f"Visita medica registrata con successo per {pet_selected}!")
+                st.rerun()
     else:
         st.warning("Seleziona o registra un animale attivo per gestire le visite.")
 
@@ -485,8 +513,13 @@ elif st.session_state.sezione_attiva == "terapie":
                     "note": note_somministrazione,
                     "ricetta": ricetta.name if ricetta else None
                 }
+                
+                if pet_selected not in st.session_state.db_terapie:
+                    st.session_state.db_terapie[pet_selected] = []
+                    
                 st.session_state.db_terapie[pet_selected].append(nuova_terapia)
                 st.success(f"Terapia registrata con successo per {pet_selected}!")
+                st.rerun()
     else:
         st.warning("Seleziona o registra un animale attivo per gestire le terapie.")
 
@@ -513,8 +546,13 @@ elif st.session_state.sezione_attiva == "fatture":
                     "fornitore": fornitore,
                     "documento": file_fattura.name if file_fattura else None
                 }
+                
+                if pet_selected not in st.session_state.db_fatture:
+                    st.session_state.db_fatture[pet_selected] = []
+                    
                 st.session_state.db_fatture[pet_selected].append(nuova_fattura)
                 st.success("Fattura / Spesa registrata con successo!")
+                st.rerun()
     else:
         st.warning("Seleziona o registra un animale attivo per gestire le fatture.")
 
@@ -566,7 +604,6 @@ elif st.session_state.sezione_attiva == "angeli":
             st.caption(f"Data del decesso registrata: {dati_angelo['data_decesso']} | Certificato allegato: {dati_angelo['certificato']}")
             st.markdown("---")
             
-            # --- APPLICAZIONE DIRETTA HTML PER RENDERE IL TESTO ROSSO FISSO INDIPENDENTEMENTE DALLO STATO ---
             tab_visite, tab_terapie, tab_fatture = st.tabs([
                 "🏥 Storico Visite", 
                 ":red[💊 Terapie Registrate]", 
