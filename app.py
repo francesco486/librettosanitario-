@@ -21,7 +21,7 @@ if "lista_animali" not in st.session_state:
 
 # Animale attivo selezionato
 if "pet_selezionato" not in st.session_state:
-    st.session_state.pet_selezionato = st.session_state.lista_animali[0]
+    st.session_state.pet_selezionato = st.session_state.lista_animali[0] if st.session_state.lista_animali else None
 
 # Database in memoria per registrare visite, terapie e fatture degli animali attivi
 if "db_visite" not in st.session_state:
@@ -37,7 +37,7 @@ if "db_fatture" not in st.session_state:
 if "angeli_archiviati" not in st.session_state:
     st.session_state.angeli_archiviati = {} 
 
-# 2. CSS CUSTOM COMPLETO CON FIX COLORE TERAPIE ROSSO FISSO
+# 2. CSS CUSTOM COMPLETO
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
@@ -116,13 +116,12 @@ st.markdown("""
         margin-bottom: 20px;
     }
 
-    /* FIX SPECIFICO PER LA TAB TERAPIE IN COLORE ROSSO FISSO */
-    button[data-baseweb="tab"]:nth-child(2) p,
-    button[data-baseweb="tab"]:nth-child(2) span,
-    button[data-baseweb="tab"]:nth-child(2) {
+    /* FIX FORZATO PER LA TAB TERAPIE IN COLORE ROSSO FISSO */
+    button[data-baseweb="tab"]:nth-child(2),
+    button[data-baseweb="tab"]:nth-child(2) * {
         color: #DC2626 !important;
         -webkit-text-fill-color: #DC2626 !important;
-        font-weight: 700 !important;
+        font-weight: 800 !important;
     }
 
     /* BADGES */
@@ -387,7 +386,7 @@ if st.session_state.sezione_attiva == "dashboard":
         st.write("")
 
         with st.expander(f"⚠️ Area Riservata Medico Veterinario (Registro Decesso - {pet_selected})"):
-            st.warning(f"⚠️ Attenzione: questa procedura registrerà ufficialmente il decesso dell'animale {pet_selected}. L'azione è irreversibile e sposterà l'intera cartella clinica nella sezione 'I nostri angeli a 4 zampe'.")
+            st.warning(f"⚠️ Attenzione: questa procedura registrerà ufficialmente il decesso dell'animale {pet_selected}. L'azione sposterà l'intera cartella clinica nella sezione 'I nostri angeli a 4 zampe'.")
             
             date_decesso = st.date_input("Data del decesso")
             certificato = st.file_uploader("Allega Certificato di Morte (PDF/Foto)", type=["pdf", "png", "jpg"], key="cert_morte")
@@ -542,49 +541,78 @@ elif st.session_state.sezione_attiva == "angeli":
     lista_angeli = list(st.session_state.angeli_archiviati.keys())
     
     if len(lista_angeli) > 0:
-        angelo_selezionato = st.selectbox("Seleziona un angelo per consultare la sua cartella clinica archiviata:", lista_angeli)
+        col_select, col_restore = st.columns([2, 1])
         
-        dati_angelo = st.session_state.angeli_archiviati[angelo_selezionato]
-        
-        st.write("")
-        st.markdown(f"### 📁 Cartella Clinica Archiviata: **{angelo_selezionato}**")
-        st.caption(f"Data del decesso registrata: {dati_angelo['data_decesso']} | Certificato allegato: {dati_angelo['certificato']}")
-        st.markdown("---")
-        
-        tab_visite, tab_terapie, tab_fatture = st.tabs(["🏥 Storico Visite", "💊 Terapie Registrate", "📄 Fatture e Documenti"])
-        
-        with tab_visite:
-            if dati_angelo["visite"]:
-                for v in dati_angelo["visite"]:
-                    st.write(f"• **Data:** {v['data']} | **Tipo:** {v['tipo']} | **Vet:** {v['veterinario']}")
-                    st.write(f"  *Diagnosi:* {v['diagnosi']}")
-                    if v['referto']:
-                        st.caption(f"  📄 Documento referto allegato: {v['referto']}")
-                    st.write("---")
-            else:
-                st.info("Nessuna visita salvata nello storico al momento dell'archiviazione.")
+        with col_select:
+            angelo_selezionato = st.selectbox("Seleziona un angelo per consultare la sua cartella clinica archiviata:", lista_angeli)
+            
+        with col_restore:
+            st.write("")
+            st.write("")
+            # FUNZIONE PER RIPRISTINARE L'ANIMALE
+            if st.button("🔄 Ripristina Animale Attivo"):
+                # Ripristiniamo l'animale nella lista degli attivi
+                if angelo_selezionato not in st.session_state.lista_animali:
+                    st.session_state.lista_animali.append(angelo_selezionato)
                 
-        with tab_terapie:
-            if dati_angelo["terapie"]:
-                for t in dati_angelo["terapie"]:
-                    st.write(f"• **Farmaco:** {t['farmaco']} | **Dosaggio:** {t['dosaggio']} | **Periodo:** {t['periodo']}")
-                    st.write(f"  *Note:* {t['note']}")
-                    if t['ricetta']:
-                        st.caption(f"  📄 Documento ricetta allegato: {t['ricetta']}")
-                    st.write("---")
-            else:
-                st.info("Nessuna terapia salvata nello storico al momento dell'archiviazione.")
+                # Ripristiniamo la sua cartella clinica
+                dati_ripristinati = st.session_state.angeli_archiviati.pop(angelo_selezionato)
+                st.session_state.db_visite[angelo_selezionato] = dati_ripristinati["visite"]
+                st.session_state.db_terapie[angelo_selezionato] = dati_ripristinati["terapie"]
+                st.session_state.db_fatture[angelo_selezionato] = dati_ripristinati["fatture"]
                 
-        with tab_fatture:
-            if dati_angelo["fatture"]:
-                for f in dati_angelo["fatture"]:
-                    st.write(f"• **Data:** {f['data']} | **Categoria:** {f['categoria']} | **Importo:** €{f['importo']:.2f}")
-                    st.write(f"  *Fornitore:* {f['fornitore']}")
-                    if f['documento']:
-                        st.caption(f"  📄 Ricevuta/Fattura allegata: {f['documento']}")
-                    st.write("---")
-            else:
-                st.info("Nessuna fattura salvata nello storico al momento dell'archiviazione.")
+                # Impostiamo l'animale ripristinato come quello selezionato
+                st.session_state.pet_selezionato = angelo_selezionato
+                
+                # Se non ci sono più angeli archiviati, torniamo alla dashboard
+                if len(st.session_state.angeli_archiviati) == 0:
+                    st.session_state.sezione_attiva = "dashboard"
+                    
+                st.success(f"{angelo_selezionato} è stato ripristinato con successo tra gli animali attivi!")
+                st.rerun()
+
+        if angelo_selezionato in st.session_state.angeli_archiviati:
+            dati_angelo = st.session_state.angeli_archiviati[angelo_selezionato]
+            
+            st.write("")
+            st.markdown(f"### 📁 Cartella Clinica Archiviata: **{angelo_selezionato}**")
+            st.caption(f"Data del decesso registrata: {dati_angelo['data_decesso']} | Certificato allegato: {dati_angelo['certificato']}")
+            st.markdown("---")
+            
+            tab_visite, tab_terapie, tab_fatture = st.tabs(["🏥 Storico Visite", "💊 Terapie Registrate", "📄 Fatture e Documenti"])
+            
+            with tab_visite:
+                if dati_angelo["visite"]:
+                    for v in dati_angelo["visite"]:
+                        st.write(f"• **Data:** {v['data']} | **Tipo:** {v['tipo']} | **Vet:** {v['veterinario']}")
+                        st.write(f"  *Diagnosi:* {v['diagnosi']}")
+                        if v['referto']:
+                            st.caption(f"  📄 Documento referto allegato: {v['referto']}")
+                        st.write("---")
+                else:
+                    st.info("Nessuna visita salvata nello storico al momento dell'archiviazione.")
+                    
+            with tab_terapie:
+                if dati_angelo["terapie"]:
+                    for t in dati_angelo["terapie"]:
+                        st.write(f"• **Farmaco:** {t['farmaco']} | **Dosaggio:** {t['dosaggio']} | **Periodo:** {t['periodo']}")
+                        st.write(f"  *Note:* {t['note']}")
+                        if t['ricetta']:
+                            st.caption(f"  📄 Documento ricetta allegato: {t['ricetta']}")
+                        st.write("---")
+                else:
+                    st.info("Nessuna terapia salvata nello storico al momento dell'archiviazione.")
+                    
+            with tab_fatture:
+                if dati_angelo["fatture"]:
+                    for f in dati_angelo["fatture"]:
+                        st.write(f"• **Data:** {f['data']} | **Categoria:** {f['categoria']} | **Importo:** €{f['importo']:.2f}")
+                        st.write(f"  *Fornitore:* {f['fornitore']}")
+                        if f['documento']:
+                            st.caption(f"  📄 Ricevuta/Fattura allegata: {f['documento']}")
+                        st.write("---")
+                else:
+                    st.info("Nessuna fattura salvata nello storico al momento dell'archiviazione.")
 
 elif st.session_state.sezione_attiva == "nuovo_animale":
     st.markdown("<h2 style='color: #1E3A2B;'>🐾 Registra Nuovo Animale</h2>", unsafe_allow_html=True)
