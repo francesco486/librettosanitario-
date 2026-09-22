@@ -668,40 +668,50 @@ elif st.session_state.sezione_attiva == "angeli":
             
             tab_visite, tab_terapie, tab_fatture = st.tabs([
                 "🏥 Storico Visite", 
-                ":red[💊 Terapie Registrate]", 
+                "💊 Terapie Registrate", 
                 "📄 Fatture e Documenti"
             ])
             
             with tab_visite:
                 if dati_angelo["visite"]:
-                    for v in dati_angelo["visite"]:
-                        st.write(f"• **Data:** {v['data']} | **Tipo:** {v['tipo']} | **Vet:** {v['veterinario']}")
-                        st.write(f"  *Diagnosi:* {v['diagnosi']}")
-                        if v.get('referto'):
-                            st.caption(f"  📄 Documento referto allegato: {v['referto']}")
-                        st.write("---")
+                    for idx_v, v in enumerate(dati_angelo["visite"]):
+                        with st.expander(f"🏥 {v['data']} - {v['tipo']} ({v['veterinario']})"):
+                            st.write(f"**Diagnosi:** {v['diagnosi']}")
+                            if v.get('referto'):
+                                st.caption(f"📄 Referto: {v['referto']}")
+                            if st.button("🗑️ Elimina Questa Visita", key=f"del_vis_ang_{idx_v}"):
+                                dati_angelo["visite"].pop(idx_v)
+                                st.success("Visita eliminata dall'archivio!")
+                                st.rerun()
                 else:
                     st.info("Nessuna visita salvata nello storico al momento dell'archiviazione.")
                     
             with tab_terapie:
                 if dati_angelo["terapie"]:
-                    for t in dati_angelo["terapie"]:
-                        st.write(f"• **Farmaco:** {t['farmaco']} | **Dosaggio:** {t['dosaggio']} | **Periodo:** {t['periodo']}")
-                        st.write(f"  *Note:* {t['note']}")
-                        if t.get('ricetta'):
-                            st.caption(f"  📄 Documento ricetta allegato: {t['ricetta']}")
-                        st.write("---")
+                    for idx_t, t in enumerate(dati_angelo["terapie"]):
+                        with st.expander(f"💊 {t['farmaco']} ({t['periodo']})"):
+                            st.write(f"**Dosaggio:** {t['dosaggio']}")
+                            st.write(f"**Note:** {t['note']}")
+                            if t.get('ricetta'):
+                                st.caption(f"📄 Ricetta: {t['ricetta']}")
+                            if st.button("🗑️ Elimina Questa Terapia", key=f"del_ter_ang_{idx_t}"):
+                                dati_angelo["terapie"].pop(idx_t)
+                                st.success("Terapia eliminata dall'archivio!")
+                                st.rerun()
                 else:
                     st.info("Nessuna terapia salvata nello storico al momento dell'archiviazione.")
                     
             with tab_fatture:
                 if dati_angelo["fatture"]:
-                    for f in dati_angelo["fatture"]:
-                        st.write(f"• **Data:** {f['data']} | **Categoria:** {f['categoria']} | **Importo:** €{f['importo']:.2f}")
-                        st.write(f"  *Fornitore:* {f['fornitore']}")
-                        if f.get('documento'):
-                            st.caption(f"  📄 Ricevuta/Fattura allegata: {f['documento']}")
-                        st.write("---")
+                    for idx_f, f in enumerate(dati_angelo["fatture"]):
+                        with st.expander(f"📄 €{f['importo']:.2f} - {f['categoria']} ({f['data']})"):
+                            st.write(f"**Fornitore:** {f['fornitore']}")
+                            if f.get('documento'):
+                                st.caption(f"📄 Ricevuta/Fattura: {f['documento']}")
+                            if st.button("🗑️ Elimina Questa Fattura", key=f"del_fat_ang_{idx_f}"):
+                                dati_angelo["fatture"].pop(idx_f)
+                                st.success("Fattura eliminata dall'archivio!")
+                                st.rerun()
                 else:
                     st.info("Nessuna fattura salvata nello storico al momento dell'archiviazione.")
 
