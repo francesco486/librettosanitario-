@@ -36,10 +36,8 @@ if "db_fatture" not in st.session_state:
 # Registro e Archivio per "I nostri angeli a 4 zampe"
 if "angeli_archiviati" not in st.session_state:
     st.session_state.angeli_archiviati = {} 
-    # Struttura: {"NomeAnimale": {"data_decesso": ..., "visite": [...], "terapie": [...], "fatture": [...]}}
 
-
-# 2. CSS CUSTOM COMPLETO
+# 2. CSS CUSTOM COMPLETO CON FIX COLORE TERAPIE ROSSO FISSO
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
@@ -116,6 +114,15 @@ st.markdown("""
         border: 1.5px solid #CBD5E1 !important;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
         margin-bottom: 20px;
+    }
+
+    /* FIX SPECIFICO PER LA TAB TERAPIE IN COLORE ROSSO FISSO */
+    button[data-baseweb="tab"]:nth-child(2) p,
+    button[data-baseweb="tab"]:nth-child(2) span,
+    button[data-baseweb="tab"]:nth-child(2) {
+        color: #DC2626 !important;
+        -webkit-text-fill-color: #DC2626 !important;
+        font-weight: 700 !important;
     }
 
     /* BADGES */
@@ -307,7 +314,6 @@ with st.sidebar:
     
     st.markdown("**LIBRETTO ATTIVO**")
     
-    # Se ci sono animali attivi mostriamo la selectbox
     if len(st.session_state.lista_animali) > 0:
         index_selezionato = 0
         if st.session_state.pet_selezionato in st.session_state.lista_animali:
@@ -343,7 +349,6 @@ with st.sidebar:
         st.session_state.sezione_attiva = "fatture"
         st.rerun()
         
-    # SEZIONE ANGELI (Compare se c'è almeno un animale archiviato)
     if len(st.session_state.angeli_archiviati) > 0:
         st.write("")
         if st.button("🌈 I nostri angeli a 4 zampe"):
@@ -381,7 +386,6 @@ if st.session_state.sezione_attiva == "dashboard":
 
         st.write("")
 
-        # AREA RISERVATA VETERINARIO - REGISTRO DECESSO
         with st.expander(f"⚠️ Area Riservata Medico Veterinario (Registro Decesso - {pet_selected})"):
             st.warning(f"⚠️ Attenzione: questa procedura registrerà ufficialmente il decesso dell'animale {pet_selected}. L'azione è irreversibile e sposterà l'intera cartella clinica nella sezione 'I nostri angeli a 4 zampe'.")
             
@@ -390,10 +394,9 @@ if st.session_state.sezione_attiva == "dashboard":
             pin_vet = st.text_input("PIN Veterinario per confermare (es. 1234)", type="password", key="pin_morte")
             
             if st.button("Conferma e Archivia Registro"):
-                if pin_vet == "1234":  # PIN di test
+                if pin_vet == "1234":
                     animale_da_archiviare = pet_selected
                     
-                    # Archiviazione dati e documenti
                     st.session_state.angeli_archiviati[animale_da_archiviare] = {
                         "data_decesso": str(date_decesso),
                         "certificato": certificato.name if certificato else "Non allegato",
@@ -402,10 +405,8 @@ if st.session_state.sezione_attiva == "dashboard":
                         "fatture": st.session_state.db_fatture.get(animale_da_archiviare, [])
                     }
                     
-                    # Rimuoviamo l'animale dalla lista degli attivi
                     st.session_state.lista_animali.remove(animale_da_archiviare)
                     
-                    # Impostiamo il prossimo animale attivo o nessuno
                     if len(st.session_state.lista_animali) > 0:
                         st.session_state.pet_selezionato = st.session_state.lista_animali[0]
                     else:
@@ -446,7 +447,6 @@ elif st.session_state.sezione_attiva == "visite":
             
             st.write("")
             if st.button("Salva Visita Medica"):
-                # Salvataggio nel database locale per la cartella clinica
                 nuova_visita = {
                     "data": str(data_visita),
                     "tipo": tipo_visita,
@@ -528,10 +528,8 @@ elif st.session_state.sezione_attiva == "fatture":
         st.warning("Seleziona o registra un animale attivo per gestire le fatture.")
 
 elif st.session_state.sezione_attiva == "angeli":
-    # --- SEZIONE I NOSTRI ANGELI A 4 ZAMPE ---
     st.markdown("<h2 style='color: #1E3A2B;'>🌈 I Nostri Angeli a 4 Zampe</h2>", unsafe_allow_html=True)
     
-    # MESSAGGIO D'AFFETTO DEDICATO
     st.markdown(f"""
         <div class="angels-card">
             <span class="card-badge badge-memorial">MEMORIALE</span>
@@ -541,7 +539,6 @@ elif st.session_state.sezione_attiva == "angeli":
         </div>
     """, unsafe_allow_html=True)
     
-    # SELETTORE DELL'ARCHIVIO ANGELI
     lista_angeli = list(st.session_state.angeli_archiviati.keys())
     
     if len(lista_angeli) > 0:
@@ -611,8 +608,6 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
             if nome_animale.strip() != "":
                 if nome_animale not in st.session_state.lista_animali:
                     st.session_state.lista_animali.append(nome_animale)
-                    
-                    # Inizializziamo il database vuoto per il nuovo animale
                     st.session_state.db_visite[nome_animale] = []
                     st.session_state.db_terapie[nome_animale] = []
                     st.session_state.db_fatture[nome_animale] = []
