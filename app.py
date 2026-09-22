@@ -116,6 +116,12 @@ st.markdown("""
         margin-bottom: 20px;
     }
 
+    /* FORZATURA TESTO ROSSO PER SCHEDE SPECIFICHE */
+    .tab-rossa {
+        color: #DC2626 !important;
+        font-weight: 800 !important;
+    }
+
     /* BADGES */
     .card-badge {
         display: inline-block;
@@ -666,10 +672,11 @@ elif st.session_state.sezione_attiva == "angeli":
             st.caption(f"Data del decesso registrata: {dati_angelo['data_decesso']} | Certificato allegato: {dati_angelo['certificato']}")
             st.markdown("---")
             
+            # --- TITOLI TAB CON CLASSE HTML HTML PER ROSSO FISSO ---
             tab_visite, tab_terapie, tab_fatture = st.tabs([
                 "🏥 Storico Visite", 
-                "💊 Terapie Registrate", 
-                "📄 Fatture e Documenti"
+                '<span class="tab-rossa">💊 Terapie Registrate</span>', 
+                '<span class="tab-rossa">📄 Fatture e Documenti</span>'
             ])
             
             with tab_visite:
