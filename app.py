@@ -116,12 +116,6 @@ st.markdown("""
         margin-bottom: 20px;
     }
 
-    /* FORZATURA TESTO ROSSO PER SCHEDE SPECIFICHE */
-    .tab-rossa {
-        color: #DC2626 !important;
-        font-weight: 800 !important;
-    }
-
     /* BADGES */
     .card-badge {
         display: inline-block;
@@ -299,6 +293,21 @@ st.markdown("""
         background-color: #334155 !important;
         border: 1px solid #475569 !important;
         color: #FFFFFF !important;
+    }
+    
+    /* STILE PER COLORARE DI ROSSO LE TAB SPECIFICHE */
+    /* Targetta il secondo bottone delle tab (Terapie Registrate) */
+    button[data-baseweb="tab"]:nth-child(2) div[data-testid="stMarkdownContainer"] p {
+        color: #DC2626 !important;
+        -webkit-text-fill-color: #DC2626 !important;
+        font-weight: bold !important;
+    }
+    
+    /* Targetta il terzo bottone delle tab (Fatture e Documenti) */
+    button[data-baseweb="tab"]:nth-child(3) div[data-testid="stMarkdownContainer"] p {
+        color: #DC2626 !important;
+        -webkit-text-fill-color: #DC2626 !important;
+        font-weight: bold !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -672,11 +681,11 @@ elif st.session_state.sezione_attiva == "angeli":
             st.caption(f"Data del decesso registrata: {dati_angelo['data_decesso']} | Certificato allegato: {dati_angelo['certificato']}")
             st.markdown("---")
             
-            # --- TITOLI TAB CON CLASSE HTML HTML PER ROSSO FISSO ---
+            # --- MODIFICA: Ripristinati i titoli delle tab in testo semplice ---
             tab_visite, tab_terapie, tab_fatture = st.tabs([
                 "🏥 Storico Visite", 
-                '<span class="tab-rossa">💊 Terapie Registrate</span>', 
-                '<span class="tab-rossa">📄 Fatture e Documenti</span>'
+                "💊 Terapie Registrate", 
+                "📄 Fatture e Documenti"
             ])
             
             with tab_visite:
@@ -756,3 +765,6 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
                 st.error("Inserisci un nome valido per l'animale.")
                 
     st.markdown('</div>', unsafe_allow_html=True)
+```eof
+
+I've reverted the tab definitions to plain strings and added a specific CSS rule to target the 2nd and 3rd tab elements to make their text red. Let me know if that renders perfectly now!
