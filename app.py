@@ -1,6 +1,5 @@
 import streamlit as st
 
-# 1. Configurazione della pagina
 st.set_page_config(
     page_title="PetHealth - Wellness & Care",
     page_icon="🐾",
@@ -8,7 +7,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- INIZIALIZZAZIONE DEGLI STATI DELLA SESSIONE ---
 if "sezione_attiva" not in st.session_state:
     st.session_state.sezione_attiva = "dashboard"
 
@@ -37,7 +35,6 @@ if "db_fatture" not in st.session_state:
 if "angeli_archiviati" not in st.session_state:
     st.session_state.angeli_archiviati = {} 
 
-# 2. CSS CUSTOM COMPLETO
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
@@ -295,15 +292,13 @@ st.markdown("""
         color: #FFFFFF !important;
     }
     
-    /* STILE PER COLORARE DI ROSSO LE TAB SPECIFICHE */
-    /* Targetta il secondo bottone delle tab (Terapie Registrate) */
+    /* COLORAZIONE ROSSA TAB SPECIFICHE NELLA SEZIONE ANGELI */
     button[data-baseweb="tab"]:nth-child(2) div[data-testid="stMarkdownContainer"] p {
         color: #DC2626 !important;
         -webkit-text-fill-color: #DC2626 !important;
         font-weight: bold !important;
     }
     
-    /* Targetta il terzo bottone delle tab (Fatture e Documenti) */
     button[data-baseweb="tab"]:nth-child(3) div[data-testid="stMarkdownContainer"] p {
         color: #DC2626 !important;
         -webkit-text-fill-color: #DC2626 !important;
@@ -312,7 +307,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 3. BARRA LATERALE (SIDEBAR)
 with st.sidebar:
     st.caption("BENTORNATO/A")
     st.markdown(f"### {st.session_state.nome_utente} Veraldi")
@@ -366,7 +360,6 @@ with st.sidebar:
         st.session_state.sezione_attiva = "nuovo_animale"
         st.rerun()
 
-# 4. CONTENUTO DINAMICO DELL'APPLICAZIONE
 
 if st.session_state.sezione_attiva == "dashboard":
     if pet_selected:
@@ -681,7 +674,7 @@ elif st.session_state.sezione_attiva == "angeli":
             st.caption(f"Data del decesso registrata: {dati_angelo['data_decesso']} | Certificato allegato: {dati_angelo['certificato']}")
             st.markdown("---")
             
-            # --- MODIFICA: Ripristinati i titoli delle tab in testo semplice ---
+            # Tab in testo semplice per evitare l'errore di visualizzazione dell'HTML
             tab_visite, tab_terapie, tab_fatture = st.tabs([
                 "🏥 Storico Visite", 
                 "💊 Terapie Registrate", 
@@ -765,6 +758,3 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
                 st.error("Inserisci un nome valido per l'animale.")
                 
     st.markdown('</div>', unsafe_allow_html=True)
-```eof
-
-I've reverted the tab definitions to plain strings and added a specific CSS rule to target the 2nd and 3rd tab elements to make their text red. Let me know if that renders perfectly now!
