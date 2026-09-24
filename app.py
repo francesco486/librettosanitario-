@@ -1,6 +1,8 @@
 import streamlit as st
 import json
 import os
+import urllib.parse
+from datetime import datetime, date
 
 st.set_page_config(
     page_title="PetHealth - Wellness & Care",
@@ -10,6 +12,19 @@ st.set_page_config(
 )
 
 DATA_FILE = "data_pethealth.json"
+
+def genera_link_whatsapp(numero, animale, farmaco, dosaggio, orario, note=""):
+    """Genera il link di invio immediato con messaggio pre-compilato per WhatsApp."""
+    testo = f"🐾 *PetHealth - Promemoria Terapia*\n\n🐶 *Animale:* {animale}\n💊 *Farmaco:* {farmaco}\n🥄 *Dose / Quantità:* {dosaggio}\n⏰ *Orario Somministrazione:* {orario}\n"
+    if note:
+        testo += f"📝 *Istruzioni:* {note}\n"
+    testo += "\n⚠️ *Ricordati di somministrare la terapia fino alla data di fine prevista!*"
+    
+    testo_encoded = urllib.parse.quote(testo)
+    numero_pulito = "".join(filter(str.isdigit, str(numero)))
+    if numero_pulito:
+        return f"https://api.whatsapp.com/send?phone={numero_pulito}&text={testo_encoded}"
+    return f"https://api.whatsapp.com/send?text={testo_encoded}"
 
 def carica_dati():
     """Carica i dati salvati su file JSON se esiste."""
@@ -25,6 +40,7 @@ def salva_dati():
     """Salva lo stato attuale su file JSON per mantenerlo persistente ad ogni reload."""
     dati = {
         "nome_utente": st.session_state.get("nome_utente", "Francesco"),
+        "numero_whatsapp": st.session_state.get("numero_whatsapp", ""),
         "lista_animali": st.session_state.get("lista_animali", ["Orlando"]),
         "pet_selezionato": st.session_state.get("pet_selezionato", "Orlando"),
         "db_visite": st.session_state.get("db_visite", {"Orlando": []}),
@@ -42,6 +58,7 @@ if "inizializzato" not in st.session_state:
     dati_salvati = carica_dati()
     if dati_salvati:
         st.session_state.nome_utente = dati_salvati.get("nome_utente", "Francesco")
+        st.session_state.numero_whatsapp = dati_salvati.get("numero_whatsapp", "")
         st.session_state.lista_animali = dati_salvati.get("lista_animali", ["Orlando"])
         st.session_state.pet_selezionato = dati_salvati.get("pet_selezionato", "Orlando")
         st.session_state.db_visite = dati_salvati.get("db_visite", {"Orlando": []})
@@ -50,6 +67,7 @@ if "inizializzato" not in st.session_state:
         st.session_state.angeli_archiviati = dati_salvati.get("angeli_archiviati", {})
     else:
         st.session_state.nome_utente = "Francesco"
+        st.session_state.numero_whatsapp = ""
         st.session_state.lista_animali = ["Orlando"]
         st.session_state.pet_selezionato = "Orlando"
         st.session_state.db_visite = {"Orlando": []}
@@ -332,6 +350,14 @@ st.markdown("""
 with st.sidebar:
     st.caption("BENTORNATO/A")
     st.markdown(f"### {st.session_state.nome_utente} Veraldi")
+    
+    with st.expander("⚙️ Impostazioni Notifiche WhatsApp", expanded=False):
+        num_wa = st.text_input("Numero WhatsApp (con prefisso, es. +393331234567)", value=st.session_state.get("numero_whatsapp", ""))
+        if st.button("Salva Numero WhatsApp"):
+            st.session_state.numero_whatsapp = num_wa
+            salva_dati()
+            st.success("Numero WhatsApp salvato!")
+            
     st.write("")
     
     st.markdown("**LIBRETTO ATTIVO**")
@@ -394,21 +420,35 @@ if st.session_state.sezione_attiva == "dashboard":
         with col1:
             st.markdown(f"""
                 <div class="wellness-card">
-                    <span class="card-badge badge-purple">TERAPIE ATTIVE</span>
+                    <span class="card-badge badge-purple">TERAPIE ATTIVE & PROMEMORIA</span>
                     <h3 style="margin-top: 5px; margin-bottom: 15px; color: #1E3A2B;">💊 In Somministrazione</h3>
                 </div>
             """, unsafe_allow_html=True)
             
             if terapie_pet:
                 for idx, t in enumerate(terapie_pet):
-                    with st.expander(f"💊 {t['farmaco']} ({t['periodo']})"):
-                        st.write(f"**Dosaggio:** {t['dosaggio']}")
+                    orario_txt = t.get('orario', 'Non specificato')
+                    with st.expander(f"💊 {t['farmaco']} ({t['periodo']}) - ⏰ {orario_txt}"):
+                        st.write(f"**Dose / Quantità:** {t['dosaggio']}")
+                        st.write(f"**Orario di Somministrazione:** {orario_txt}")
                         st.write(f"**Periodo:** {t['periodo']}")
-                        if t['note']:
-                            st.write(f"**Note:** {t['note']}")
+                        if t.get('note'):
+                            st.write(f"**Note / Istruzioni:** {t['note']}")
                         if t.get('ricetta'):
                             st.caption(f"📄 Ricetta: {t['ricetta']}")
                         
+                        # Generazione link WhatsApp
+                        link_wa = genera_link_whatsapp(
+                            numero=st.session_state.get("numero_whatsapp", ""),
+                            animale=pet_selected,
+                            farmaco=t['farmaco'],
+                            dosaggio=t['dosaggio'],
+                            orario=orario_txt,
+                            note=t.get('note', '')
+                        )
+                        st.link_button("📲 Invia Promemoria WhatsApp Ora", url=link_wa)
+                        
+                        st.write("")
                         if st.button("🗑️ Elimina Terapia", key=f"del_ter_dash_{idx}"):
                             st.session_state.db_terapie[pet_selected].pop(idx)
                             salva_dati()
@@ -550,12 +590,13 @@ elif st.session_state.sezione_attiva == "terapie":
         with st.expander("➕ Nuova Terapia o Prescrizione", expanded=True):
             col1, col2 = st.columns(2)
             with col1:
-                nome_farmaco = st.text_input("Nome del Farmaco / Principio Attivo")
-                dosaggio = st.text_input("Dosaggio (es. 1 compressa ogni 12 ore)")
-                data_inizio = st.date_input("Data Inizio Terapia")
+                nome_farmaco = st.text_input("Nome del Farmaco / Principio Attivo*")
+                dosaggio = st.text_input("Dose / Quantità (es. 1/2 compressa, 5ml, 1 fiala)*")
+                orario_somministrazione = st.time_input("Orario di Somministrazione Giornaliero", value=datetime.strptime("09:00", "%H:%M").time())
+                data_inizio = st.date_input("Data Inizio Terapia", value=date.today())
                 data_fine = st.date_input("Data Fine Terapia (Presunta)")
             with col2:
-                note_somministrazione = st.text_area("Istruzioni e Note", placeholder="Es. Somministrare a stomaco pieno...")
+                note_somministrazione = st.text_area("Istruzioni e Note", placeholder="Es. Somministrare a stomaco pieno, 1 ora prima dei pasti...")
                 ricetta = st.file_uploader("Allega Ricetta Medica / Prescrizione (Opzionale)", type=["pdf", "png", "jpg"], key="terapia_ric")
                 fattura_farmaco = st.file_uploader("Allega Scontrino / Fattura Acquisto (Opzionale)", type=["pdf", "png", "jpg"], key="terapia_fat")
                 
@@ -570,32 +611,53 @@ elif st.session_state.sezione_attiva == "terapie":
                     tipo_prestazione_terapia = st.text_input("Tipo di Controllo Richiesto", placeholder="Es. Controllo valori ematici, Visita di controllo efficacia...")
 
             st.write("")
-            if st.button("Salva Terapia"):
-                nuova_terapia = {
-                    "farmaco": nome_farmaco,
-                    "dosaggio": dosaggio,
-                    "periodo": f"{data_inizio} - {data_fine}",
-                    "note": note_somministrazione,
-                    "ricetta": ricetta.name if ricetta else None
-                }
-                
-                if pet_selected not in st.session_state.db_terapie:
-                    st.session_state.db_terapie[pet_selected] = []
+            if st.button("Salva Terapia e Programma Promemoria"):
+                if nome_farmaco.strip() and dosaggio.strip():
+                    orario_str = orario_somministrazione.strftime("%H:%M")
+                    nuova_terapia = {
+                        "farmaco": nome_farmaco,
+                        "dosaggio": dosaggio,
+                        "orario": orario_str,
+                        "periodo": f"{data_inizio.strftime('%d/%m/%Y')} - {data_fine.strftime('%d/%m/%Y')}",
+                        "note": note_somministrazione,
+                        "ricetta": ricetta.name if ricetta else None
+                    }
                     
-                st.session_state.db_terapie[pet_selected].append(nuova_terapia)
-                salva_dati()
-                st.success(f"Terapia registrata con successo per {pet_selected}!")
-                st.rerun()
+                    if pet_selected not in st.session_state.db_terapie:
+                        st.session_state.db_terapie[pet_selected] = []
+                        
+                    st.session_state.db_terapie[pet_selected].append(nuova_terapia)
+                    salva_dati()
+                    st.success(f"Terapia per {nome_farmaco} registrata con successo con orario {orario_str}!")
+                    st.rerun()
+                else:
+                    st.error("Inserisci il nome del farmaco e la dose esatta.")
 
-        st.markdown("### 📋 Terapie Registrate")
+        st.markdown("### 📋 Terapie e Promemoria Programmati")
         terapie_list = st.session_state.db_terapie.get(pet_selected, [])
         if terapie_list:
             for idx, t in enumerate(terapie_list):
-                with st.expander(f"💊 {t['farmaco']} ({t['periodo']})"):
-                    st.write(f"**Dosaggio:** {t['dosaggio']}")
-                    st.write(f"**Note:** {t['note']}")
+                orario_txt = t.get('orario', 'Non specificato')
+                with st.expander(f"💊 {t['farmaco']} - Dose: {t['dosaggio']} (⏰ Orario: {orario_txt})"):
+                    st.write(f"**Dose / Quantità:** {t['dosaggio']}")
+                    st.write(f"**Orario Somministrazione:** {orario_txt}")
+                    st.write(f"**Periodo Terapia:** {t['periodo']}")
+                    if t.get('note'):
+                        st.write(f"**Istruzioni:** {t['note']}")
                     if t.get('ricetta'):
-                        st.caption(f"📄 Ricetta: {t['ricetta']}")
+                        st.caption(f"📄 Ricetta allegata: {t['ricetta']}")
+                    
+                    link_wa = genera_link_whatsapp(
+                        numero=st.session_state.get("numero_whatsapp", ""),
+                        animale=pet_selected,
+                        farmaco=t['farmaco'],
+                        dosaggio=t['dosaggio'],
+                        orario=orario_txt,
+                        note=t.get('note', '')
+                    )
+                    st.link_button("📲 Invia Promemoria WhatsApp", url=link_wa)
+                    
+                    st.write("")
                     if st.button("🗑️ Elimina Questa Terapia", key=f"del_ter_page_{idx}"):
                         st.session_state.db_terapie[pet_selected].pop(idx)
                         salva_dati()
