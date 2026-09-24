@@ -391,6 +391,11 @@ st.markdown("""
         -webkit-text-fill-color: #D2E3D8 !important;
     }
 
+    /* Riduzione dello spazio verticale tra i riquadri di testo nell'expander della sidebar */
+    section[data-testid="stSidebar"] div[data-testid="stExpander"] div[data-testid="stTextInput"] {
+        margin-bottom: -0.4rem !important;
+    }
+
     /* STILI SCURI SEZIONE REGISTRA NUOVO ANIMALE */
     .form-nuovo-animale input {
         background-color: #1E293B !important;
@@ -442,8 +447,8 @@ with st.sidebar:
     st.markdown(f"### {st.session_state.nome_utente} Veraldi")
     
     with st.expander("⚙️ Impostazioni Notifiche WhatsApp", expanded=False):
-        num_wa_1 = st.text_input("Numero WhatsApp 1 (Principale)", value=st.session_state.get("numero_whatsapp", ""))
-        num_wa_2 = st.text_input("Numero WhatsApp 2 (Secondario / Opzionale)", value=st.session_state.get("numero_whatsapp_2", ""))
+        num_wa_1 = st.text_input("Primo numero di telefono", value=st.session_state.get("numero_whatsapp", ""))
+        num_wa_2 = st.text_input("Secondo numero di telefono (opzionale)", value=st.session_state.get("numero_whatsapp_2", ""))
         if st.button("Salva / Modifica Numeri WhatsApp"):
             st.session_state.numero_whatsapp = num_wa_1
             st.session_state.numero_whatsapp_2 = num_wa_2
