@@ -592,9 +592,26 @@ elif st.session_state.sezione_attiva == "terapie":
             with col1:
                 nome_farmaco = st.text_input("Nome del Farmaco / Principio Attivo*")
                 dosaggio = st.text_input("Dose / Quantità (es. 1/2 compressa, 5ml, 1 fiala)*")
-                orario_somministrazione = st.time_input("Orario di Somministrazione Giornaliero", value=datetime.strptime("09:00", "%H:%M").time())
-                data_inizio = st.date_input("Data Inizio Terapia", value=date.today())
-                data_fine = st.date_input("Data Fine Terapia (Presunta)")
+                
+                # Checkbox per somministrazione per più giorni
+                is_multigiorno = st.checkbox("📅 La terapia va somministrata per più giorni?", value=False)
+                
+                data_inizio = st.date_input("Data Somministrazione / Inizio Terapia", value=date.today())
+                
+                if is_multigiorno:
+                    data_fine = st.date_input("Data Fine Terapia (Presunta)")
+                    st.markdown("---")
+                    st.caption("🔔 **Configurazione Promemoria**")
+                    attiva_promemoria = st.checkbox("📲 Attiva Promemoria Giornaliero WhatsApp", value=True)
+                    if attiva_promemoria:
+                        orario_somministrazione = st.time_input("Orario di Somministrazione Giornaliero", value=datetime.strptime("09:00", "%H:%M").time())
+                    else:
+                        orario_somministrazione = None
+                else:
+                    data_fine = data_inizio
+                    attiva_promemoria = False
+                    orario_somministrazione = None
+
             with col2:
                 note_somministrazione = st.text_area("Istruzioni e Note", placeholder="Es. Somministrare a stomaco pieno, 1 ora prima dei pasti...")
                 ricetta = st.file_uploader("Allega Ricetta Medica / Prescrizione (Opzionale)", type=["pdf", "png", "jpg"], key="terapia_ric")
@@ -613,12 +630,20 @@ elif st.session_state.sezione_attiva == "terapie":
             st.write("")
             if st.button("Salva Terapia e Programma Promemoria"):
                 if nome_farmaco.strip() and dosaggio.strip():
-                    orario_str = orario_somministrazione.strftime("%H:%M")
+                    if is_multigiorno:
+                        periodo_txt = f"{data_inizio.strftime('%d/%m/%Y')} - {data_fine.strftime('%d/%m/%Y')}"
+                        orario_str = orario_somministrazione.strftime("%H:%M") if (attiva_promemoria and orario_somministrazione) else "Non impostato"
+                    else:
+                        periodo_txt = f"Dose Unica ({data_inizio.strftime('%d/%m/%Y')})"
+                        orario_str = "Dose singola"
+
                     nuova_terapia = {
                         "farmaco": nome_farmaco,
                         "dosaggio": dosaggio,
                         "orario": orario_str,
-                        "periodo": f"{data_inizio.strftime('%d/%m/%Y')} - {data_fine.strftime('%d/%m/%Y')}",
+                        "periodo": periodo_txt,
+                        "multigiorno": is_multigiorno,
+                        "promemoria_attivo": attiva_promemoria if is_multigiorno else False,
                         "note": note_somministrazione,
                         "ricetta": ricetta.name if ricetta else None
                     }
@@ -628,7 +653,7 @@ elif st.session_state.sezione_attiva == "terapie":
                         
                     st.session_state.db_terapie[pet_selected].append(nuova_terapia)
                     salva_dati()
-                    st.success(f"Terapia per {nome_farmaco} registrata con successo con orario {orario_str}!")
+                    st.success(f"Terapia per {nome_farmaco} registrata con successo!")
                     st.rerun()
                 else:
                     st.error("Inserisci il nome del farmaco e la dose esatta.")
@@ -638,7 +663,7 @@ elif st.session_state.sezione_attiva == "terapie":
         if terapie_list:
             for idx, t in enumerate(terapie_list):
                 orario_txt = t.get('orario', 'Non specificato')
-                with st.expander(f"💊 {t['farmaco']} - Dose: {t['dosaggio']} (⏰ Orario: {orario_txt})"):
+                with st.expander(f"💊 {t['farmaco']} - Dose: {t['dosaggio']} ({t['periodo']})"):
                     st.write(f"**Dose / Quantità:** {t['dosaggio']}")
                     st.write(f"**Orario Somministrazione:** {orario_txt}")
                     st.write(f"**Periodo Terapia:** {t['periodo']}")
@@ -647,15 +672,17 @@ elif st.session_state.sezione_attiva == "terapie":
                     if t.get('ricetta'):
                         st.caption(f"📄 Ricetta allegata: {t['ricetta']}")
                     
-                    link_wa = genera_link_whatsapp(
-                        numero=st.session_state.get("numero_whatsapp", ""),
-                        animale=pet_selected,
-                        farmaco=t['farmaco'],
-                        dosaggio=t['dosaggio'],
-                        orario=orario_txt,
-                        note=t.get('note', '')
-                    )
-                    st.link_button("📲 Invia Promemoria WhatsApp", url=link_wa)
+                    # Mostra il pulsante promemoria solo se la terapia è per più giorni ed è attivata la notifica
+                    if t.get('promemoria_attivo', False):
+                        link_wa = genera_link_whatsapp(
+                            numero=st.session_state.get("numero_whatsapp", ""),
+                            animale=pet_selected,
+                            farmaco=t['farmaco'],
+                            dosaggio=t['dosaggio'],
+                            orario=orario_txt,
+                            note=t.get('note', '')
+                        )
+                        st.link_button("📲 Invia Promemoria WhatsApp", url=link_wa)
                     
                     st.write("")
                     if st.button("🗑️ Elimina Questa Terapia", key=f"del_ter_page_{idx}"):
