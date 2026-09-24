@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import os
 import urllib.parse
+import requests
 from datetime import datetime, date
 
 st.set_page_config(
@@ -14,7 +15,7 @@ st.set_page_config(
 DATA_FILE = "data_pethealth.json"
 
 def genera_link_whatsapp(numero, animale, farmaco, dosaggio, orario, note=""):
-    """Genera il link di invio immediato con messaggio pre-compilato per WhatsApp."""
+    """Genera il link di invio immediato con messaggio pre-compilato per WhatsApp per le Terapie."""
     testo = f"🐾 *PetHealth - Promemoria Terapia*\n\n🐶 *Animale:* {animale}\n💊 *Farmaco:* {farmaco}\n🥄 *Dose / Quantità:* {dosaggio}\n⏰ *Orario Somministrazione:* {orario}\n"
     if note:
         testo += f"📝 *Istruzioni:* {note}\n"
@@ -25,6 +26,92 @@ def genera_link_whatsapp(numero, animale, farmaco, dosaggio, orario, note=""):
     if numero_pulito:
         return f"https://api.whatsapp.com/send?phone={numero_pulito}&text={testo_encoded}"
     return f"https://api.whatsapp.com/send?text={testo_encoded}"
+
+def genera_link_whatsapp_visita(numero, animale, tipo_visita, data_visita, veterinario="", note=""):
+    """Genera il link di invio immediato con messaggio pre-compilato per WhatsApp per Visite e Controlli."""
+    testo = f"🐾 *PetHealth - Promemoria Visita / Controllo*\n\n🐶 *Animale:* {animale}\n🏥 *Prestazione/Controllo:* {tipo_visita}\n📅 *Data Prevista:* {data_visita}\n"
+    if veterinario:
+        testo += f"🩺 *Veterinario / Clinica:* {veterinario}\n"
+    if note:
+        testo += f"📝 *Note:* {note}\n"
+    testo += "\n⚠️ *Ricordati di confermare o presentarti all'appuntamento!*"
+    
+    testo_encoded = urllib.parse.quote(testo)
+    numero_pulito = "".join(filter(str.isdigit, str(numero)))
+    if numero_pulito:
+        return f"https://api.whatsapp.com/send?phone={numero_pulito}&text={testo_encoded}"
+    return f"https://api.whatsapp.com/send?text={testo_encoded}"
+
+def mostra_pulsanti_promemoria_terapia(animale, farmaco, dosaggio, orario, note=""):
+    """Mostra i pulsanti di invio WhatsApp per il Numero 1, Numero 2 o entrambi."""
+    num1 = st.session_state.get("numero_whatsapp", "")
+    num2 = st.session_state.get("numero_whatsapp_2", "")
+    
+    if num1 and num2:
+        col_wa1, col_wa2 = st.columns(2)
+        with col_wa1:
+            link1 = genera_link_whatsapp(num1, animale, farmaco, dosaggio, orario, note)
+            st.link_button("📲 WhatsApp (Numero 1)", url=link1)
+        with col_wa2:
+            link2 = genera_link_whatsapp(num2, animale, farmaco, dosaggio, orario, note)
+            st.link_button("📲 WhatsApp (Numero 2)", url=link2)
+    elif num1:
+        link1 = genera_link_whatsapp(num1, animale, farmaco, dosaggio, orario, note)
+        st.link_button("📲 Invia Promemoria WhatsApp", url=link1)
+    elif num2:
+        link2 = genera_link_whatsapp(num2, animale, farmaco, dosaggio, orario, note)
+        st.link_button("📲 Invia Promemoria WhatsApp (Num 2)", url=link2)
+    else:
+        link_gen = genera_link_whatsapp("", animale, farmaco, dosaggio, orario, note)
+        st.link_button("📲 Invia Promemoria WhatsApp", url=link_gen)
+
+def mostra_pulsanti_promemoria_visita(animale, tipo_visita, data_visita, veterinario="", note=""):
+    """Mostra i pulsanti di invio WhatsApp per i promemoria visita su Numero 1 o Numero 2."""
+    num1 = st.session_state.get("numero_whatsapp", "")
+    num2 = st.session_state.get("numero_whatsapp_2", "")
+    
+    if num1 and num2:
+        col_wa1, col_wa2 = st.columns(2)
+        with col_wa1:
+            link1 = genera_link_whatsapp_visita(num1, animale, tipo_visita, data_visita, veterinario, note)
+            st.link_button("📲 Promemoria Visita (Num 1)", url=link1)
+        with col_wa2:
+            link2 = genera_link_whatsapp_visita(num2, animale, tipo_visita, data_visita, veterinario, note)
+            st.link_button("📲 Promemoria Visita (Num 2)", url=link2)
+    elif num1:
+        link1 = genera_link_whatsapp_visita(num1, animale, tipo_visita, data_visita, veterinario, note)
+        st.link_button("📲 Promemoria Visita WhatsApp", url=link1)
+    elif num2:
+        link2 = genera_link_whatsapp_visita(num2, animale, tipo_visita, data_visita, veterinario, note)
+        st.link_button("📲 Promemoria Visita WhatsApp", url=link2)
+    else:
+        link_gen = genera_link_whatsapp_visita("", animale, tipo_visita, data_visita, veterinario, note)
+        st.link_button("📲 Promemoria Visita WhatsApp", url=link_gen)
+
+def chiedi_assistente_ai(prompt, pet_info=""):
+    """Invia una richiesta all'API Gemini per consulenza e supporto veterinario AI."""
+    system_instruction = (
+        "Sei un assistente AI esperto nella cura e nel benessere degli animali domestici. "
+        "Rispondi in modo empatico, professionale e chiaro in italiano. "
+        "Fornisci consigli utili e pratici, ma specifica SEMPRE che l'AI non sostituisce la diagnosi di un medico veterinario."
+    )
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent"
+    
+    payload = {
+        "contents": [{"parts": [{"text": f"Contesto Animale: {pet_info}\n\nRichiesta Utente: {prompt}"}]}],
+        "systemInstruction": {"parts": [{"text": system_instruction}]}
+    }
+    headers = {"Content-Type": "application/json"}
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=20)
+        if response.status_code == 200:
+            res_data = response.json()
+            return res_data['candidates'][0]['content']['parts'][0]['text']
+        else:
+            return f"⚠️ Errore API ({response.status_code}): Si è verificato un problema nella generazione del responso."
+    except Exception as e:
+        return f"⚠️ Errore di connessione API Gemini: {e}"
 
 def carica_dati():
     """Carica i dati salvati su file JSON se esiste."""
@@ -41,6 +128,7 @@ def salva_dati():
     dati = {
         "nome_utente": st.session_state.get("nome_utente", "Francesco"),
         "numero_whatsapp": st.session_state.get("numero_whatsapp", ""),
+        "numero_whatsapp_2": st.session_state.get("numero_whatsapp_2", ""),
         "lista_animali": st.session_state.get("lista_animali", ["Orlando"]),
         "pet_selezionato": st.session_state.get("pet_selezionato", "Orlando"),
         "db_visite": st.session_state.get("db_visite", {"Orlando": []}),
@@ -59,6 +147,7 @@ if "inizializzato" not in st.session_state:
     if dati_salvati:
         st.session_state.nome_utente = dati_salvati.get("nome_utente", "Francesco")
         st.session_state.numero_whatsapp = dati_salvati.get("numero_whatsapp", "")
+        st.session_state.numero_whatsapp_2 = dati_salvati.get("numero_whatsapp_2", "")
         st.session_state.lista_animali = dati_salvati.get("lista_animali", ["Orlando"])
         st.session_state.pet_selezionato = dati_salvati.get("pet_selezionato", "Orlando")
         st.session_state.db_visite = dati_salvati.get("db_visite", {"Orlando": []})
@@ -68,6 +157,7 @@ if "inizializzato" not in st.session_state:
     else:
         st.session_state.nome_utente = "Francesco"
         st.session_state.numero_whatsapp = ""
+        st.session_state.numero_whatsapp_2 = ""
         st.session_state.lista_animali = ["Orlando"]
         st.session_state.pet_selezionato = "Orlando"
         st.session_state.db_visite = {"Orlando": []}
@@ -352,11 +442,13 @@ with st.sidebar:
     st.markdown(f"### {st.session_state.nome_utente} Veraldi")
     
     with st.expander("⚙️ Impostazioni Notifiche WhatsApp", expanded=False):
-        num_wa = st.text_input("Numero WhatsApp (con prefisso, es. +393331234567)", value=st.session_state.get("numero_whatsapp", ""))
-        if st.button("Salva Numero WhatsApp"):
-            st.session_state.numero_whatsapp = num_wa
+        num_wa_1 = st.text_input("Numero WhatsApp 1 (Principale)", value=st.session_state.get("numero_whatsapp", ""))
+        num_wa_2 = st.text_input("Numero WhatsApp 2 (Secondario / Opzionale)", value=st.session_state.get("numero_whatsapp_2", ""))
+        if st.button("Salva / Modifica Numeri WhatsApp"):
+            st.session_state.numero_whatsapp = num_wa_1
+            st.session_state.numero_whatsapp_2 = num_wa_2
             salva_dati()
-            st.success("Numero WhatsApp salvato!")
+            st.success("Numeri WhatsApp salvati e aggiornati con successo!")
             
     st.write("")
     
@@ -399,6 +491,10 @@ with st.sidebar:
         st.session_state.sezione_attiva = "fatture"
         st.rerun()
         
+    if st.button("🤖 Assistente AI Veterinario"):
+        st.session_state.sezione_attiva = "assistente_ai"
+        st.rerun()
+        
     if len(st.session_state.angeli_archiviati) > 0:
         st.write("")
         if st.button("🌈 I nostri angeli a 4 zampe"):
@@ -437,16 +533,13 @@ if st.session_state.sezione_attiva == "dashboard":
                         if t.get('ricetta'):
                             st.caption(f"📄 Ricetta: {t['ricetta']}")
                         
-                        # Generazione link WhatsApp
-                        link_wa = genera_link_whatsapp(
-                            numero=st.session_state.get("numero_whatsapp", ""),
+                        mostra_pulsanti_promemoria_terapia(
                             animale=pet_selected,
                             farmaco=t['farmaco'],
                             dosaggio=t['dosaggio'],
                             orario=orario_txt,
                             note=t.get('note', '')
                         )
-                        st.link_button("📲 Invia Promemoria WhatsApp Ora", url=link_wa)
                         
                         st.write("")
                         if st.button("🗑️ Elimina Terapia", key=f"del_ter_dash_{idx}"):
@@ -473,9 +566,19 @@ if st.session_state.sezione_attiva == "dashboard":
                             st.write(f"**Veterinario:** {v['veterinario']}")
                         if v['diagnosi']:
                             st.write(f"**Diagnosi:** {v['diagnosi']}")
+                        if v.get('prossimo_controllo_data'):
+                            st.write(f"⏰ **Prossimo Controllo:** {v['prossimo_controllo_data']} ({v.get('prossimo_controllo_tipo', 'Controllo')})")
                         if v.get('referto'):
                             st.caption(f"📄 Referto: {v['referto']}")
-                            
+                        
+                        mostra_pulsanti_promemoria_visita(
+                            animale=pet_selected,
+                            tipo_visita=v.get('prossimo_controllo_tipo', v['tipo']),
+                            data_visita=v.get('prossimo_controllo_data', v['data']),
+                            veterinario=v.get('veterinario', ''),
+                            note=v.get('diagnosi', '')
+                        )
+
                         if st.button("🗑️ Elimina Visita", key=f"del_vis_dash_{real_idx}"):
                             st.session_state.db_visite[pet_selected].pop(real_idx)
                             salva_dati()
@@ -539,12 +642,14 @@ elif st.session_state.sezione_attiva == "visite":
             st.markdown("---")
             richiede_controllo = st.checkbox("🔄 Questa prestazione richiede un controllo successivo o va ripetuta?")
             
+            data_prossimo_ctrl = None
+            tipo_prestazione_ctrl = None
             if richiede_controllo:
                 col_ctrl1, col_ctrl2 = st.columns(2)
                 with col_ctrl1:
-                    data_prossimo_controllo = st.date_input("Data Prossimo Controllo / Ripetizione")
+                    data_prossimo_ctrl = st.date_input("Data Prossimo Controllo / Ripetizione")
                 with col_ctrl2:
-                    tipo_prestazione_ripetere = st.text_input("Tipo di Prestazione da Eseguire", placeholder="Es. Richiamo Vaccino, Controllo Ecografico, Esami del Sangue...")
+                    tipo_prestazione_ctrl = st.text_input("Tipo di Prestazione da Eseguire", placeholder="Es. Richiamo Vaccino, Controllo Ecografico, Esami del Sangue...")
             
             st.write("")
             if st.button("Salva Visita Medica"):
@@ -553,7 +658,9 @@ elif st.session_state.sezione_attiva == "visite":
                     "tipo": tipo_visita,
                     "veterinario": veterinario,
                     "diagnosi": diagnosi,
-                    "referto": referto.name if referto else None
+                    "referto": referto.name if referto else None,
+                    "prossimo_controllo_data": str(data_prossimo_ctrl) if richiede_controllo and data_prossimo_ctrl else None,
+                    "prossimo_controllo_tipo": tipo_prestazione_ctrl if richiede_controllo else None
                 }
                 
                 if pet_selected not in st.session_state.db_visite:
@@ -570,8 +677,19 @@ elif st.session_state.sezione_attiva == "visite":
             for idx, v in enumerate(visite_list):
                 with st.expander(f"🏥 {v['data']} - {v['tipo']} ({v['veterinario']})"):
                     st.write(f"**Diagnosi:** {v['diagnosi']}")
+                    if v.get('prossimo_controllo_data'):
+                        st.write(f"⏰ **Prossimo Controllo:** {v['prossimo_controllo_data']} ({v.get('prossimo_controllo_tipo', 'Controllo')})")
                     if v.get('referto'):
                         st.caption(f"📄 Referto: {v['referto']}")
+                    
+                    mostra_pulsanti_promemoria_visita(
+                        animale=pet_selected,
+                        tipo_visita=v.get('prossimo_controllo_tipo', v['tipo']),
+                        data_visita=v.get('prossimo_controllo_data', v['data']),
+                        veterinario=v.get('veterinario', ''),
+                        note=v.get('diagnosi', '')
+                    )
+
                     if st.button("🗑️ Elimina Questa Visita", key=f"del_vis_page_{idx}"):
                         st.session_state.db_visite[pet_selected].pop(idx)
                         salva_dati()
@@ -672,17 +790,13 @@ elif st.session_state.sezione_attiva == "terapie":
                     if t.get('ricetta'):
                         st.caption(f"📄 Ricetta allegata: {t['ricetta']}")
                     
-                    # Mostra il pulsante promemoria solo se la terapia è per più giorni ed è attivata la notifica
-                    if t.get('promemoria_attivo', False):
-                        link_wa = genera_link_whatsapp(
-                            numero=st.session_state.get("numero_whatsapp", ""),
-                            animale=pet_selected,
-                            farmaco=t['farmaco'],
-                            dosaggio=t['dosaggio'],
-                            orario=orario_txt,
-                            note=t.get('note', '')
-                        )
-                        st.link_button("📲 Invia Promemoria WhatsApp", url=link_wa)
+                    mostra_pulsanti_promemoria_terapia(
+                        animale=pet_selected,
+                        farmaco=t['farmaco'],
+                        dosaggio=t['dosaggio'],
+                        orario=orario_txt,
+                        note=t.get('note', '')
+                    )
                     
                     st.write("")
                     if st.button("🗑️ Elimina Questa Terapia", key=f"del_ter_page_{idx}"):
@@ -746,6 +860,62 @@ elif st.session_state.sezione_attiva == "fatture":
 
     else:
         st.warning("Seleziona o registra un animale attivo per gestire le fatture.")
+
+elif st.session_state.sezione_attiva == "assistente_ai":
+    st.markdown(f"<h2 style='color: #1E3A2B;'>🤖 Assistente AI Veterinario - {pet_selected if pet_selected else 'Generale'}</h2>", unsafe_allow_html=True)
+    
+    st.markdown("""
+        <div class="wellness-card">
+            <span class="card-badge badge-purple">INTEGRAZIONE GEMINI AI</span>
+            <p style="margin-top: 8px; font-weight: 500; color: #334155;">
+                Ottieni supporto immediato guidato dall'intelligenza artificiale per la salute del tuo pet. Chiedi informazioni su farmaci, sintomi, consigli nutrizionali o chiarimenti sulla terapia!
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    info_contesto = ""
+    if pet_selected:
+        terapie_p = st.session_state.db_terapie.get(pet_selected, [])
+        visite_p = st.session_state.db_visite.get(pet_selected, [])
+        info_contesto = f"Animale selezionato: {pet_selected}. Terapie attive: {len(terapie_p)}. Visite registrate: {len(visite_p)}."
+    
+    st.write("### 💬 Fai una domanda all'Assistente AI")
+    
+    st.caption("Esempi rapidi di richiesta:")
+    col_q1, col_q2, col_q3 = st.columns(3)
+    
+    prompt_preimpostato = ""
+    with col_q1:
+        if st.button("🩺 Analisi Sintomi Notati", key="btn_ai_sintomi"):
+            prompt_preimpostato = f"Quali possono essere le cause principali se {pet_selected if pet_selected else 'il mio pet'} appare stanco, poco attivo o svogliato nell'alimentazione?"
+    with col_q2:
+        if st.button("🥗 Dieta e Alimentazione", key="btn_ai_dieta"):
+            prompt_preimpostato = f"Fornisci dei consigli generali per una corretta alimentazione ed idratazione quotidiana per {pet_selected if pet_selected else 'un animale domestico'}."
+    with col_q3:
+        if st.button("💊 Supporto Somministrazione", key="btn_ai_terapie"):
+            terapie_p = st.session_state.db_terapie.get(pet_selected, []) if pet_selected else []
+            prompt_preimpostato = f"Fornisci consigli utili e trucchi per somministrare pillole o sciroppi senza stressare {pet_selected if pet_selected else 'l animale'}."
+
+    user_query = st.text_area(
+        "Oppure scrivi qui il tuo dubbio o la tua richiesta specifica:", 
+        value=prompt_preimpostato,
+        placeholder="Es: Quali cibi sono assolutamente tossici per i cani/gatti?",
+        height=110
+    )
+    
+    if st.button("✨ Chiedi all'Assistente AI"):
+        if user_query.strip():
+            with st.spinner("L'IA di Gemini sta analizzando la tua richiesta..."):
+                risposta = chiedi_assistente_ai(user_query, info_contesto)
+                st.markdown("""
+                    <div class="wellness-card" style="border-left: 4px solid #1E3A2B !important;">
+                        <h4 style="color: #1E3A2B; margin-bottom: 10px;">💡 Risposta dell'Assistente AI:</h4>
+                    </div>
+                """, unsafe_allow_html=True)
+                st.markdown(risposta)
+                st.info("ℹ️ *Nota: Il responso fornito dall'AI ha scopo puramente informativo ed educativo e non sostituisce il parere di un veterinario.*")
+        else:
+            st.warning("Inserisci o seleziona una domanda prima di inviare.")
 
 elif st.session_state.sezione_attiva == "angeli":
     st.markdown("<h2 style='color: #1E3A2B;'>🌈 I Nostri Angeli a 4 Zampe</h2>", unsafe_allow_html=True)
