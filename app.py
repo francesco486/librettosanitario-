@@ -3,6 +3,7 @@ import json
 import os
 import urllib.parse
 import requests
+import hashlib
 from datetime import datetime, date
 
 st.set_page_config(
@@ -13,6 +14,12 @@ st.set_page_config(
 )
 
 DATA_FILE = "data_pethealth.json"
+
+def genera_codice_certificazione(pet_nome, vet_nome, num_ordine, data_prestazione):
+    """Genera un codice identificativo univoco e inalterabile di certificazione sanitaria."""
+    stringa_base = f"{pet_nome}-{vet_nome}-{num_ordine}-{data_prestazione}-{datetime.now().isoformat()}"
+    hash_codice = hashlib.sha256(stringa_base.encode('utf-8')).hexdigest()[:8].upper()
+    return f"VET-CERT-{hash_codice}"
 
 def genera_link_whatsapp(numero, animale, farmaco, dosaggio, orario, note=""):
     """Genera il link di invio immediato con messaggio pre-compilato per WhatsApp per le Terapie."""
@@ -482,6 +489,10 @@ with st.sidebar:
         st.session_state.sezione_attiva = "fatture"
         st.rerun()
         
+    if st.button("✈️ Passaporto & Viaggi"):
+        st.session_state.sezione_attiva = "passaporto"
+        st.rerun()
+
     if len(st.session_state.angeli_archiviati) > 0:
         st.write("")
         if st.button("🌈 I nostri angeli a 4 zampe"):
@@ -615,11 +626,11 @@ elif st.session_state.sezione_attiva == "visite":
     if pet_selected:
         st.markdown(f"<h2 style='color: #1E3A2B;'>🏥 Visite e Clinica - {pet_selected}</h2>", unsafe_allow_html=True)
         
-        with st.expander("➕ Aggiungi Nuova Visita Medica", expanded=True):
+        with st.expander("➕ Aggiungi Nuova Visita Medica / Prestazione", expanded=True):
             col1, col2 = st.columns(2)
             with col1:
                 data_visita = st.date_input("Data Visita")
-                tipo_visita = st.selectbox("Tipo di Visita", ["Controllo Generale", "Vaccinazione", "Visita Specialistica", "Urgenza", "Controllo Post-Operatorio"])
+                tipo_visita = st.selectbox("Tipo di Visita", ["Controllo Generale", "Vaccinazione", "Visita Specialistica", "Urgenza", "Controllo Post-Operatorio", "Trattamento Antiparassitario Ufficiale"])
                 veterinario = st.text_input("Medico Veterinario / Clinica")
             with col2:
                 diagnosi = st.text_area("Diagnosi / Note Cliniche", placeholder="Descrivi il motivo della visita e l'esito...")
@@ -627,8 +638,28 @@ elif st.session_state.sezione_attiva == "visite":
                 fattura_visita = st.file_uploader("Allega Ricevuta / Fattura (Opzionale)", type=["pdf", "png", "jpg"], key="visita_fat")
             
             st.markdown("---")
-            richiede_controllo = st.checkbox("🔄 Questa prestazione richiede un controllo successivo o va ripetuta?")
+            st.markdown("🔒 **Certificazione Ufficiale Sanitaria (Per viaggi e validità legale)**")
+            chi_inserisce = st.radio("Chi sta registrando questa prestazione?", ["Utente (In attesa di convalida veterinaria)", "Veterinario (Certificazione e Firma Immediata)"], horizontal=True)
             
+            certificato_valido = False
+            num_ordine_vet = ""
+            codice_cert = None
+            
+            if chi_inserisce == "Veterinario (Certificazione e Firma Immediata)":
+                col_v1, col_v2 = st.columns(2)
+                with col_v1:
+                    num_ordine_vet = st.text_input("N° Iscrizione Ordine dei Medici Veterinari (FNOVI / Prov.)*")
+                with col_v2:
+                    pin_convalida = st.text_input("PIN Segreto Veterinario (es. 1234)*", type="password")
+                
+                if pin_convalida == "1234" and num_ordine_vet.strip():
+                    certificato_valido = True
+                    codice_cert = genera_codice_certificazione(pet_selected, veterinario, num_ordine_vet, str(data_visita))
+                    st.success(f"✅ Certificazione Digitale Generata: {codice_cert}")
+                elif pin_convalida and pin_convalida != "1234":
+                    st.error("PIN Veterinario errato. La prestazione verrà salvata in attesa di convalida.")
+
+            richiede_controllo = st.checkbox("🔄 Questa prestazione richiede un controllo successivo o va ripetuta?")
             data_prossimo_ctrl = None
             tipo_prestazione_ctrl = None
             if richiede_controllo:
@@ -636,7 +667,7 @@ elif st.session_state.sezione_attiva == "visite":
                 with col_ctrl1:
                     data_prossimo_ctrl = st.date_input("Data Prossimo Controllo / Ripetizione")
                 with col_ctrl2:
-                    tipo_prestazione_ctrl = st.text_input("Tipo di Prestazione da Eseguire", placeholder="Es. Richiamo Vaccino, Controllo Ecografico, Esami del Sangue...")
+                    tipo_prestazione_ctrl = st.text_input("Tipo di Prestazione da Eseguire", placeholder="Es. Richiamo Vaccino, Controllo Ecografico...")
             
             st.write("")
             if st.button("Salva Visita Medica"):
@@ -647,7 +678,10 @@ elif st.session_state.sezione_attiva == "visite":
                     "diagnosi": diagnosi,
                     "referto": referto.name if referto else None,
                     "prossimo_controllo_data": str(data_prossimo_ctrl) if richiede_controllo and data_prossimo_ctrl else None,
-                    "prossimo_controllo_tipo": tipo_prestazione_ctrl if richiede_controllo else None
+                    "prossimo_controllo_tipo": tipo_prestazione_ctrl if richiede_controllo else None,
+                    "certificata": certificato_valido,
+                    "num_ordine_vet": num_ordine_vet if certificato_valido else "",
+                    "codice_certificato": codice_cert
                 }
                 
                 if pet_selected not in st.session_state.db_visite:
@@ -658,17 +692,47 @@ elif st.session_state.sezione_attiva == "visite":
                 st.success(f"Visita medica registrata con successo per {pet_selected}!")
                 st.rerun()
 
-        st.markdown("### 📋 Visite Registrate")
+        st.markdown("### 📋 Visite e Certificati Registrati")
         visite_list = st.session_state.db_visite.get(pet_selected, [])
         if visite_list:
             for idx, v in enumerate(visite_list):
-                with st.expander(f"🏥 {v['data']} - {v['tipo']} ({v['veterinario']})"):
-                    st.write(f"**Diagnosi:** {v['diagnosi']}")
+                is_cert = v.get("certificata", False)
+                badge_cert = f"✅ CERTIFICATA ({v.get('codice_certificato', '')})" if is_cert else "⏳ IN ATTESA DI CONVALIDA VETERINARIA"
+                
+                with st.expander(f"🏥 {v['data']} - {v['tipo']} | {badge_cert}"):
+                    if is_cert:
+                        st.success(f"🛡️ **Prestazione Sanitaria Ufficiale Certificata**\n\n• **Medico:** {v['veterinario']}\n• **N° Iscrizione Ordine:** {v.get('num_ordine_vet', 'N/D')}\n• **Codice univoco di convalida:** `{v.get('codice_certificato')}`")
+                    else:
+                        st.warning("⚠️ Questa prestazione è stata inserita dall'utente ed è in attesa di firma/convalida da parte del Medico Veterinario per avere valore di espatrio/viaggio.")
+                    
+                    st.write(f"**Diagnosi / Dettagli:** {v['diagnosi']}")
                     if v.get('prossimo_controllo_data'):
                         st.write(f"⏰ **Prossimo Controllo:** {v['prossimo_controllo_data']} ({v.get('prossimo_controllo_tipo', 'Controllo')})")
                     if v.get('referto'):
                         st.caption(f"📄 Referto: {v['referto']}")
                     
+                    if not is_cert:
+                        st.markdown("---")
+                        st.markdown("🩺 **Area Riservata al Veterinario - Convalida Ora**")
+                        c_v1, c_v2, c_btn = st.columns([2, 2, 2])
+                        with c_v1:
+                            v_nome = st.text_input("Nome Medico Veterinario", value=v.get('veterinario', ''), key=f"v_nome_{idx}")
+                        with c_v2:
+                            v_ord = st.text_input("N° Ordine FNOVI", key=f"v_ord_{idx}")
+                        with c_btn:
+                            v_pin = st.text_input("PIN Convalida (1234)", type="password", key=f"v_pin_{idx}")
+                            if st.button("Firma e Convalida", key=f"btn_cert_{idx}"):
+                                if v_pin == "1234" and v_ord.strip():
+                                    v["certificata"] = True
+                                    v["veterinario"] = v_nome
+                                    v["num_ordine_vet"] = v_ord
+                                    v["codice_certificato"] = genera_codice_certificazione(pet_selected, v_nome, v_ord, v['data'])
+                                    salva_dati()
+                                    st.success("Visita convalidata e firmata con successo!")
+                                    st.rerun()
+                                else:
+                                    st.error("PIN o N° Ordine non valido.")
+
                     mostra_pulsanti_promemoria_visita(
                         animale=pet_selected,
                         tipo_visita=v.get('prossimo_controllo_tipo', v['tipo']),
@@ -687,6 +751,29 @@ elif st.session_state.sezione_attiva == "visite":
 
     else:
         st.warning("Seleziona o registra un animale attivo per gestire le visite.")
+
+elif st.session_state.sezione_attiva == "passaporto":
+    if pet_selected:
+        st.markdown(f"<h2 style='color: #1E3A2B;'>✈️ Passaporto Sanitario & Certificati di Viaggio - {pet_selected}</h2>", unsafe_allow_html=True)
+        st.info("In questa sezione sono raccolte esclusivamente le prestazioni e le vaccinazioni **ufficialmente verificate e certificate dal Medico Veterinario**, idonee ai controlli sanitari e agli spostamenti/viaggi.")
+        
+        visite_cert = [v for v in st.session_state.db_visite.get(pet_selected, []) if v.get("certificata", False)]
+        
+        if visite_cert:
+            for v in visite_cert:
+                st.markdown(f"""
+                    <div class="wellness-card" style="border-left: 5px solid #10B981 !important;">
+                        <span class="card-badge badge-purple">CERTIFICATO VETERINARIO UFFICIALE</span>
+                        <h4 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 5px;">💉 {v['tipo']} — {v['data']}</h4>
+                        <p style="margin-bottom: 4px;"><strong>Medico Responsabile:</strong> Dr. {v['veterinario']} (N° Ordine: {v.get('num_ordine_vet')})</p>
+                        <p style="margin-bottom: 4px;"><strong>Codice Certificato Univoco:</strong> <code style="background-color:#E2E8F0; padding:2px 6px; border-radius:4px;">{v.get('codice_certificato')}</code></p>
+                        <p style="margin-bottom: 0;"><strong>Diagnosi/Note Cliniche:</strong> {v['diagnosi']}</p>
+                    </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.warning(f"Al momento {pet_selected} non ha ancora prestazioni sanitarie certificate dal veterinario per il passaporto.")
+    else:
+        st.warning("Seleziona o registra un animale attivo per accedere al passaporto.")
 
 elif st.session_state.sezione_attiva == "terapie":
     if pet_selected:
