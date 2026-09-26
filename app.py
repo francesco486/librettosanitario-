@@ -493,11 +493,9 @@ with st.sidebar:
         st.session_state.sezione_attiva = "passaporto"
         st.rerun()
 
-    if len(st.session_state.angeli_archiviati) > 0:
-        st.write("")
-        if st.button("🌈 I nostri angeli a 4 zampe"):
-            st.session_state.sezione_attiva = "angeli"
-            st.rerun()
+    if st.button("🌈 I nostri angeli a 4 zampe"):
+        st.session_state.sezione_attiva = "angeli"
+        st.rerun()
     
     st.write("")
     if st.button("Registra Nuovo Animale"):
@@ -1035,6 +1033,8 @@ elif st.session_state.sezione_attiva == "angeli":
                                 st.rerun()
                 else:
                     st.info("Nessuna fattura salvata nello storico al momento dell'archiviazione.")
+    else:
+        st.info("Nessun animale è attualmente presente nella sezione 'I nostri angeli a 4 zampe'. Gli animali archiviati tramite il registro nell'Area Riservata della Dashboard appariranno qui insieme alla loro intera cartella clinica.")
 
 elif st.session_state.sezione_attiva == "nuovo_animale":
     st.markdown("<h2 style='color: #1E3A2B;'>🐾 Registra Nuovo Animale</h2>", unsafe_allow_html=True)
