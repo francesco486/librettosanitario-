@@ -784,24 +784,72 @@ elif st.session_state.sezione_attiva == "urgenze":
     st.markdown("""
         <div class="wellness-card" style="border-left: 5px solid #EF4444 !important;">
             <span class="card-badge badge-purple" style="background-color: #FEE2E2; color: #991B1B;">RICERCA IN TEMPO REALE GOOGLE MAPS</span>
-            <h3 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 10px;">🔍 Trova Clinica H24 Vicino a Te</h3>
-            <p style="color: #475569; margin-bottom: 15px;">Inserisci la tua città, provincia, indirizzo o lascia vuoto per cercare direttamente attorno alla tua posizione attuale.</p>
+            <h3 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 10px;">🔍 Trova Clinica H24 Vicino a Te (Anche in Vacanza)</h3>
+            <p style="color: #475569; margin-bottom: 15px;">Sei in viaggio o in vacanza? Usa il rilevamento GPS in tempo reale del tuo dispositivo oppure inserisci manualmente la località in cui ti trovi.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    citta_ricerca = st.text_input("📍 Inserisci Posizione, Città o Provincia:", placeholder="Es. Milano, Roma, Pescara, Firenze o 'vicino a me'...")
+    import streamlit.components.v1 as components
+    
+    st.markdown("#### 🎯 Opzione 1: Rileva Posizione GPS Attuale (Consigliata in Vacanza)")
+    components.html("""
+        <script>
+        function trovaGPS() {
+            var btn = document.getElementById("btn-gps");
+            var status = document.getElementById("gps-status");
+            btn.innerHTML = "⏳ Rilevamento coordinate GPS in corso...";
+            status.style.display = "none";
+            
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    var lat = position.coords.latitude;
+                    var lng = position.coords.longitude;
+                    var mapUrl = "https://www.google.com/maps/search/pronto+soccorso+veterinario+24+ore/@" + lat + "," + lng + ",13z";
+                    window.open(mapUrl, "_blank");
+                    btn.innerHTML = "🎯 Posizione Rilevata! Clicca per Riaprire Google Maps GPS";
+                }, function(error) {
+                    btn.innerHTML = "🎯 Rileva Posizione GPS Attuale del Dispositivo";
+                    status.innerHTML = "⚠️ Impossibile accedere al GPS. Assicurati di aver concesso i permessi di geolocalizzazione al browser o seleziona la città qui sotto.";
+                    status.style.display = "block";
+                }, {enableHighAccuracy: true, timeout: 10000});
+            } else {
+                btn.innerHTML = "🎯 Rileva Posizione GPS Attuale del Dispositivo";
+                status.innerHTML = "⚠️ Geolocalizzazione non supportata dal tuo browser.";
+                status.style.display = "block";
+            }
+        }
+        </script>
+        <button id="btn-gps" onclick="trovaGPS()" style="
+            background-color: #1E3A2B;
+            color: #FFFFFF;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 15px;
+            cursor: pointer;
+            width: 100%;
+            box-shadow: 0 4px 12px rgba(30, 58, 43, 0.2);
+            transition: all 0.2s ease;
+        ">🎯 Rileva Posizione GPS Attuale del Dispositivo (In Vacanza / In Viaggio)</button>
+        <div id="gps-status" style="display:none; color: #b91c1c; font-size: 13px; font-weight: 600; margin-top: 8px; text-align: center;"></div>
+    """, height=85)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("#### 🏙️ Opzione 2: Cerca per Città o Località di Vacanza Specificare")
+    citta_ricerca = st.text_input("📍 Inserisci la Città o Località di Vacanza:", placeholder="Es. Rimini, Olbia, Otranto, Courmayeur...")
 
     if citta_ricerca.strip():
-        # Posizioniamo la località digitata all'inizio della query per forzare il centramento della mappa
-        query_testo = f"{citta_ricerca.strip()} pronto soccorso veterinario 24 ore clinica"
+        # Costruzione query esplicita con "a <città>" per forzare il centramento geografico
+        query_testo = f"pronto soccorso veterinario 24 ore a {citta_ricerca.strip()}"
         query_map = urllib.parse.quote_plus(query_testo)
         url_maps = f"https://www.google.com/maps/search/?api=1&query={query_map}"
-        label_bottone = f"🗺️ Apri Google Maps per '{citta_ricerca.strip()}'"
+        label_bottone = f"🗺️ Cerca Cliniche H24 a '{citta_ricerca.strip()}' su Google Maps"
     else:
         query_testo = "pronto soccorso veterinario 24 ore clinica vicina a me"
         query_map = urllib.parse.quote_plus(query_testo)
         url_maps = f"https://www.google.com/maps/search/?api=1&query={query_map}"
-        label_bottone = "🗺️ Apri Google Maps (Cliniche H24 Vicine a Me)"
+        label_bottone = "🗺️ Apri Google Maps per Ricerca Generica"
 
     st.write("")
     st.link_button(label_bottone, url_maps)
@@ -812,35 +860,17 @@ elif st.session_state.sezione_attiva == "urgenze":
 
     col_q1, col_q2, col_q3, col_q4 = st.columns(4)
     with col_q1:
-        st.link_button("🏛️ Roma H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('Roma pronto soccorso veterinario 24 ore')}")
-        st.link_button("🏰 Torino H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('Torino pronto soccorso veterinario 24 ore')}")
+        st.link_button("🏛️ Roma H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('pronto soccorso veterinario 24 ore a Roma')}")
+        st.link_button("🏰 Torino H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('pronto soccorso veterinario 24 ore a Torino')}")
     with col_q2:
-        st.link_button("🏢 Milano H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('Milano pronto soccorso veterinario 24 ore')}")
-        st.link_button("🍝 Bologna H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('Bologna pronto soccorso veterinario 24 ore')}")
+        st.link_button("🏢 Milano H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('pronto soccorso veterinario 24 ore a Milano')}")
+        st.link_button("🍝 Bologna H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('pronto soccorso veterinario 24 ore a Bologna')}")
     with col_q3:
-        st.link_button("🍕 Napoli H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('Napoli pronto soccorso veterinario 24 ore')}")
-        st.link_button("🎨 Firenze H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('Firenze pronto soccorso veterinario 24 ore')}")
+        st.link_button("🍕 Napoli H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('pronto soccorso veterinario 24 ore a Napoli')}")
+        st.link_button("🎨 Firenze H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('pronto soccorso veterinario 24 ore a Firenze')}")
     with col_q4:
-        st.link_button("🌊 Bari H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('Bari pronto soccorso veterinario 24 ore')}")
-        st.link_button("☀️ Palermo H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('Palermo pronto soccorso veterinario 24 ore')}")
-
-    st.markdown("---")
-    st.markdown("### ⚡ Scorciatoie di Ricerca Rapida Google Maps")
-    st.caption("Clicca su una città o area per aprire direttamente i risultati urgenti H24 su Google Maps:")
-
-    col_q1, col_q2, col_q3, col_q4 = st.columns(4)
-    with col_q1:
-        st.link_button("🏛️ Roma H24", f"https://www.google.com/maps/search/{urllib.parse.quote('pronto soccorso veterinario 24 ore Roma')}")
-        st.link_button("🏰 Torino H24", f"https://www.google.com/maps/search/{urllib.parse.quote('pronto soccorso veterinario 24 ore Torino')}")
-    with col_q2:
-        st.link_button("🏢 Milano H24", f"https://www.google.com/maps/search/{urllib.parse.quote('pronto soccorso veterinario 24 ore Milano')}")
-        st.link_button("🍝 Bologna H24", f"https://www.google.com/maps/search/{urllib.parse.quote('pronto soccorso veterinario 24 ore Bologna')}")
-    with col_q3:
-        st.link_button("🍕 Napoli H24", f"https://www.google.com/maps/search/{urllib.parse.quote('pronto soccorso veterinario 24 ore Napoli')}")
-        st.link_button("🎨 Firenze H24", f"https://www.google.com/maps/search/{urllib.parse.quote('pronto soccorso veterinario 24 ore Firenze')}")
-    with col_q4:
-        st.link_button("🌊 Bari H24", f"https://www.google.com/maps/search/{urllib.parse.quote('pronto soccorso veterinario 24 ore Bari')}")
-        st.link_button("☀️ Palermo H24", f"https://www.google.com/maps/search/{urllib.parse.quote('pronto soccorso veterinario 24 ore Palermo')}")
+        st.link_button("🌊 Bari H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('pronto soccorso veterinario 24 ore a Bari')}")
+        st.link_button("☀️ Palermo H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('pronto soccorso veterinario 24 ore a Palermo')}")
 
     st.markdown("---")
     st.markdown("### ☎️ Numeri Utili d'Emergenza")
