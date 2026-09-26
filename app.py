@@ -88,31 +88,6 @@ def mostra_pulsanti_promemoria_visita(animale, tipo_visita, data_visita, veterin
         link_gen = genera_link_whatsapp_visita("", animale, tipo_visita, data_visita, veterinario, note)
         st.link_button("📲 Promemoria Visita WhatsApp", url=link_gen)
 
-def chiedi_assistente_ai(prompt, pet_info=""):
-    """Invia una richiesta all'API Gemini per consulenza e supporto veterinario AI."""
-    system_instruction = (
-        "Sei un assistente AI esperto nella cura e nel benessere degli animali domestici. "
-        "Rispondi in modo empatico, professionale e chiaro in italiano. "
-        "Fornisci consigli utili e pratici, ma specifica SEMPRE che l'AI non sostituisce la diagnosi di un medico veterinario."
-    )
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent"
-    
-    payload = {
-        "contents": [{"parts": [{"text": f"Contesto Animale: {pet_info}\n\nRichiesta Utente: {prompt}"}]}],
-        "systemInstruction": {"parts": [{"text": system_instruction}]}
-    }
-    headers = {"Content-Type": "application/json"}
-    
-    try:
-        response = requests.post(url, json=payload, headers=headers, timeout=20)
-        if response.status_code == 200:
-            res_data = response.json()
-            return res_data['candidates'][0]['content']['parts'][0]['text']
-        else:
-            return f"⚠️ Errore API ({response.status_code}): Si è verificato un problema nella generazione del responso."
-    except Exception as e:
-        return f"⚠️ Errore di connessione API Gemini: {e}"
-
 def carica_dati():
     """Carica i dati salvati su file JSON se esiste."""
     if os.path.exists(DATA_FILE):
@@ -213,6 +188,16 @@ st.markdown("""
         color: #FFFFFF !important;
     }
 
+    /* Assicura che tutti i testi degli input, etichette ed expander nella sidebar e nell'app siano visibili in colore NERO (#000000) */
+    section[data-testid="stSidebar"] div[data-testid="stExpander"] *,
+    section[data-testid="stSidebar"] div[data-testid="stExpander"] label p,
+    section[data-testid="stSidebar"] div[data-testid="stExpander"] input,
+    div[data-testid="stExpander"] label p,
+    div[data-testid="stExpander"] input {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+    }
+
     @media (min-width: 768px) {
         [data-testid="stSidebarCollapseButton"], 
         [data-testid="stSidebarToggle"], 
@@ -277,12 +262,13 @@ st.markdown("""
     .stTextArea textarea, 
     .stNumberInput input,
     .stDateInput input,
-    div[data-baseweb="input"] {
-        color: #0f172a !important;
+    div[data-baseweb="input"] input {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
         background-color: #ffffff !important;
         border: 1.5px solid #cbd5e1 !important;
         border-radius: 10px !important;
-        font-weight: 500 !important;
+        font-weight: 600 !important;
     }
 
     div[data-testid="stSelectbox"] div[data-baseweb="select"] {
@@ -494,10 +480,6 @@ with st.sidebar:
         
     if st.button("📄 Fatture e Spese"):
         st.session_state.sezione_attiva = "fatture"
-        st.rerun()
-        
-    if st.button("🤖 Assistente AI Veterinario"):
-        st.session_state.sezione_attiva = "assistente_ai"
         st.rerun()
         
     if len(st.session_state.angeli_archiviati) > 0:
@@ -865,62 +847,6 @@ elif st.session_state.sezione_attiva == "fatture":
 
     else:
         st.warning("Seleziona o registra un animale attivo per gestire le fatture.")
-
-elif st.session_state.sezione_attiva == "assistente_ai":
-    st.markdown(f"<h2 style='color: #1E3A2B;'>🤖 Assistente AI Veterinario - {pet_selected if pet_selected else 'Generale'}</h2>", unsafe_allow_html=True)
-    
-    st.markdown("""
-        <div class="wellness-card">
-            <span class="card-badge badge-purple">INTEGRAZIONE GEMINI AI</span>
-            <p style="margin-top: 8px; font-weight: 500; color: #334155;">
-                Ottieni supporto immediato guidato dall'intelligenza artificiale per la salute del tuo pet. Chiedi informazioni su farmaci, sintomi, consigli nutrizionali o chiarimenti sulla terapia!
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    info_contesto = ""
-    if pet_selected:
-        terapie_p = st.session_state.db_terapie.get(pet_selected, [])
-        visite_p = st.session_state.db_visite.get(pet_selected, [])
-        info_contesto = f"Animale selezionato: {pet_selected}. Terapie attive: {len(terapie_p)}. Visite registrate: {len(visite_p)}."
-    
-    st.write("### 💬 Fai una domanda all'Assistente AI")
-    
-    st.caption("Esempi rapidi di richiesta:")
-    col_q1, col_q2, col_q3 = st.columns(3)
-    
-    prompt_preimpostato = ""
-    with col_q1:
-        if st.button("🩺 Analisi Sintomi Notati", key="btn_ai_sintomi"):
-            prompt_preimpostato = f"Quali possono essere le cause principali se {pet_selected if pet_selected else 'il mio pet'} appare stanco, poco attivo o svogliato nell'alimentazione?"
-    with col_q2:
-        if st.button("🥗 Dieta e Alimentazione", key="btn_ai_dieta"):
-            prompt_preimpostato = f"Fornisci dei consigli generali per una corretta alimentazione ed idratazione quotidiana per {pet_selected if pet_selected else 'un animale domestico'}."
-    with col_q3:
-        if st.button("💊 Supporto Somministrazione", key="btn_ai_terapie"):
-            terapie_p = st.session_state.db_terapie.get(pet_selected, []) if pet_selected else []
-            prompt_preimpostato = f"Fornisci consigli utili e trucchi per somministrare pillole o sciroppi senza stressare {pet_selected if pet_selected else 'l animale'}."
-
-    user_query = st.text_area(
-        "Oppure scrivi qui il tuo dubbio o la tua richiesta specifica:", 
-        value=prompt_preimpostato,
-        placeholder="Es: Quali cibi sono assolutamente tossici per i cani/gatti?",
-        height=110
-    )
-    
-    if st.button("✨ Chiedi all'Assistente AI"):
-        if user_query.strip():
-            with st.spinner("L'IA di Gemini sta analizzando la tua richiesta..."):
-                risposta = chiedi_assistente_ai(user_query, info_contesto)
-                st.markdown("""
-                    <div class="wellness-card" style="border-left: 4px solid #1E3A2B !important;">
-                        <h4 style="color: #1E3A2B; margin-bottom: 10px;">💡 Risposta dell'Assistente AI:</h4>
-                    </div>
-                """, unsafe_allow_html=True)
-                st.markdown(risposta)
-                st.info("ℹ️ *Nota: Il responso fornito dall'AI ha scopo puramente informativo ed educativo e non sostituisce il parere di un veterinario.*")
-        else:
-            st.warning("Inserisci o seleziona una domanda prima di inviare.")
 
 elif st.session_state.sezione_attiva == "angeli":
     st.markdown("<h2 style='color: #1E3A2B;'>🌈 I Nostri Angeli a 4 Zampe</h2>", unsafe_allow_html=True)
