@@ -493,6 +493,10 @@ with st.sidebar:
         st.session_state.sezione_attiva = "passaporto"
         st.rerun()
 
+    if st.button("🚨 Urgenze & Cliniche 24H"):
+        st.session_state.sezione_attiva = "urgenze"
+        st.rerun()
+
     if st.button("🌈 I nostri angeli a 4 zampe"):
         st.session_state.sezione_attiva = "angeli"
         st.rerun()
@@ -772,6 +776,128 @@ elif st.session_state.sezione_attiva == "passaporto":
             st.warning(f"Al momento {pet_selected} non ha ancora prestazioni sanitarie certificate dal veterinario per il passaporto.")
     else:
         st.warning("Seleziona o registra un animale attivo per accedere al passaporto.")
+
+elif st.session_state.sezione_attiva == "urgenze":
+    st.markdown("<h2 style='color: #1E3A2B;'>🚨 Urgenze & Cliniche Veterinarie 24H in Italia</h2>", unsafe_allow_html=True)
+    st.info("Sei in vacanza o in spostamento in Italia? Usa questa guida rapida per trovare immediatamente strutture veterinarie con Pronto Soccorso aperto h24.")
+    
+    col_search1, col_search2 = st.columns([2, 1])
+    with col_search1:
+        citta_ricerca = st.text_input("📍 Inserisci la tua posizione o la città in cui ti trovi (es. Rimini, Firenze, Gallipoli, Roma...)", placeholder="Es. Firenze")
+    with col_search2:
+        st.write("")
+        st.write("")
+        if citta_ricerca.strip():
+            query_map = urllib.parse.quote(f"clinica veterinaria 24 ore pronto soccorso {citta_ricerca.strip()}")
+        else:
+            query_map = urllib.parse.quote("clinica veterinaria pronto soccorso 24 ore aperto ora vicina a me")
+        
+        st.link_button("🔍 Apri Mappa Urgenze H24", f"https://www.google.com/maps/search/{query_map}")
+
+    st.markdown("---")
+    
+    st.markdown("### 🏥 Principali Ospedali & Cliniche H24 nelle Zone Turistiche e Capoluoghi")
+    
+    regione_filtro = st.selectbox(
+        "Filtra per Regione:",
+        ["Tutte le Regioni", "Lombardia", "Lazio", "Toscana", "Emilia-Romagna", "Campania", "Piemonte", "Veneto", "Sicilia", "Puglia", "Liguria", "Sardegna"]
+    )
+
+    cliniche_h24 = [
+        # Lombardia
+        {"regione": "Lombardia", "citta": "Milano", "nome": "Ospedale Veterinario San Siro (H24)", "indirizzo": "Via A. Strada 10, Milano", "telefono": "02 4525254", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+San+Siro+Milano"},
+        {"regione": "Lombardia", "citta": "Milano", "nome": "Clinica Veterinaria Gran Sasso (H24)", "indirizzo": "Via D'Ovidio 3, Milano", "telefono": "02 2663095", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Gran+Sasso+Milano"},
+        
+        # Lazio
+        {"regione": "Lazio", "citta": "Roma", "nome": "Ospedale Veterinario Gregorio VII (H24)", "indirizzo": "Piazza di Villa Carpegna 52, Roma", "telefono": "06 66013444", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+Gregorio+VII+Roma"},
+        {"regione": "Lazio", "citta": "Roma", "nome": "Clinica Veterinaria Roma Sud (H24)", "indirizzo": "Via Pilade Mazza 24, Roma", "telefono": "06 72677392", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Roma+Sud"},
+        
+        # Toscana
+        {"regione": "Toscana", "citta": "Firenze", "nome": "Ospedale Veterinario Firenze Sud (H24)", "indirizzo": "Via Erbosa 12/r, Firenze", "telefono": "055 6811222", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+Firenze+Sud"},
+        {"regione": "Toscana", "citta": "Pisa / Costa", "nome": "Ospedale Didattico Veterinario San Piero a Grado (H24)", "indirizzo": "Via Livornese 1289, San Piero a Grado (PI)", "telefono": "050 2210100", "maps": "https://maps.google.com/?q=Ospedale+Didattico+Veterinario+Pisa"},
+        
+        # Emilia-Romagna
+        {"regione": "Emilia-Romagna", "citta": "Bologna", "nome": "Ospedale Veterinario Universitario Ozzano (H24)", "indirizzo": "Via Tolara di Sopra 50, Ozzano dell'Emilia (BO)", "telefono": "051 2097000", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+Universitario+Ozzano"},
+        {"regione": "Emilia-Romagna", "citta": "Rimini (Riviera)", "nome": "Clinica Veterinaria Riviera (H24)", "indirizzo": "Via Flaminia 120, Rimini", "telefono": "0541 380482", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Riviera+Rimini"},
+
+        # Campania
+        {"regione": "Campania", "citta": "Napoli", "nome": "Clinica Veterinaria Ospedale Veterinario Flegreo (H24)", "indirizzo": "Via S. Gennaro Agnano 84, Pozzuoli (NA)", "telefono": "081 5708892", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+Flegreo"},
+
+        # Piemonte
+        {"regione": "Piemonte", "citta": "Torino", "nome": "Ospedale Veterinario Anubis (H24)", "indirizzo": "Strada della Prionda 21, Torino", "telefono": "011 3190209", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+Anubis+Torino"},
+
+        # Veneto
+        {"regione": "Veneto", "citta": "Venezia / Mestre", "nome": "Clinica Veterinaria Sirio (H24)", "indirizzo": "Via Circonvallazione 8, Mestre (VE)", "telefono": "041 988288", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Sirio+Mestre"},
+
+        # Puglia
+        {"regione": "Puglia", "citta": "Bari", "nome": "Ospedale Veterinario S. Francesco (H24)", "indirizzo": "Via Trevisani 105, Bari", "telefono": "080 5231782", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+San+Francesco+Bari"},
+
+        # Sicilia
+        {"regione": "Sicilia", "citta": "Palermo", "nome": "Clinica Veterinaria Vetrano (H24)", "indirizzo": "Via Leonardo Da Vinci 294, Palermo", "telefono": "091 6818160", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Vetrano+Palermo"},
+
+        # Liguria
+        {"regione": "Liguria", "citta": "Genova", "nome": "Clinica Veterinaria San Fruttuoso (H24)", "indirizzo": "Via Imperiale 1, Genova", "telefono": "010 500150", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+San+Fruttuoso+Genova"},
+
+        # Sardegna
+        {"regione": "Sardegna", "citta": "Cagliari", "nome": "Clinica Veterinaria San Giuseppe (H24)", "indirizzo": "Via dei Conversi 12, Cagliari", "telefono": "070 488288", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+San+Giuseppe+Cagliari"}
+    ]
+
+    filtrate = [c for c in cliniche_h24 if regione_filtro == "Tutte le Regioni" or c["regione"] == regione_filtro]
+
+    col_grid1, col_grid2 = st.columns(2)
+    for i, c in enumerate(filtrate):
+        target_col = col_grid1 if i % 2 == 0 else col_grid2
+        with target_col:
+            st.markdown(f"""
+                <div class="wellness-card" style="border-left: 5px solid #EF4444 !important;">
+                    <span class="card-badge badge-purple" style="background-color: #FEE2E2; color: #991B1B;">H24 EMERGENCY</span>
+                    <h4 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 5px;">🏥 {c['nome']}</h4>
+                    <p style="margin-bottom: 4px;"><strong>📍 Zona/Città:</strong> {c['citta']} ({c['regione']})</p>
+                    <p style="margin-bottom: 4px;"><strong>🏠 Indirizzo:</strong> {c['indirizzo']}</p>
+                    <p style="margin-bottom: 8px;"><strong>📞 Tel Emergenze:</strong> <a href="tel:{c['telefono'].replace(' ', '')}" style="color: #2563EB; font-weight:700;">{c['telefono']}</a></p>
+                </div>
+            """, unsafe_allow_html=True)
+            col_b1, col_b2 = st.columns(2)
+            with col_b1:
+                st.link_button("📞 Chiama Ora", f"tel:{c['telefono'].replace(' ', '')}")
+            with col_b2:
+                st.link_button("🗺️ Mappa & Naviga", c['maps'])
+            st.write("")
+
+    st.markdown("---")
+    st.markdown("### ☎️ Numeri e Servizi Utili in caso di Emergenza")
+    
+    col_num1, col_num2, col_num3 = st.columns(3)
+    with col_num1:
+        st.markdown("""
+            <div class="wellness-card">
+                <h4 style="color: #1E3A2B;">📞 Numero Unico 112</h4>
+                <p>In caso di incidente stradale grave o smarrimento lungo autostrade / strade statali.</p>
+            </div>
+        """, unsafe_allow_html=True)
+    with col_num2:
+        st.markdown("""
+            <div class="wellness-card">
+                <h4 style="color: #1E3A2B;">🧪 Centro Antiveleni</h4>
+                <p><strong>CAV Ospedale Niguarda:</strong> <a href="tel:0266101029">02 66101029</a> per consulenze immediate su ingestioni tossiche.</p>
+            </div>
+        """, unsafe_allow_html=True)
+    with col_num3:
+        st.markdown("""
+            <div class="wellness-card">
+                <h4 style="color: #1E3A2B;">🐾 Soccorso ENPA / Guardie</h4>
+                <p>Segnalazioni di animali in difficoltà su territorio nazionale o recupero fauna.</p>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with st.expander("💡 Consigli di Primo Soccorso Veterinario Prima di Arrivare in Clinica"):
+        st.markdown("""
+        1. **Mantenere la calma:** L'animale percepisce l'ansia. Parla con tono di voce rassicurante e basso.
+        2. **Chiamare prima di partire:** Telefona alla clinica mentre ti stai mettendo in viaggio così il team veterinario potrà preparare la sala d'emergenza o l'ossigeno.
+        3. **Colpo di calore (Frequente in ferie d'estate):** Sposta subito l'animale all'ombra, bagnagli le zampe, l'addome e il collo con acqua a temperatura ambiente (MAI acqua ghiacciata per evitare shock termici).
+        4. **Ingestione di sostanze tossiche o corpi estranei:** NON somministrare latte, olio o farmaci di testa tua. Conserva la confezione o la pianta ingerita per mostrarla al veterinario.
+        5. **Traumi o ferite:** Copri eventuali ferite con un panno pulito mantenendo leggera pressione senza stringere eccessivamente.
+        """)
 
 elif st.session_state.sezione_attiva == "terapie":
     if pet_selected:
