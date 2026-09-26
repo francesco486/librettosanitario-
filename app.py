@@ -778,221 +778,80 @@ elif st.session_state.sezione_attiva == "passaporto":
         st.warning("Seleziona o registra un animale attivo per accedere al passaporto.")
 
 elif st.session_state.sezione_attiva == "urgenze":
-    st.markdown("<h2 style='color: #1E3A2B;'>🚨 Urgenze & Cliniche Veterinarie 24H in Italia</h2>", unsafe_allow_html=True)
-    st.info("Sei in vacanza o in spostamento in Italia? Usa questa guida rapida con il database completo delle strutture veterinarie H24 per tutte le regioni e province italiane, oppure ricerca direttamente la tua città.")
+    st.markdown("<h2 style='color: #1E3A2B;'>🚨 Urgenze & Cliniche Veterinarie 24H</h2>", unsafe_allow_html=True)
+    st.info("La ricerca delle cliniche e dei pronti soccorsi veterinari H24 avviene in tempo reale tramite **Google Maps**, garantendoti informazioni sempre aggiornate su aperture, numeri di telefono diretti e navigazione GPS.")
     
-    col_search1, col_search2 = st.columns([2, 1])
-    with col_search1:
-        citta_ricerca = st.text_input("📍 Inserisci la tua posizione, provincia o città (es. Pescara, Trento, Perugia, Taranto...)", placeholder="Es. Perugia")
-    with col_search2:
-        st.write("")
-        st.write("")
-        if citta_ricerca.strip():
-            query_map = urllib.parse.quote(f"clinica veterinaria 24 ore pronto soccorso {citta_ricerca.strip()}")
-        else:
-            query_map = urllib.parse.quote("clinica veterinaria pronto soccorso 24 ore aperto ora vicina a me")
-        
-        st.link_button("🔍 Apri Mappa Urgenze H24", f"https://www.google.com/maps/search/{query_map}")
+    st.markdown("""
+        <div class="wellness-card" style="border-left: 5px solid #EF4444 !important;">
+            <span class="card-badge badge-purple" style="background-color: #FEE2E2; color: #991B1B;">RICERCA IN TEMPO REALE GOOGLE MAPS</span>
+            <h3 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 10px;">🔍 Trova Clinica H24 Vicino a Te</h3>
+            <p style="color: #475569; margin-bottom: 15px;">Inserisci la tua città, provincia, indirizzo o lascia vuoto per cercare direttamente attorno alla tua posizione attuale.</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-    st.markdown("---")
-    
-    st.markdown("### 🏥 Ospedali e Cliniche Veterinarie H24 in Italia per Regione e Provincia")
-    
-    col_reg, col_prov_search = st.columns([1, 1])
-    with col_reg:
-        regione_filtro = st.selectbox(
-            "Filtra per Regione:",
-            [
-                "Tutte le Regioni", "Abruzzo", "Basilicata", "Calabria", "Campania", 
-                "Emilia-Romagna", "Friuli Venezia Giulia", "Lazio", "Liguria", 
-                "Lombardia", "Marche", "Molise", "Piemonte", "Puglia", 
-                "Sardegna", "Sicilia", "Toscana", "Trentino-Alto Adige", 
-                "Umbria", "Valle d'Aosta", "Veneto"
-            ]
-        )
-    with col_prov_search:
-        filtro_testo = st.text_input("🔍 Filtra per Provincia o Città nel database:", value=citta_ricerca)
+    citta_ricerca = st.text_input("📍 Inserisci Posizione, Città o Provincia:", placeholder="Es. Milano, Roma, Pescara, Firenze o 'vicino a me'...")
 
-    cliniche_h24 = [
-        # Abruzzo
-        {"regione": "Abruzzo", "citta": "Pescara / Chieti", "nome": "Clinica Veterinaria D'Annunzio (H24)", "indirizzo": "Via Tiburtina Valeria 128, Pescara", "telefono": "085 4310502", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+D%27Annunzio+Pescara"},
-        {"regione": "Abruzzo", "citta": "L'Aquila", "nome": "Clinica Veterinaria Ospedale San Francesco (H24)", "indirizzo": "Via Colle Sapone, L'Aquila", "telefono": "0862 318356", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+L%27Aquila"},
-        {"regione": "Abruzzo", "citta": "Teramo", "nome": "Ospedale Veterinario Universitario Teramo (H24)", "indirizzo": "Piano D'Accio, Teramo", "telefono": "0861 266863", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+Teramo"},
-
-        # Basilicata
-        {"regione": "Basilicata", "citta": "Potenza", "nome": "Clinica Veterinaria Lucana (H24)", "indirizzo": "Via del Gallitello, Potenza", "telefono": "0971 445200", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Potenza"},
-        {"regione": "Basilicata", "citta": "Matera", "nome": "Pronto Soccorso Veterinario Matera (H24)", "indirizzo": "Via Lucana, Matera", "telefono": "0835 330201", "maps": "https://maps.google.com/?q=Pronto+Soccorso+Veterinario+Matera"},
-
-        # Calabria
-        {"regione": "Calabria", "citta": "Catanzaro", "nome": "Ospedale Veterinario Universitario Magna Graecia (H24)", "indirizzo": "Località Roccelletta di Borgia, Catanzaro", "telefono": "0961 3694001", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+Catanzaro"},
-        {"regione": "Calabria", "citta": "Cosenza", "nome": "Clinica Veterinaria Bruzia (H24)", "indirizzo": "Via Panebianco, Cosenza", "telefono": "0984 391212", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Cosenza"},
-        {"regione": "Calabria", "citta": "Reggio Calabria", "nome": "Clinica Veterinaria Magna Grecia (H24)", "indirizzo": "Via Nazionale Pentimele, Reggio Calabria", "telefono": "0965 48800", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Reggio+Calabria"},
-
-        # Campania
-        {"regione": "Campania", "citta": "Napoli", "nome": "Ospedale Veterinario Flegreo (H24)", "indirizzo": "Via S. Gennaro Agnano 84, Pozzuoli (NA)", "telefono": "081 5708892", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+Flegreo"},
-        {"regione": "Campania", "citta": "Salerno", "nome": "Clinica Veterinaria Salernitana (H24)", "indirizzo": "Via S. Leonardo 120, Salerno", "telefono": "089 334141", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Salerno"},
-        {"regione": "Campania", "citta": "Caserta", "nome": "Clinica Veterinaria San Prisco (H24)", "indirizzo": "Via Gianfrotta 12, Caserta", "telefono": "0823 848123", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Caserta"},
-        {"regione": "Campania", "citta": "Avellino", "nome": "Clinica Veterinaria Irpina (H24)", "indirizzo": "Via Nazionale, Avellino", "telefono": "0825 628001", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Avellino"},
-
-        # Emilia-Romagna
-        {"regione": "Emilia-Romagna", "citta": "Bologna", "nome": "Ospedale Veterinario Universitario Ozzano (H24)", "indirizzo": "Via Tolara di Sopra 50, Ozzano dell'Emilia (BO)", "telefono": "051 2097000", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+Universitario+Ozzano"},
-        {"regione": "Emilia-Romagna", "citta": "Rimini / Riccione", "nome": "Clinica Veterinaria Riviera (H24)", "indirizzo": "Via Flaminia 120, Rimini", "telefono": "0541 380482", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Riviera+Rimini"},
-        {"regione": "Emilia-Romagna", "citta": "Parma", "nome": "Ospedale Veterinario Universitario Parma (H24)", "indirizzo": "Strada del Taglio 10, Parma", "telefono": "0521 032734", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+Parma"},
-        {"regione": "Emilia-Romagna", "citta": "Modena", "nome": "Clinica Veterinaria Modena Sud (H24)", "indirizzo": "Via Emilia Est 1020, Modena", "telefono": "059 373737", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Modena"},
-        {"regione": "Emilia-Romagna", "citta": "Forlì-Cesena / Ravenna", "nome": "Clinica Veterinaria Romagna (H24)", "indirizzo": "Via Ravegnana 200, Forlì", "telefono": "0543 720000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Forli"},
-
-        # Friuli Venezia Giulia
-        {"regione": "Friuli Venezia Giulia", "citta": "Trieste", "nome": "Clinica Veterinaria San Giacomo (H24)", "indirizzo": "Via San Giacomo 15, Trieste", "telefono": "040 365050", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Trieste"},
-        {"regione": "Friuli Venezia Giulia", "citta": "Udine", "nome": "Clinica Veterinaria Udine Nord (H24)", "indirizzo": "Via Tricesimo 100, Udine", "telefono": "0432 481234", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Udine"},
-        {"regione": "Friuli Venezia Giulia", "citta": "Pordenone", "nome": "Clinica Veterinaria Naonis (H24)", "indirizzo": "Via Montereale 45, Pordenone", "telefono": "0434 551122", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Pordenone"},
-
-        # Lazio
-        {"regione": "Lazio", "citta": "Roma", "nome": "Ospedale Veterinario Gregorio VII (H24)", "indirizzo": "Piazza di Villa Carpegna 52, Roma", "telefono": "06 66013444", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+Gregorio+VII+Roma"},
-        {"regione": "Lazio", "citta": "Roma Sud / Castelli", "nome": "Clinica Veterinaria Roma Sud (H24)", "indirizzo": "Via Pilade Mazza 24, Roma", "telefono": "06 72677392", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Roma+Sud"},
-        {"regione": "Lazio", "citta": "Latina", "nome": "Clinica Veterinaria Latina Nord (H24)", "indirizzo": "Via Pontina Km 68, Latina", "telefono": "0773 690011", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Latina"},
-        {"regione": "Lazio", "citta": "Viterbo", "nome": "Clinica Veterinaria Tuscia (H24)", "indirizzo": "Strada Cassia Nord, Viterbo", "telefono": "0761 251100", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Viterbo"},
-        {"regione": "Lazio", "citta": "Frosinone", "nome": "Clinica Veterinaria Ciociaria (H24)", "indirizzo": "Via Monti Lepini, Frosinone", "telefono": "0775 881001", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Frosinone"},
-
-        # Liguria
-        {"regione": "Liguria", "citta": "Genova", "nome": "Clinica Veterinaria San Fruttuoso (H24)", "indirizzo": "Via Imperiale 1, Genova", "telefono": "010 500150", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+San+Fruttuoso+Genova"},
-        {"regione": "Liguria", "citta": "Savona / Riviera", "nome": "Clinica Veterinaria Savonese (H24)", "indirizzo": "Via Stalingrado 15, Savona", "telefono": "019 821212", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Savona"},
-        {"regione": "Liguria", "citta": "La Spezia", "nome": "Clinica Veterinaria Spezzina (H24)", "indirizzo": "Via Carducci 120, La Spezia", "telefono": "0187 512000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+La+Spezia"},
-
-        # Lombardia
-        {"regione": "Lombardia", "citta": "Milano", "nome": "Ospedale Veterinario San Siro (H24)", "indirizzo": "Via A. Strada 10, Milano", "telefono": "02 4525254", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+San+Siro+Milano"},
-        {"regione": "Lombardia", "citta": "Milano East", "nome": "Clinica Veterinaria Gran Sasso (H24)", "indirizzo": "Via D'Ovidio 3, Milano", "telefono": "02 2663095", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Gran+Sasso+Milano"},
-        {"regione": "Lombardia", "citta": "Brescia", "nome": "Clinica Veterinaria San Antonio (H24)", "indirizzo": "Via Triumplina 45, Brescia", "telefono": "030 2001234", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Brescia"},
-        {"regione": "Lombardia", "citta": "Bergamo", "nome": "Ospedale Veterinario Orobico (H24)", "indirizzo": "Via Bergamo 88, Bergamo", "telefono": "035 311000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Bergamo"},
-        {"regione": "Lombardia", "citta": "Monza e Brianza", "nome": "Clinica Veterinaria Brianza (H24)", "indirizzo": "Viale Elvezia 22, Monza", "telefono": "039 388800", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Monza"},
-        {"regione": "Lombardia", "citta": "Varese / Como", "nome": "Clinica Veterinaria Lago Maggiore (H24)", "indirizzo": "Via Sempione 12, Varese", "telefono": "0332 284000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Varese"},
-
-        # Marche
-        {"regione": "Marche", "citta": "Ancona", "nome": "Clinica Veterinaria Dorica (H24)", "indirizzo": "Via Barilatti 10, Ancona", "telefono": "071 2800123", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Ancona"},
-        {"regione": "Marche", "citta": "Pesaro e Urbino", "nome": "Clinica Veterinaria Rossini (H24)", "indirizzo": "Via SS Adriatica, Pesaro", "telefono": "0721 411000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Pesaro"},
-        {"regione": "Marche", "citta": "Macerata / Fermo", "nome": "Clinica Veterinaria Maceratese (H24)", "indirizzo": "Via Mattei, Macerata", "telefono": "0733 30000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Macerata"},
-
-        # Molise
-        {"regione": "Molise", "citta": "Campobasso", "nome": "Clinica Veterinaria Molisana (H24)", "indirizzo": "Via XXIV Maggio, Campobasso", "telefono": "0874 481100", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Campobasso"},
-        {"regione": "Molise", "citta": "Isernia / Termoli", "nome": "Pronto Soccorso Veterinario Termoli (H24)", "indirizzo": "Via Milano, Termoli", "telefono": "0875 700111", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Termoli"},
-
-        # Piemonte
-        {"regione": "Piemonte", "citta": "Torino", "nome": "Ospedale Veterinario Anubis (H24)", "indirizzo": "Strada della Prionda 21, Torino", "telefono": "011 3190209", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+Anubis+Torino"},
-        {"regione": "Piemonte", "citta": "Torino Sud / Moncalieri", "nome": "Ospedale Veterinario Universitario Grugliasco (H24)", "indirizzo": "Largo Braccini 2, Grugliasco (TO)", "telefono": "011 6709111", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+Grugliasco"},
-        {"regione": "Piemonte", "citta": "Cuneo", "nome": "Clinica Veterinaria Cuneese (H24)", "indirizzo": "Via Stura 10, Cuneo", "telefono": "0171 690000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Cuneo"},
-        {"regione": "Piemonte", "citta": "Novara / Alessandria", "nome": "Clinica Veterinaria Novarese (H24)", "indirizzo": "Corso Milano 40, Novara", "telefono": "0321 620000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Novara"},
-
-        # Puglia
-        {"regione": "Puglia", "citta": "Bari", "nome": "Ospedale Veterinario S. Francesco (H24)", "indirizzo": "Via Trevisani 105, Bari", "telefono": "080 5231782", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+San+Francesco+Bari"},
-        {"regione": "Puglia", "citta": "Lecce / Salento", "nome": "Clinica Veterinaria Salentina (H24)", "indirizzo": "Via Leuca 150, Lecce", "telefono": "0832 340000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Lecce"},
-        {"regione": "Puglia", "citta": "Foggia", "nome": "Clinica Veterinaria Dauna (H24)", "indirizzo": "Via Manfredonia, Foggia", "telefono": "0881 700000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Foggia"},
-        {"regione": "Puglia", "citta": "Taranto / Brindisi", "nome": "Clinica Veterinaria Jonica (H24)", "indirizzo": "Via Cintoia 12, Taranto", "telefono": "099 7700000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Taranto"},
-
-        # Sardegna
-        {"regione": "Sardegna", "citta": "Cagliari", "nome": "Clinica Veterinaria San Giuseppe (H24)", "indirizzo": "Via dei Conversi 12, Cagliari", "telefono": "070 488288", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+San+Giuseppe+Cagliari"},
-        {"regione": "Sardegna", "citta": "Sassari / Olbia", "nome": "Ospedale Veterinario Universitario Sassari (H24)", "indirizzo": "Via Vienna 2, Sassari", "telefono": "079 229400", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+Sassari"},
-        {"regione": "Sardegna", "citta": "Olbia / Costa Smeralda", "nome": "Clinica Veterinaria Olbia (H24)", "indirizzo": "Via Aldo Moro, Olbia", "telefono": "0789 50000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Olbia"},
-
-        # Sicilia
-        {"regione": "Sicilia", "citta": "Palermo", "nome": "Clinica Veterinaria Vetrano (H24)", "indirizzo": "Via Leonardo Da Vinci 294, Palermo", "telefono": "091 6818160", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Vetrano+Palermo"},
-        {"regione": "Sicilia", "citta": "Catania", "nome": "Clinica Veterinaria Etnea (H24)", "indirizzo": "Via Etnea 400, Catania", "telefono": "095 440000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Catania"},
-        {"regione": "Sicilia", "citta": "Messina", "nome": "Ospedale Veterinario Universitario Messina (H24)", "indirizzo": "Polo Universitario Annunziata, Messina", "telefono": "090 3503111", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+Messina"},
-        {"regione": "Sicilia", "citta": "Siracusa / Ragusa", "nome": "Clinica Veterinaria Aretusa (H24)", "indirizzo": "Viale Teracati, Siracusa", "telefono": "0931 410000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Siracusa"},
-
-        # Toscana
-        {"regione": "Toscana", "citta": "Firenze", "nome": "Ospedale Veterinario Firenze Sud (H24)", "indirizzo": "Via Erbosa 12/r, Firenze", "telefono": "055 6811222", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+Firenze+Sud"},
-        {"regione": "Toscana", "citta": "Pisa / Livorno / Versilia", "nome": "Ospedale Didattico Veterinario San Piero a Grado (H24)", "indirizzo": "Via Livornese 1289, San Piero a Grado (PI)", "telefono": "050 2210100", "maps": "https://maps.google.com/?q=Ospedale+Didattico+Veterinario+Pisa"},
-        {"regione": "Toscana", "citta": "Siena / Grosseto", "nome": "Clinica Veterinaria Senese (H24)", "indirizzo": "Strada Massetana, Siena", "telefono": "0577 280000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Siena"},
-        {"regione": "Toscana", "citta": "Arezzo / Lucca", "nome": "Clinica Veterinaria Aretina (H24)", "indirizzo": "Via Galileo Galilei, Arezzo", "telefono": "0575 350000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Arezzo"},
-
-        # Trentino-Alto Adige
-        {"regione": "Trentino-Alto Adige", "citta": "Trento", "nome": "Clinica Veterinaria Trentina (H24)", "indirizzo": "Via Brennero 180, Trento", "telefono": "0461 820000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Trento"},
-        {"regione": "Trentino-Alto Adige", "citta": "Bolzano", "nome": "Clinica Veterinaria Bolzano (H24)", "indirizzo": "Via Resia 40, Bolzano", "telefono": "0471 910000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Bolzano"},
-
-        # Umbria
-        {"regione": "Umbria", "citta": "Perugia", "nome": "Ospedale Veterinario Universitario Perugia (H24)", "indirizzo": "Via San Costanzo 4, Perugia", "telefono": "075 5857711", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+Perugia"},
-        {"regione": "Umbria", "citta": "Terni", "nome": "Clinica Veterinaria Ternana (H24)", "indirizzo": "Via Flaminia 50, Terni", "telefono": "0744 400000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Terni"},
-
-        # Valle d'Aosta
-        {"regione": "Valle d'Aosta", "citta": "Aosta", "nome": "Clinica Veterinaria Aostana (H24)", "indirizzo": "Corso Ivrea 30, Aosta", "telefono": "0165 31000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Aosta"},
-
-        # Veneto
-        {"regione": "Veneto", "citta": "Venezia / Mestre", "nome": "Clinica Veterinaria Sirio (H24)", "indirizzo": "Via Circonvallazione 8, Mestre (VE)", "telefono": "041 988288", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Sirio+Mestre"},
-        {"regione": "Veneto", "citta": "Padova", "nome": "Ospedale Veterinario Universitario Legnaro (H24)", "indirizzo": "Viale dell'Universita 16, Legnaro (PD)", "telefono": "049 8272608", "maps": "https://maps.google.com/?q=Ospedale+Veterinario+Legnaro"},
-        {"regione": "Veneto", "citta": "Verona", "nome": "Clinica Veterinaria Scaligera (H24)", "indirizzo": "Via Unita d'Italia, Verona", "telefono": "045 8900000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Verona"},
-        {"regione": "Veneto", "citta": "Treviso / Vicenza", "nome": "Clinica Veterinaria Marca Trevigiana (H24)", "indirizzo": "Via Terraglio, Treviso", "telefono": "0422 400000", "maps": "https://maps.google.com/?q=Clinica+Veterinaria+Treviso"}
-    ]
-
-    filtrate = []
-    for c in cliniche_h24:
-        match_regione = (regione_filtro == "Tutte le Regioni") or (c["regione"].lower() == regione_filtro.lower())
-        match_testo = True
-        if filtro_testo.strip():
-            query_str = filtro_testo.strip().lower()
-            match_testo = (
-                query_str in c["citta"].lower() or 
-                query_str in c["regione"].lower() or 
-                query_str in c["nome"].lower() or 
-                query_str in c["indirizzo"].lower()
-            )
-        if match_regione and match_testo:
-            filtrate.append(c)
-
-    if filtrate:
-        col_grid1, col_grid2 = st.columns(2)
-        for i, c in enumerate(filtrate):
-            target_col = col_grid1 if i % 2 == 0 else col_grid2
-            with target_col:
-                st.markdown(f"""
-                    <div class="wellness-card" style="border-left: 5px solid #EF4444 !important;">
-                        <span class="card-badge badge-purple" style="background-color: #FEE2E2; color: #991B1B;">H24 EMERGENCY</span>
-                        <h4 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 5px;">🏥 {c['nome']}</h4>
-                        <p style="margin-bottom: 4px;"><strong>📍 Zona / Provincia:</strong> {c['citta']} ({c['regione']})</p>
-                        <p style="margin-bottom: 4px;"><strong>🏠 Indirizzo:</strong> {c['indirizzo']}</p>
-                        <p style="margin-bottom: 8px;"><strong>📞 Tel Emergenze:</strong> <a href="tel:{c['telefono'].replace(' ', '')}" style="color: #2563EB; font-weight:700;">{c['telefono']}</a></p>
-                    </div>
-                """, unsafe_allow_html=True)
-                col_b1, col_b2 = st.columns(2)
-                with col_b1:
-                    st.link_button("📞 Chiama Ora", f"tel:{c['telefono'].replace(' ', '')}")
-                with col_b2:
-                    st.link_button("🗺️ Mappa & Naviga", c['maps'])
-                st.write("")
+    if citta_ricerca.strip():
+        query_map = urllib.parse.quote(f"clinica veterinaria 24 ore pronto soccorso {citta_ricerca.strip()}")
+        label_bottone = f"🗺️ Apri Google Maps per '{citta_ricerca.strip()}'"
     else:
-        st.warning(f"Nessuna clinica pre-registrata nel database corrisponde ai filtri impostati ('{regione_filtro}' / '{filtro_testo}'). Utilizza il pulsante in alto '🔍 Apri Mappa Urgenze H24' per la ricerca in tempo reale su Google Maps per qualunque comune d'Italia.")
+        query_map = urllib.parse.quote("clinica veterinaria pronto soccorso 24 ore aperto ora vicina a me")
+        label_bottone = "🗺️ Apri Google Maps (Cliniche H24 Vicine a Me)"
+
+    st.write("")
+    st.link_button(label_bottone, f"https://www.google.com/maps/search/{query_map}")
 
     st.markdown("---")
-    st.markdown("### ☎️ Numeri e Servizi Utili in caso di Emergenza")
+    st.markdown("### ⚡ Scorciatoie di Ricerca Rapida Google Maps")
+    st.caption("Clicca su una città o area per aprire direttamente i risultati urgenti H24 su Google Maps:")
+
+    col_q1, col_q2, col_q3, col_q4 = st.columns(4)
+    with col_q1:
+        st.link_button("🏛️ Roma H24", f"https://www.google.com/maps/search/{urllib.parse.quote('pronto soccorso veterinario 24 ore Roma')}")
+        st.link_button("🏰 Torino H24", f"https://www.google.com/maps/search/{urllib.parse.quote('pronto soccorso veterinario 24 ore Torino')}")
+    with col_q2:
+        st.link_button("🏢 Milano H24", f"https://www.google.com/maps/search/{urllib.parse.quote('pronto soccorso veterinario 24 ore Milano')}")
+        st.link_button("🍝 Bologna H24", f"https://www.google.com/maps/search/{urllib.parse.quote('pronto soccorso veterinario 24 ore Bologna')}")
+    with col_q3:
+        st.link_button("🍕 Napoli H24", f"https://www.google.com/maps/search/{urllib.parse.quote('pronto soccorso veterinario 24 ore Napoli')}")
+        st.link_button("🎨 Firenze H24", f"https://www.google.com/maps/search/{urllib.parse.quote('pronto soccorso veterinario 24 ore Firenze')}")
+    with col_q4:
+        st.link_button("🌊 Bari H24", f"https://www.google.com/maps/search/{urllib.parse.quote('pronto soccorso veterinario 24 ore Bari')}")
+        st.link_button("☀️ Palermo H24", f"https://www.google.com/maps/search/{urllib.parse.quote('pronto soccorso veterinario 24 ore Palermo')}")
+
+    st.markdown("---")
+    st.markdown("### ☎️ Numeri Utili d'Emergenza")
     
     col_num1, col_num2, col_num3 = st.columns(3)
     with col_num1:
         st.markdown("""
             <div class="wellness-card">
                 <h4 style="color: #1E3A2B;">📞 Numero Unico 112</h4>
-                <p>In caso di incidente stradale grave o smarrimento lungo autostrade / strade statali.</p>
+                <p>Per incidenti stradali o emergenze gravi su strade ed autostrade.</p>
             </div>
         """, unsafe_allow_html=True)
     with col_num2:
         st.markdown("""
             <div class="wellness-card">
                 <h4 style="color: #1E3A2B;">🧪 Centro Antiveleni</h4>
-                <p><strong>CAV Ospedale Niguarda:</strong> <a href="tel:0266101029">02 66101029</a> per consulenze immediate su ingestioni tossiche.</p>
+                <p><strong>CAV Niguarda:</strong> <a href="tel:0266101029">02 66101029</a> per ingestioni sospette o avvelenamenti.</p>
             </div>
         """, unsafe_allow_html=True)
     with col_num3:
         st.markdown("""
             <div class="wellness-card">
-                <h4 style="color: #1E3A2B;">🐾 Soccorso ENPA / Guardie</h4>
-                <p>Segnalazioni di animali in difficoltà su territorio nazionale o recupero fauna.</p>
+                <h4 style="color: #1E3A2B;">🐾 Soccorso Animali ENPA</h4>
+                <p>Per segnalare animali in difficoltà o interventi sul territorio.</p>
             </div>
         """, unsafe_allow_html=True)
 
     with st.expander("💡 Consigli di Primo Soccorso Veterinario Prima di Arrivare in Clinica"):
         st.markdown("""
         1. **Mantenere la calma:** L'animale percepisce l'ansia. Parla con tono di voce rassicurante e basso.
-        2. **Chiamare prima di partire:** Telefona alla clinica mentre ti stai mettendo in viaggio così il team veterinario potrà preparare la sala d'emergenza o l'ossigeno.
-        3. **Colpo di calore (Frequente in ferie d'estate):** Sposta subito l'animale all'ombra, bagnagli le zampe, l'addome e il collo con acqua a temperatura ambiente (MAI acqua ghiacciata per evitare shock termici).
-        4. **Ingestione di sostanze tossiche o corpi estranei:** NON somministrare latte, olio o farmaci di testa tua. Conserva la confezione o la pianta ingerita per mostrarla al veterinario.
-        5. **Traumi o ferite:** Copri eventuali ferite con un panno pulito mantenendo leggera pressione senza stringere eccessivamente.
+        2. **Chiamare la clinica mentre viaggi:** Telefona alla struttura individuata su Google Maps prima di arrivare, in modo che il team medico possa allestire la sala per l'emergenza.
+        3. **Colpo di calore:** Sposta l'animale all'ombra, bagna zampe e collo con acqua a temperatura ambiente (MAI acqua ghiacciata per evitare shock termici).
+        4. **Ingestione tossica:** NON somministrare latte, olio o farmaci di testa tua. Porta con te la confezione della sostanza ingerita.
+        5. **Traumi o ferite:** Copri eventuali ferite con un panno pulito applicando una leggera pressione.
         """)
 
 elif st.session_state.sezione_attiva == "terapie":
