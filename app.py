@@ -704,7 +704,9 @@ if st.session_state.sezione_attiva == "dashboard":
             """, unsafe_allow_html=True)
             
             if terapie_pet:
-                for idx, t in enumerate(terapie_pet):
+                # Ordinamento per data di inizio più recente
+                terapie_ordinate = sorted(enumerate(terapie_pet), key=lambda x: x[1].get('data_inizio', ''), reverse=True)
+                for idx, t in terapie_ordinate:
                     orario_txt = t.get('orario', 'Non specificato')
                     with st.expander(f"💊 {t['farmaco']} ({t['periodo']}) - ⏰ {orario_txt}"):
                         st.write(f"**Dose / Quantità:** {t['dosaggio']}")
@@ -741,8 +743,9 @@ if st.session_state.sezione_attiva == "dashboard":
             """, unsafe_allow_html=True)
             
             if visite_pet:
-                for idx, v in enumerate(reversed(visite_pet)):
-                    real_idx = len(visite_pet) - 1 - idx
+                # Ordinamento per data visita più recente
+                visite_ordinate = sorted(enumerate(visite_pet), key=lambda x: x[1].get('data', ''), reverse=True)
+                for idx, v in visite_ordinate:
                     with st.expander(f"🏥 {v['tipo']} - {v['data']}"):
                         if v['veterinario']:
                             st.write(f"**Veterinario:** {v['veterinario']}")
@@ -765,8 +768,8 @@ if st.session_state.sezione_attiva == "dashboard":
                             note=v.get('diagnosi', '')
                         )
 
-                        if st.button("🗑️ Elimina Visita", key=f"del_vis_dash_{real_idx}"):
-                            st.session_state.db_visite[pet_selected].pop(real_idx)
+                        if st.button("🗑️ Elimina Visita", key=f"del_vis_dash_{idx}"):
+                            st.session_state.db_visite[pet_selected].pop(idx)
                             salva_dati()
                             st.success("Visita eliminata con successo!")
                             st.rerun()
@@ -972,7 +975,9 @@ elif st.session_state.sezione_attiva == "visite":
         st.markdown("### 📋 Visite e Certificati Registrati")
         visite_list = st.session_state.db_visite.get(pet_selected, [])
         if visite_list:
-            for idx, v in enumerate(visite_list):
+            # Ordinamento per data visita più recente
+            visite_ordinate = sorted(enumerate(visite_list), key=lambda x: x[1].get('data', ''), reverse=True)
+            for idx, v in visite_ordinate:
                 is_cert = v.get("certificata", False)
                 badge_cert = f"✅ CERTIFICATA ({v.get('codice_certificato', '')})" if is_cert else "⏳ IN ATTESA DI CONVALIDA VETERINARIA"
                 
@@ -1055,6 +1060,7 @@ elif st.session_state.sezione_attiva == "passaporto":
         st.info("In questa sezione sono raccolte esclusivamente le prestazioni e le vaccinazioni **ufficialmente verificate e certificate dal Medico Veterinario**, idonee ai controlli sanitari e agli spostamenti/viaggi.")
         
         visite_cert = [v for v in st.session_state.db_visite.get(pet_selected, []) if v.get("certificata", False)]
+        visite_cert = sorted(visite_cert, key=lambda x: x.get('data', ''), reverse=True)
         
         if visite_cert:
             for v in visite_cert:
@@ -1276,6 +1282,7 @@ elif st.session_state.sezione_attiva == "terapie":
                         "dosaggio": dosaggio,
                         "orario": orario_str,
                         "periodo": periodo_txt,
+                        "data_inizio": str(data_inizio),
                         "multigiorno": is_multigiorno,
                         "promemoria_attivo": attiva_promemoria if is_multigiorno else False,
                         "note": note_somministrazione,
@@ -1295,7 +1302,9 @@ elif st.session_state.sezione_attiva == "terapie":
         st.markdown("### 📋 Terapie e Promemoria Programmati")
         terapie_list = st.session_state.db_terapie.get(pet_selected, [])
         if terapie_list:
-            for idx, t in enumerate(terapie_list):
+            # Ordinamento per data di inizio più recente
+            terapie_ordinate = sorted(enumerate(terapie_list), key=lambda x: x[1].get('data_inizio', ''), reverse=True)
+            for idx, t in terapie_ordinate:
                 orario_txt = t.get('orario', 'Non specificato')
                 with st.expander(f"💊 {t['farmaco']} - Dose: {t['dosaggio']} ({t['periodo']})"):
                     st.write(f"**Dose / Quantità:** {t['dosaggio']}")
@@ -1436,7 +1445,8 @@ elif st.session_state.sezione_attiva == "angeli":
             
             with tab_visite:
                 if dati_angelo.get("visite"):
-                    for idx_v, v in enumerate(dati_angelo["visite"]):
+                    visite_ang_ord = sorted(enumerate(dati_angelo["visite"]), key=lambda x: x[1].get('data', ''), reverse=True)
+                    for idx_v, v in visite_ang_ord:
                         with st.expander(f"🏥 {v['data']} - {v['tipo']} ({v['veterinario']})"):
                             if v.get('nome_vaccino'):
                                 st.write(f"💉 **Vaccino:** {v.get('nome_vaccino')} | **Lotto:** {v.get('lotto_vaccino', 'N/D')} | **Scadenza:** {v.get('scadenza_vaccino', 'N/D')}")
@@ -1453,7 +1463,8 @@ elif st.session_state.sezione_attiva == "angeli":
                     
             with tab_terapie:
                 if dati_angelo.get("terapie"):
-                    for idx_t, t in enumerate(dati_angelo["terapie"]):
+                    terapie_ang_ord = sorted(enumerate(dati_angelo["terapie"]), key=lambda x: x[1].get('data_inizio', ''), reverse=True)
+                    for idx_t, t in terapie_ang_ord:
                         with st.expander(f"💊 {t['farmaco']} ({t['periodo']})"):
                             st.write(f"**Dosaggio:** {t['dosaggio']}")
                             st.write(f"**Note:** {t['note']}")
