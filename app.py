@@ -2,7 +2,6 @@ import streamlit as st
 import json
 import os
 import urllib.parse
-import requests
 import hashlib
 from datetime import datetime, date
 
@@ -15,11 +14,59 @@ st.set_page_config(
 
 DATA_FILE = "data_pethealth.json"
 
-def genera_codice_certificazione(pet_nome, vet_nome, num_ordine, data_prestazione):
-    """Genera un codice identificativo univoco e inalterabile di certificazione sanitaria."""
-    stringa_base = f"{pet_nome}-{vet_nome}-{num_ordine}-{data_prestazione}-{datetime.now().isoformat()}"
-    hash_codice = hashlib.sha256(stringa_base.encode('utf-8')).hexdigest()[:8].upper()
-    return f"VET-CERT-{hash_codice}"
+def genera_id_veterinario_permanente(num_ordine, provincia=""):
+    """
+    Genera un ID univoco, deterministico e PERMANENTE per il Veterinario.
+    Basato sul Numero di Iscrizione all'Ordine FNOVI e la Provincia.
+    Questo ID rimane identico per tutte le prestazioni dello stesso medico.
+    """
+    pulito = f"{str(num_ordine).strip().upper()}-{str(provincia).strip().upper()}"
+    hash_vet = hashlib.sha256(pulito.encode('utf-8')).hexdigest()[:6].upper()
+    return f"VET-ID-{hash_vet}"
+
+def genera_codice_certificazione(pet_nome, vet_id_permanente, data_prestazione, tipo_prestazione):
+    """
+    Genera il codice univoco della SINGOLA prestazione sanitaria certificata,
+    collegandolo in modo inalterabile all'ID permanente del veterinario.
+    """
+    stringa_base = f"{pet_nome}-{vet_id_permanente}-{data_prestazione}-{tipo_prestazione}-{datetime.now().isoformat()}"
+    hash_cert = hashlib.sha256(stringa_base.encode('utf-8')).hexdigest()[:8].upper()
+    return f"CERT-{data_prestazione[:4]}-{hash_cert}"
+
+def verifica_o_registra_pin_vet(num_ordine, provincia, nome_vet, pin_inserito):
+    """
+    Verifica se il veterinario è già presente nel registro.
+    Se è la prima volta, imposta il PIN segreto scelto dal medico.
+    Se esiste già, confronta il PIN inserito con quello registrato.
+    """
+    db_vet = st.session_state.get("db_veterinari", {})
+    chiave_vet = str(num_ordine).strip().upper()
+    
+    vet_id = genera_id_veterinario_permanente(num_ordine, provincia)
+    
+    if chiave_vet in db_vet:
+        # Veterinario già esistente
+        pin_corretto = db_vet[chiave_vet].get("pin")
+        if pin_inserito == pin_corretto:
+            return True, "Autenticazione riuscita", vet_id
+        else:
+            return False, "PIN errato per il numero di iscrizione FNOVI inserito.", None
+    else:
+        # Prima volta: registra il veterinario ed imposta il suo PIN segreto personale
+        if len(pin_inserito) < 4:
+            return False, "Il PIN deve contenere almeno 4 cifre/caratteri.", None
+            
+        db_vet[chiave_vet] = {
+            "nome": nome_vet,
+            "num_ordine": num_ordine,
+            "provincia": provincia,
+            "vet_id": vet_id,
+            "pin": pin_inserito,
+            "data_registrazione": str(date.today())
+        }
+        st.session_state.db_veterinari = db_vet
+        salva_dati()
+        return True, f"Primo accesso! PIN impostato e account Medico creato (ID: {vet_id}).", vet_id
 
 def genera_link_whatsapp(numero, animale, farmaco, dosaggio, orario, note=""):
     """Genera il link di invio immediato con messaggio pre-compilato per WhatsApp per le Terapie."""
@@ -116,6 +163,7 @@ def salva_dati():
         "db_visite": st.session_state.get("db_visite", {"Orlando": []}),
         "db_terapie": st.session_state.get("db_terapie", {"Orlando": []}),
         "db_fatture": st.session_state.get("db_fatture", {"Orlando": []}),
+        "db_veterinari": st.session_state.get("db_veterinari", {}),
         "angeli_archiviati": st.session_state.get("angeli_archiviati", {})
     }
     try:
@@ -135,6 +183,7 @@ if "inizializzato" not in st.session_state:
         st.session_state.db_visite = dati_salvati.get("db_visite", {"Orlando": []})
         st.session_state.db_terapie = dati_salvati.get("db_terapie", {"Orlando": []})
         st.session_state.db_fatture = dati_salvati.get("db_fatture", {"Orlando": []})
+        st.session_state.db_veterinari = dati_salvati.get("db_veterinari", {})
         st.session_state.angeli_archiviati = dati_salvati.get("angeli_archiviati", {})
     else:
         st.session_state.nome_utente = "Francesco"
@@ -145,6 +194,7 @@ if "inizializzato" not in st.session_state:
         st.session_state.db_visite = {"Orlando": []}
         st.session_state.db_terapie = {"Orlando": []}
         st.session_state.db_fatture = {"Orlando": []}
+        st.session_state.db_veterinari = {}
         st.session_state.angeli_archiviati = {}
         salva_dati()
     st.session_state.inizializzato = True
@@ -564,6 +614,8 @@ if st.session_state.sezione_attiva == "dashboard":
                     with st.expander(f"🏥 {v['tipo']} - {v['data']}"):
                         if v['veterinario']:
                             st.write(f"**Veterinario:** {v['veterinario']}")
+                        if v.get('vet_id_permanente'):
+                            st.caption(f"🆔 ID Medico Permanente: `{v['vet_id_permanente']}`")
                         if v['diagnosi']:
                             st.write(f"**Diagnosi:** {v['diagnosi']}")
                         if v.get('prossimo_controllo_data'):
@@ -594,33 +646,46 @@ if st.session_state.sezione_attiva == "dashboard":
             
             date_decesso = st.date_input("Data del decesso")
             certificato = st.file_uploader("Allega Certificato di Morte (PDF/Foto)", type=["pdf", "png", "jpg"], key="cert_morte")
-            pin_vet = st.text_input("PIN Veterinario per confermare (es. 1234)", type="password", key="pin_morte")
+            
+            st.markdown("**Credenziali Medico Veterinario:**")
+            col_d1, col_d2, col_d3 = st.columns(3)
+            with col_d1:
+                v_num_ord_d = st.text_input("N° Iscrizione Ordine FNOVI*", key="v_num_ord_d")
+            with col_d2:
+                v_prov_d = st.text_input("Provincia Ordine (es. RM, MI)*", key="v_prov_d")
+            with col_d3:
+                pin_vet_d = st.text_input("PIN Segreto Veterinario*", type="password", key="pin_morte")
             
             if st.button("Conferma e Archivia Registro"):
-                if pin_vet == "1234":
-                    animale_da_archiviare = pet_selected
-                    
-                    st.session_state.angeli_archiviati[animale_da_archiviare] = {
-                        "data_decesso": str(date_decesso),
-                        "certificato": certificato.name if certificato else "Non allegato",
-                        "visite": st.session_state.db_visite.get(animale_da_archiviare, []),
-                        "terapie": st.session_state.db_terapie.get(animale_da_archiviare, []),
-                        "fatture": st.session_state.db_fatture.get(animale_da_archiviare, [])
-                    }
-                    
-                    st.session_state.lista_animali.remove(animale_da_archiviare)
-                    
-                    if len(st.session_state.lista_animali) > 0:
-                        st.session_state.pet_selezionato = st.session_state.lista_animali[0]
+                if v_num_ord_d.strip() and v_prov_d.strip() and pin_vet_d:
+                    esito, msg, vet_id = verifica_o_registra_pin_vet(v_num_ord_d, v_prov_d, "Veterinario Responsabile", pin_vet_d)
+                    if esito:
+                        animale_da_archiviare = pet_selected
+                        
+                        st.session_state.angeli_archiviati[animale_da_archiviare] = {
+                            "data_decesso": str(date_decesso),
+                            "certificato": certificato.name if certificato else "Non allegato",
+                            "veterinario_id": vet_id,
+                            "visite": st.session_state.db_visite.get(animale_da_archiviare, []),
+                            "terapie": st.session_state.db_terapie.get(animale_da_archiviare, []),
+                            "fatture": st.session_state.db_fatture.get(animale_da_archiviare, [])
+                        }
+                        
+                        st.session_state.lista_animali.remove(animale_da_archiviare)
+                        
+                        if len(st.session_state.lista_animali) > 0:
+                            st.session_state.pet_selezionato = st.session_state.lista_animali[0]
+                        else:
+                            st.session_state.pet_selezionato = None
+                        
+                        salva_dati()
+                        st.success(f"Registro archiviato con successo da Dr. (ID: {vet_id}). {animale_da_archiviare} è stato spostato con rispetto nella sezione 'I nostri angeli a 4 zampe'.")
+                        st.session_state.sezione_attiva = "angeli"
+                        st.rerun()
                     else:
-                        st.session_state.pet_selezionato = None
-                    
-                    salva_dati()
-                    st.success(f"Registro archiviato con successo. {animale_da_archiviare} è stato spostato con rispetto nella sezione 'I nostri angeli a 4 zampe'.")
-                    st.session_state.sezione_attiva = "angeli"
-                    st.rerun()
+                        st.error(f"Errore di autenticazione: {msg}")
                 else:
-                    st.error("PIN Veterinario non valido. Inserire un PIN corretto per procedere.")
+                    st.error("Inserire N° Ordine, Provincia e PIN per procedere con l'archiviazione ufficiale.")
     else:
         st.info("Registra un nuovo animale o consulta la sezione 'I nostri angeli a 4 zampe'.")
 
@@ -645,21 +710,28 @@ elif st.session_state.sezione_attiva == "visite":
             
             certificato_valido = False
             num_ordine_vet = ""
+            provincia_vet = ""
+            vet_id_perm = None
             codice_cert = None
             
             if chi_inserisce == "Veterinario (Certificazione e Firma Immediata)":
-                col_v1, col_v2 = st.columns(2)
+                st.caption("ℹ️ *Se è la prima volta che questo Medico firma un'attestazione nell'app, il PIN inserito verrà memorizzato come suo PIN personale permanente.*")
+                col_v1, col_v2, col_v3 = st.columns(3)
                 with col_v1:
-                    num_ordine_vet = st.text_input("N° Iscrizione Ordine dei Medici Veterinari (FNOVI / Prov.)*")
+                    num_ordine_vet = st.text_input("N° Ordine FNOVI*")
                 with col_v2:
-                    pin_convalida = st.text_input("PIN Segreto Veterinario (es. 1234)*", type="password")
+                    provincia_vet = st.text_input("Provincia Ordine (es. RM)*")
+                with col_v3:
+                    pin_convalida = st.text_input("PIN Segreto Veterinario*", type="password")
                 
-                if pin_convalida == "1234" and num_ordine_vet.strip():
-                    certificato_valido = True
-                    codice_cert = genera_codice_certificazione(pet_selected, veterinario, num_ordine_vet, str(data_visita))
-                    st.success(f"✅ Certificazione Digitale Generata: {codice_cert}")
-                elif pin_convalida and pin_convalida != "1234":
-                    st.error("PIN Veterinario errato. La prestazione verrà salvata in attesa di convalida.")
+                if num_ordine_vet.strip() and provincia_vet.strip() and pin_convalida:
+                    esito, msg, vet_id_perm = verifica_o_registra_pin_vet(num_ordine_vet, provincia_vet, veterinario, pin_convalida)
+                    if esito:
+                        certificato_valido = True
+                        codice_cert = genera_codice_certificazione(pet_selected, vet_id_perm, str(data_visita), tipo_visita)
+                        st.success(f"✅ Medico Verificato! ID Vet Permanente: `{vet_id_perm}` | Codice Certificato: `{codice_cert}`")
+                    else:
+                        st.error(f"❌ Autenticazione fallita: {msg}")
 
             richiede_controllo = st.checkbox("🔄 Questa prestazione richiede un controllo successivo o va ripetuta?")
             data_prossimo_ctrl = None
@@ -673,26 +745,31 @@ elif st.session_state.sezione_attiva == "visite":
             
             st.write("")
             if st.button("Salva Visita Medica"):
-                nuova_visita = {
-                    "data": str(data_visita),
-                    "tipo": tipo_visita,
-                    "veterinario": veterinario,
-                    "diagnosi": diagnosi,
-                    "referto": referto.name if referto else None,
-                    "prossimo_controllo_data": str(data_prossimo_ctrl) if richiede_controllo and data_prossimo_ctrl else None,
-                    "prossimo_controllo_tipo": tipo_prestazione_ctrl if richiede_controllo else None,
-                    "certificata": certificato_valido,
-                    "num_ordine_vet": num_ordine_vet if certificato_valido else "",
-                    "codice_certificato": codice_cert
-                }
-                
-                if pet_selected not in st.session_state.db_visite:
-                    st.session_state.db_visite[pet_selected] = []
+                if chi_inserisce == "Veterinario (Certificazione e Firma Immediata)" and not certificato_valido:
+                    st.error("Impossibile salvare come certificata: credenziali o PIN del veterinario errati.")
+                else:
+                    nuova_visita = {
+                        "data": str(data_visita),
+                        "tipo": tipo_visita,
+                        "veterinario": veterinario,
+                        "diagnosi": diagnosi,
+                        "referto": referto.name if referto else None,
+                        "prossimo_controllo_data": str(data_prossimo_ctrl) if richiede_controllo and data_prossimo_ctrl else None,
+                        "prossimo_controllo_tipo": tipo_prestazione_ctrl if richiede_controllo else None,
+                        "certificata": certificato_valido,
+                        "num_ordine_vet": num_ordine_vet if certificato_valido else "",
+                        "provincia_vet": provincia_vet if certificato_valido else "",
+                        "vet_id_permanente": vet_id_perm if certificato_valido else None,
+                        "codice_certificato": codice_cert
+                    }
                     
-                st.session_state.db_visite[pet_selected].append(nuova_visita)
-                salva_dati()
-                st.success(f"Visita medica registrata con successo per {pet_selected}!")
-                st.rerun()
+                    if pet_selected not in st.session_state.db_visite:
+                        st.session_state.db_visite[pet_selected] = []
+                        
+                    st.session_state.db_visite[pet_selected].append(nuova_visita)
+                    salva_dati()
+                    st.success(f"Visita medica registrata con successo per {pet_selected}!")
+                    st.rerun()
 
         st.markdown("### 📋 Visite e Certificati Registrati")
         visite_list = st.session_state.db_visite.get(pet_selected, [])
@@ -703,7 +780,7 @@ elif st.session_state.sezione_attiva == "visite":
                 
                 with st.expander(f"🏥 {v['data']} - {v['tipo']} | {badge_cert}"):
                     if is_cert:
-                        st.success(f"🛡️ **Prestazione Sanitaria Ufficiale Certificata**\n\n• **Medico:** {v['veterinario']}\n• **N° Iscrizione Ordine:** {v.get('num_ordine_vet', 'N/D')}\n• **Codice univoco di convalida:** `{v.get('codice_certificato')}`")
+                        st.success(f"🛡️ **Prestazione Sanitaria Ufficiale Certificata**\n\n• **Medico:** Dr. {v['veterinario']}\n• **ID Vet Permanente Univoco:** `{v.get('vet_id_permanente', 'N/D')}`\n• **Iscrizione Ordine:** N° {v.get('num_ordine_vet', 'N/D')} Prov. {v.get('provincia_vet', '')}\n• **Codice Certificato Prestazione:** `{v.get('codice_certificato')}`")
                     else:
                         st.warning("⚠️ Questa prestazione è stata inserita dall'utente ed è in attesa di firma/convalida da parte del Medico Veterinario per avere valore di espatrio/viaggio.")
                     
@@ -716,24 +793,33 @@ elif st.session_state.sezione_attiva == "visite":
                     if not is_cert:
                         st.markdown("---")
                         st.markdown("🩺 **Area Riservata al Veterinario - Convalida Ora**")
-                        c_v1, c_v2, c_btn = st.columns([2, 2, 2])
+                        st.caption("Firma questa bozza inserendo le tue credenziali e il tuo PIN segreto.")
+                        c_v1, c_v2, c_v3, c_btn = st.columns([2, 2, 2, 2])
                         with c_v1:
-                            v_nome = st.text_input("Nome Medico Veterinario", value=v.get('veterinario', ''), key=f"v_nome_{idx}")
+                            v_nome = st.text_input("Nome Veterinario", value=v.get('veterinario', ''), key=f"v_nome_{idx}")
                         with c_v2:
                             v_ord = st.text_input("N° Ordine FNOVI", key=f"v_ord_{idx}")
+                        with c_v3:
+                            v_prov = st.text_input("Prov. Ordine", key=f"v_prov_{idx}")
                         with c_btn:
-                            v_pin = st.text_input("PIN Convalida (1234)", type="password", key=f"v_pin_{idx}")
+                            v_pin = st.text_input("PIN Segreto", type="password", key=f"v_pin_{idx}")
                             if st.button("Firma e Convalida", key=f"btn_cert_{idx}"):
-                                if v_pin == "1234" and v_ord.strip():
-                                    v["certificata"] = True
-                                    v["veterinario"] = v_nome
-                                    v["num_ordine_vet"] = v_ord
-                                    v["codice_certificato"] = genera_codice_certificazione(pet_selected, v_nome, v_ord, v['data'])
-                                    salva_dati()
-                                    st.success("Visita convalidata e firmata con successo!")
-                                    st.rerun()
+                                if v_ord.strip() and v_prov.strip() and v_pin:
+                                    esito_c, msg_c, v_id_perm = verifica_o_registra_pin_vet(v_ord, v_prov, v_nome, v_pin)
+                                    if esito_c:
+                                        v["certificata"] = True
+                                        v["veterinario"] = v_nome
+                                        v["num_ordine_vet"] = v_ord
+                                        v["provincia_vet"] = v_prov
+                                        v["vet_id_permanente"] = v_id_perm
+                                        v["codice_certificato"] = genera_codice_certificazione(pet_selected, v_id_perm, v['data'], v['tipo'])
+                                        salva_dati()
+                                        st.success("Visita convalidata e firmata con successo!")
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Errore: {msg_c}")
                                 else:
-                                    st.error("PIN o N° Ordine non valido.")
+                                    st.error("Compila tutti i campi obbligatori per convalidare.")
 
                     mostra_pulsanti_promemoria_visita(
                         animale=pet_selected,
@@ -767,8 +853,9 @@ elif st.session_state.sezione_attiva == "passaporto":
                     <div class="wellness-card" style="border-left: 5px solid #10B981 !important;">
                         <span class="card-badge badge-purple">CERTIFICATO VETERINARIO UFFICIALE</span>
                         <h4 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 5px;">💉 {v['tipo']} — {v['data']}</h4>
-                        <p style="margin-bottom: 4px;"><strong>Medico Responsabile:</strong> Dr. {v['veterinario']} (N° Ordine: {v.get('num_ordine_vet')})</p>
-                        <p style="margin-bottom: 4px;"><strong>Codice Certificato Univoco:</strong> <code style="background-color:#E2E8F0; padding:2px 6px; border-radius:4px;">{v.get('codice_certificato')}</code></p>
+                        <p style="margin-bottom: 4px;"><strong>Medico Responsabile:</strong> Dr. {v['veterinario']} (N° Ordine FNOVI: {v.get('num_ordine_vet')} {v.get('provincia_vet', '')})</p>
+                        <p style="margin-bottom: 4px;"><strong>ID Veterinario Permanente:</strong> <code style="background-color:#E2E8F0; padding:2px 6px; border-radius:4px;">{v.get('vet_id_permanente', 'N/D')}</code></p>
+                        <p style="margin-bottom: 4px;"><strong>Codice Certificato Univoco:</strong> <code style="background-color:#FEF08A; padding:2px 6px; border-radius:4px;">{v.get('codice_certificato')}</code></p>
                         <p style="margin-bottom: 0;"><strong>Diagnosi/Note Cliniche:</strong> {v['diagnosi']}</p>
                     </div>
                 """, unsafe_allow_html=True)
@@ -1114,6 +1201,8 @@ elif st.session_state.sezione_attiva == "angeli":
             st.write("")
             st.markdown(f"### 📁 Cartella Clinica Archiviata: **{angelo_selezionato}**")
             st.caption(f"Data del decesso registrata: {dati_angelo['data_decesso']} | Certificato allegato: {dati_angelo['certificato']}")
+            if dati_angelo.get("veterinario_id"):
+                st.caption(f"ID Medico Veterinario Certificatore: {dati_angelo['veterinario_id']}")
             st.markdown("---")
             
             tab_visite, tab_terapie, tab_fatture = st.tabs([
