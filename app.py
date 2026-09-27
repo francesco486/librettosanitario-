@@ -4,6 +4,62 @@ import os
 import urllib.parse
 import hashlib
 from datetime import datetime, date
+import streamlit.components.v1 as components
+
+def mostra_scansionatore_barre(titolo="📷 Scansiona Codice a Barre / Microchip con Fotocamera"):
+    """
+    Mostra un lettore di codici a barre e QR Code in tempo reale basato sulla fotocamera del dispositivo.
+    Legge EAN-13, EAN-8, Code 128, Microchip e QR code.
+    """
+    st.markdown(f"##### {titolo}")
+    st.caption("Inquadra il codice a barre del medicinale o del microchip con la fotocamera. Il codice verrà rilevato automaticamente.")
+    
+    html_code = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+        <style>
+            body { font-family: sans-serif; margin: 0; padding: 5px; background-color: #f8f7f2; }
+            #reader { width: 100%; max-width: 480px; margin: auto; border-radius: 12px; overflow: hidden; border: 2px solid #1E3A2B; }
+            #result-box { margin-top: 10px; padding: 12px; background-color: #E8F0EC; border-radius: 10px; font-weight: bold; text-align: center; color: #1E3A2B; border: 1px solid #A3E635; display: none; }
+            .code-display { font-family: monospace; font-size: 1.1rem; color: #0F172A; background: #FFFFFF; padding: 4px 8px; border-radius: 6px; border: 1px solid #CBD5E1; }
+            button.copy-btn { background-color: #1E3A2B; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; margin-top: 10px; width: 100%; }
+            button.copy-btn:hover { background-color: #2D4A3E; }
+        </style>
+    </head>
+    <body>
+        <div id="reader"></div>
+        <div id="result-box">
+            ✅ <span>Codice Rilevato:</span><br><br>
+            <span id="scanned-code" class="code-display">---</span><br>
+            <button class="copy-btn" onclick="copiaCodice()">📋 Copia Codice Rilevato</button>
+        </div>
+        <script>
+            function copiaCodice() {
+                var text = document.getElementById("scanned-code").innerText;
+                var dummy = document.createElement("textarea");
+                document.body.appendChild(dummy);
+                dummy.value = text;
+                dummy.select();
+                document.execCommand("copy");
+                document.body.removeChild(dummy);
+                alert("Codice '" + text + "' copiato negli appunti! Ora puoi incollarlo direttamente nel campo desiderato.");
+            }
+
+            function onScanSuccess(decodedText, decodedResult) {
+                document.getElementById("scanned-code").innerText = decodedText;
+                document.getElementById("result-box").style.display = "block";
+            }
+
+            var html5QrcodeScanner = new Html5QrcodeScanner(
+                "reader", { fps: 10, qrbox: {width: 250, height: 140} }, false);
+            html5QrcodeScanner.render(onScanSuccess);
+        </script>
+    </body>
+    </html>
+    """
+    components.html(html_code, height=400)
 
 st.set_page_config(
     page_title="PetHealth - Wellness & Care",
@@ -718,6 +774,9 @@ elif st.session_state.sezione_attiva == "visite":
     if pet_selected:
         st.markdown(f"<h2 style='color: #1E3A2B;'>🏥 Visite e Clinica - {pet_selected}</h2>", unsafe_allow_html=True)
         
+        with st.expander("🔍 Scansiona Codice a Barre Medicinali / Fiale / Fustelle", expanded=False):
+            mostra_scansionatore_barre("📷 Lettore Codici a Barre Medicinali e Vaccini")
+
         with st.expander("➕ Aggiungi Nuova Visita Medica / Prestazione", expanded=True):
             col1, col2 = st.columns(2)
             with col1:
@@ -1023,6 +1082,9 @@ elif st.session_state.sezione_attiva == "terapie":
     if pet_selected:
         st.markdown(f"<h2 style='color: #1E3A2B;'>💊 Terapie e Farmaci - {pet_selected}</h2>", unsafe_allow_html=True)
         
+        with st.expander("🔍 Scansiona Codice a Barre Medicinali / Fustella Farmaco", expanded=False):
+            mostra_scansionatore_barre("📷 Lettore Codici a Barre Medicinali (EAN / Codice Farmaco)")
+
         with st.expander("➕ Nuova Terapia o Prescrizione", expanded=True):
             col1, col2 = st.columns(2)
             with col1:
@@ -1287,6 +1349,9 @@ elif st.session_state.sezione_attiva == "angeli":
 elif st.session_state.sezione_attiva == "nuovo_animale":
     st.markdown("<h2 style='color: #1E3A2B;'>🐾 Registra Nuovo Animale</h2>", unsafe_allow_html=True)
     
+    with st.expander("🔍 Scansiona Codice a Barre Microchip dall'Adesivo del Libretto", expanded=False):
+        mostra_scansionatore_barre("📷 Lettore Codice Microchip Animale")
+
     st.markdown('<div class="form-nuovo-animale">', unsafe_allow_html=True)
     
     with st.form("form_nuovo_animale"):
