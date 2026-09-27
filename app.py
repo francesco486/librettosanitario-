@@ -8,11 +8,11 @@ import streamlit.components.v1 as components
 
 def mostra_scansionatore_barre(titolo="📷 Scansiona Codice a Barre / Microchip con Fotocamera"):
     """
-    Mostra un lettore di codici a barre e QR Code in tempo reale basato sulla fotocamera del dispositivo.
-    Legge EAN-13, EAN-8, Code 128, Microchip e QR code.
+    Mostra un lettore di codici a barre, QR Code e Fustelle con isolamento dello sfondo
+    e ritaglio automatico dell'etichetta del vaccino.
     """
     st.markdown(f"##### {titolo}")
-    st.caption("Inquadra il codice a barre del medicinale o del microchip con la fotocamera. Il codice verrà rilevato automaticamente.")
+    st.caption("Inquadra l'etichetta del vaccino nella cornice centrale. Lo sfondo verrà automaticamente oscurato ed escluso dalla scansione.")
     
     html_code = """
     <!DOCTYPE html>
@@ -20,20 +20,59 @@ def mostra_scansionatore_barre(titolo="📷 Scansiona Codice a Barre / Microchip
     <head>
         <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
         <style>
-            body { font-family: sans-serif; margin: 0; padding: 5px; background-color: #f8f7f2; }
-            #reader { width: 100%; max-width: 480px; margin: auto; border-radius: 12px; overflow: hidden; border: 2px solid #1E3A2B; }
+            body { font-family: sans-serif; margin: 0; padding: 5px; background-color: #f8f7f2; text-align: center; }
+            .scanner-wrapper { position: relative; width: 100%; max-width: 480px; margin: auto; border-radius: 14px; overflow: hidden; border: 2.5px solid #1E3A2B; background: #000; }
+            #reader { width: 100%; }
+            
+            /* Maschera con oscuramento per isolare lo sfondo e mettere a fuoco solo l'etichetta */
+            .scan-overlay {
+                position: absolute;
+                top: 0; left: 0; right: 0; bottom: 0;
+                pointer-events: none;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                box-shadow: inset 0 0 0 2000px rgba(15, 23, 42, 0.65);
+            }
+            .focus-frame {
+                width: 270px;
+                height: 150px;
+                border: 3px dashed #A3E635;
+                border-radius: 12px;
+                box-shadow: 0 0 20px rgba(163, 230, 53, 0.9);
+                position: relative;
+                animation: focusPulse 2s infinite;
+            }
+            @keyframes focusPulse {
+                0% { border-color: #A3E635; box-shadow: 0 0 12px rgba(163, 230, 53, 0.6); }
+                50% { border-color: #22c55e; box-shadow: 0 0 24px rgba(34, 197, 94, 1); }
+                100% { border-color: #A3E635; box-shadow: 0 0 12px rgba(163, 230, 53, 0.6); }
+            }
             #result-box { margin-top: 10px; padding: 12px; background-color: #E8F0EC; border-radius: 10px; font-weight: bold; text-align: center; color: #1E3A2B; border: 1px solid #A3E635; display: none; }
             .code-display { font-family: monospace; font-size: 1.1rem; color: #0F172A; background: #FFFFFF; padding: 4px 8px; border-radius: 6px; border: 1px solid #CBD5E1; }
             button.copy-btn { background-color: #1E3A2B; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; margin-top: 10px; width: 100%; }
             button.copy-btn:hover { background-color: #2D4A3E; }
+            
+            #cropped-preview { display: none; margin-top: 10px; background: #ffffff; padding: 10px; border-radius: 10px; border: 1.5px solid #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+            #cropped-preview img { max-width: 100%; border-radius: 8px; border: 1px solid #94a3b8; }
         </style>
     </head>
     <body>
-        <div id="reader"></div>
+        <div class="scanner-wrapper">
+            <div id="reader"></div>
+            <div class="scan-overlay">
+                <div class="focus-frame"></div>
+            </div>
+        </div>
         <div id="result-box">
-            ✅ <span>Codice Rilevato:</span><br><br>
+            ✅ <span>Etichetta Rilevata (Sfondo Escluso):</span><br><br>
             <span id="scanned-code" class="code-display">---</span><br>
             <button class="copy-btn" onclick="copiaCodice()">📋 Copia Codice Rilevato</button>
+        </div>
+        <div id="cropped-preview">
+            <p style="margin:0 0 6px 0; color:#1E3A2B; font-size:13px; font-weight:700;">🏷️ Ritaglio Istantaneo dell'Etichetta (Sfondo Rimosso):</p>
+            <canvas id="crop-canvas" style="display:none;"></canvas>
+            <img id="cropped-img" src="" alt="Etichetta Vaccino Ritagliata">
         </div>
         <script>
             function copiaCodice() {
@@ -44,22 +83,59 @@ def mostra_scansionatore_barre(titolo="📷 Scansiona Codice a Barre / Microchip
                 dummy.select();
                 document.execCommand("copy");
                 document.body.removeChild(dummy);
-                alert("Codice '" + text + "' copiato negli appunti! Ora puoi incollarlo direttamente nel campo desiderato.");
+                alert("Codice '" + text + "' copiato negli appunti!");
+            }
+
+            function ritagliaSoloEtichetta() {
+                try {
+                    var video = document.querySelector("#reader video");
+                    if (video && video.videoWidth) {
+                        var canvas = document.getElementById("crop-canvas");
+                        var ctx = canvas.getContext("2d");
+                        
+                        // Calcolo delle proporzioni per estrarre ESCLUSIVAMENTE la zona dentro il rettangolo di messa a fuoco
+                        var scaleX = video.videoWidth / video.clientWidth;
+                        var scaleY = video.videoHeight / video.clientHeight;
+                        
+                        var cropW = 270 * scaleX;
+                        var cropH = 150 * scaleY;
+                        var cropX = (video.videoWidth - cropW) / 2;
+                        var cropY = (video.videoHeight - cropH) / 2;
+                        
+                        canvas.width = cropW;
+                        canvas.height = cropH;
+                        
+                        // Disegna e isola l'immagine del vaccino ritagliando qualsiasi elemento esterno
+                        ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+                        
+                        var croppedImg = document.getElementById("cropped-img");
+                        croppedImg.src = canvas.toDataURL("image/png");
+                        document.getElementById("cropped-preview").style.display = "block";
+                    }
+                } catch(e) {
+                    console.log("Ritaglio etichetta non disponibile:", e);
+                }
             }
 
             function onScanSuccess(decodedText, decodedResult) {
                 document.getElementById("scanned-code").innerText = decodedText;
                 document.getElementById("result-box").style.display = "block";
+                ritagliaSoloEtichetta();
             }
 
             var html5QrcodeScanner = new Html5QrcodeScanner(
-                "reader", { fps: 10, qrbox: {width: 250, height: 140} }, false);
+                "reader", { 
+                    fps: 15, 
+                    qrbox: { width: 270, height: 150 },
+                    aspectRatio: 1.0
+                }, false
+            );
             html5QrcodeScanner.render(onScanSuccess);
         </script>
     </body>
     </html>
     """
-    components.html(html_code, height=400)
+    components.html(html_code, height=490)
 
 st.set_page_config(
     page_title="PetHealth - Wellness & Care",
