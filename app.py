@@ -672,6 +672,8 @@ if st.session_state.sezione_attiva == "dashboard":
                             st.write(f"**Veterinario:** {v['veterinario']}")
                         if v.get('vet_id_permanente'):
                             st.caption(f"🆔 ID Medico Permanente: `{v['vet_id_permanente']}`")
+                        if v.get('nome_vaccino'):
+                            st.write(f"💉 **Vaccino:** {v.get('nome_vaccino')} | **Lotto:** {v.get('lotto_vaccino', 'N/D')} | **Scadenza:** {v.get('scadenza_vaccino', 'N/D')}")
                         if v['diagnosi']:
                             st.write(f"**Diagnosi:** {v['diagnosi']}")
                         if v.get('prossimo_controllo_data'):
@@ -788,6 +790,38 @@ elif st.session_state.sezione_attiva == "visite":
                 referto = st.file_uploader("Allega Referto o Esami (Opzionale)", type=["pdf", "png", "jpg"], key="visita_ref")
                 fattura_visita = st.file_uploader("Allega Ricevuta / Fattura (Opzionale)", type=["pdf", "png", "jpg"], key="visita_fat")
             
+            # Sezione specifica per i Vaccini
+            nome_vaccino = ""
+            lotto_vaccino = ""
+            scadenza_vaccino = None
+            foto_etichetta_nome = None
+
+            if tipo_visita == "Vaccinazione":
+                st.markdown("---")
+                st.markdown("💉 **Dettagli Specifici Vaccino & Registrazione Fustella / Etichetta**")
+                st.caption("Inserisci i dati del vaccino manualmente oppure acquisisci l'etichetta tramite scansione/foto.")
+
+                modalita_vaccino = st.radio(
+                    "Modalità inserimento dati vaccino:",
+                    ["📷 Scansione / Foto Etichetta o Fustella (Consigliata)", "✍️ Inserimento Manuale"],
+                    horizontal=True
+                )
+
+                if "Scansione" in modalita_vaccino:
+                    st.info("💡 Puoi utilizzare la fotocamera per scansionare il codice dell'etichetta ed allegare la foto della fustella originale al libretto sanitario.")
+                    mostra_scansionatore_barre("📷 Scansiona Codice Etichetta / Fustella Vaccino")
+                    foto_etichetta = st.file_uploader("📸 Allega / Scatta foto dell'Etichetta / Fustella Vaccino*", type=["png", "jpg", "jpeg"], key="vac_foto_upl")
+                    if foto_etichetta:
+                        foto_etichetta_nome = foto_etichetta.name
+
+                col_v1, col_v2, col_v3 = st.columns(3)
+                with col_v1:
+                    nome_vaccino = st.text_input("Nome Vaccino Somministrato*", placeholder="Es. Nobivac DHPPi, Rabisin...")
+                with col_v2:
+                    lotto_vaccino = st.text_input("N° Lotto Vaccino*", placeholder="Es. Lot 24B09X")
+                with col_v3:
+                    scadenza_vaccino = st.date_input("Data Scadenza Farmaco")
+
             st.markdown("---")
             st.markdown("🔒 **Certificazione Ufficiale Sanitaria (Per viaggi e validità legale)**")
             chi_inserisce = st.radio("Chi sta registrando questa prestazione?", ["Utente (In attesa di convalida veterinaria)", "Veterinario (Certificazione e Firma Immediata)"], horizontal=True)
@@ -844,7 +878,11 @@ elif st.session_state.sezione_attiva == "visite":
                         "num_ordine_vet": num_ordine_vet if certificato_valido else "",
                         "provincia_vet": provincia_vet if certificato_valido else "",
                         "vet_id_permanente": vet_id_perm if certificato_valido else None,
-                        "codice_certificato": codice_cert
+                        "codice_certificato": codice_cert,
+                        "nome_vaccino": nome_vaccino if tipo_visita == "Vaccinazione" else "",
+                        "lotto_vaccino": lotto_vaccino if tipo_visita == "Vaccinazione" else "",
+                        "scadenza_vaccino": str(scadenza_vaccino) if (tipo_visita == "Vaccinazione" and scadenza_vaccino) else "",
+                        "foto_etichetta": foto_etichetta_nome if tipo_visita == "Vaccinazione" else None
                     }
                     
                     if pet_selected not in st.session_state.db_visite:
@@ -868,6 +906,17 @@ elif st.session_state.sezione_attiva == "visite":
                     else:
                         st.warning("⚠️ Questa prestazione è stata inserita dall'utente ed è in attesa di firma/convalida da parte del Medico Veterinario per avere valore di espatrio/viaggio.")
                     
+                    if v.get('tipo') == "Vaccinazione" or v.get('nome_vaccino'):
+                        st.markdown(f"""
+                            <div style="background-color: #f0fdf4; border: 1.5px solid #86efac; padding: 12px; border-radius: 10px; margin-bottom: 12px;">
+                                <strong style="color:#166534; font-size: 1.02rem;">💉 Dettagli Vaccino Somministrato:</strong><br>
+                                • <strong>Nome Vaccino:</strong> {v.get('nome_vaccino', 'N/D')}<br>
+                                • <strong>N° Lotto:</strong> <code style="background:#dcfce7; padding:2px 6px; border-radius:4px;">{v.get('lotto_vaccino', 'N/D')}</code><br>
+                                • <strong>Data Scadenza Farmaco:</strong> {v.get('scadenza_vaccino', 'N/D')}
+                                {f"<br>• 📸 <strong>Allegato Foto Etichetta/Fustella:</strong> {v.get('foto_etichetta')}" if v.get('foto_etichetta') else ""}
+                            </div>
+                        """, unsafe_allow_html=True)
+
                     st.write(f"**Diagnosi / Dettagli:** {v['diagnosi']}")
                     if v.get('prossimo_controllo_data'):
                         st.write(f"⏰ **Prossimo Controllo:** {v['prossimo_controllo_data']} ({v.get('prossimo_controllo_tipo', 'Controllo')})")
@@ -933,6 +982,16 @@ elif st.session_state.sezione_attiva == "passaporto":
         
         if visite_cert:
             for v in visite_cert:
+                dettagli_vac_html = ""
+                if v.get('tipo') == "Vaccinazione" or v.get('nome_vaccino'):
+                    dettagli_vac_html = f"""
+                        <div style="background-color: #f0fdf4; border: 1px solid #86efac; padding: 10px; border-radius: 8px; margin-top: 8px; margin-bottom: 8px; color: #166534;">
+                            <strong>💉 Dettagli Vaccino:</strong> {v.get('nome_vaccino', 'N/D')}<br>
+                            • <strong>N° Lotto:</strong> <code style="background:#dcfce7; padding:2px 6px; border-radius:4px;">{v.get('lotto_vaccino', 'N/D')}</code> | <strong>Scadenza:</strong> {v.get('scadenza_vaccino', 'N/D')}
+                            {f"<br>• 📸 <strong>Etichetta / Fustella:</strong> {v.get('foto_etichetta')}" if v.get('foto_etichetta') else ""}
+                        </div>
+                    """
+                
                 st.markdown(f"""
                     <div class="wellness-card" style="border-left: 5px solid #10B981 !important;">
                         <span class="card-badge badge-purple">CERTIFICATO VETERINARIO UFFICIALE</span>
@@ -940,6 +999,7 @@ elif st.session_state.sezione_attiva == "passaporto":
                         <p style="margin-bottom: 4px;"><strong>Medico Responsabile:</strong> Dr. {v['veterinario']} (N° Ordine FNOVI: {v.get('num_ordine_vet')} {v.get('provincia_vet', '')})</p>
                         <p style="margin-bottom: 4px;"><strong>ID Veterinario Permanente:</strong> <code style="background-color:#E2E8F0; padding:2px 6px; border-radius:4px;">{v.get('vet_id_permanente', 'N/D')}</code></p>
                         <p style="margin-bottom: 4px;"><strong>Codice Certificato Univoco:</strong> <code style="background-color:#FEF08A; padding:2px 6px; border-radius:4px;">{v.get('codice_certificato')}</code></p>
+                        {dettagli_vac_html}
                         <p style="margin-bottom: 0;"><strong>Diagnosi/Note Cliniche:</strong> {v['diagnosi']}</p>
                     </div>
                 """, unsafe_allow_html=True)
@@ -1302,6 +1362,8 @@ elif st.session_state.sezione_attiva == "angeli":
                 if dati_angelo.get("visite"):
                     for idx_v, v in enumerate(dati_angelo["visite"]):
                         with st.expander(f"🏥 {v['data']} - {v['tipo']} ({v['veterinario']})"):
+                            if v.get('nome_vaccino'):
+                                st.write(f"💉 **Vaccino:** {v.get('nome_vaccino')} | **Lotto:** {v.get('lotto_vaccino', 'N/D')} | **Scadenza:** {v.get('scadenza_vaccino', 'N/D')}")
                             st.write(f"**Diagnosi:** {v['diagnosi']}")
                             if v.get('referto'):
                                 st.caption(f"📄 Referto: {v['referto']}")
