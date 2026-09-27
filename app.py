@@ -641,6 +641,31 @@ if st.session_state.sezione_attiva == "dashboard":
 
         st.write("")
 
+        with st.expander("🩺 Registrazione & Impostazione PIN Medico Veterinario", expanded=False):
+            st.markdown("In questa sezione il Medico Veterinario o la Clinica possono effettuare il **primo inserimento** nel sistema, impostando il proprio **PIN Segreto personale** e generando il proprio **ID Medico Permanente Univoco** in totale riservatezza.")
+            
+            st.markdown("#### ➕ Registrazione Primo Accesso Medico Veterinario / Clinica")
+            with st.form("form_reg_vet_dash"):
+                col_rv1, col_rv2 = st.columns(2)
+                with col_rv1:
+                    r_nome_vet = st.text_input("Nome e Cognome Medico / Clinica*")
+                    r_num_ord = st.text_input("N° Iscrizione Ordine FNOVI*")
+                with col_rv2:
+                    r_prov_ord = st.text_input("Provincia Ordine (es. RM, MI)*")
+                    r_pin_vet = st.text_input("Imposta PIN Segreto Medico (min. 4 caratteri)*", type="password")
+                
+                sub_vet = st.form_submit_button("Registra Medico Veterinario")
+                if sub_vet:
+                    if r_nome_vet.strip() and r_num_ord.strip() and r_prov_ord.strip() and r_pin_vet:
+                        esito, msg, v_id = verifica_o_registra_pin_vet(r_num_ord, r_prov_ord, r_nome_vet, r_pin_vet)
+                        if esito:
+                            st.success(f"✅ Medico registrato con successo! {msg} | ID Permanente: `{v_id}`")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {msg}")
+                    else:
+                        st.error("Compila tutti i campi obbligatori per registrare il medico.")
+
         with st.expander(f"⚠️ Area Riservata Medico Veterinario (Registro Decesso - {pet_selected})"):
             st.warning(f"⚠️ Attenzione: questa procedura registrerà ufficialmente il decesso dell'animale {pet_selected}. L'azione sposterà l'intera cartella clinica nella sezione 'I nostri angeli a 4 zampe'.")
             
