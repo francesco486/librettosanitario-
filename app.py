@@ -295,6 +295,7 @@ def salva_dati():
         "db_visite": st.session_state.get("db_visite", {"Orlando": []}),
         "db_terapie": st.session_state.get("db_terapie", {"Orlando": []}),
         "db_fatture": st.session_state.get("db_fatture", {"Orlando": []}),
+        "db_anagrafica": st.session_state.get("db_anagrafica", {}),
         "db_veterinari": st.session_state.get("db_veterinari", {}),
         "angeli_archiviati": st.session_state.get("angeli_archiviati", {})
     }
@@ -315,6 +316,7 @@ if "inizializzato" not in st.session_state:
         st.session_state.db_visite = dati_salvati.get("db_visite", {"Orlando": []})
         st.session_state.db_terapie = dati_salvati.get("db_terapie", {"Orlando": []})
         st.session_state.db_fatture = dati_salvati.get("db_fatture", {"Orlando": []})
+        st.session_state.db_anagrafica = dati_salvati.get("db_anagrafica", {})
         st.session_state.db_veterinari = dati_salvati.get("db_veterinari", {})
         st.session_state.angeli_archiviati = dati_salvati.get("angeli_archiviati", {})
     else:
@@ -326,6 +328,7 @@ if "inizializzato" not in st.session_state:
         st.session_state.db_visite = {"Orlando": []}
         st.session_state.db_terapie = {"Orlando": []}
         st.session_state.db_fatture = {"Orlando": []}
+        st.session_state.db_anagrafica = {}
         st.session_state.db_veterinari = {}
         st.session_state.angeli_archiviati = {}
         salva_dati()
@@ -658,6 +661,10 @@ with st.sidebar:
     if st.button("🏠 Riepilogo (Dashboard)"):
         st.session_state.sezione_attiva = "dashboard"
         st.rerun()
+
+    if st.button("📋 Anagrafica Pet & Proprietario"):
+        st.session_state.sezione_attiva = "anagrafica"
+        st.rerun()
         
     if st.button("🏥 Visite e Clinica"):
         st.session_state.sezione_attiva = "visite"
@@ -830,26 +837,123 @@ if st.session_state.sezione_attiva == "dashboard":
                             "veterinario_id": vet_id,
                             "visite": st.session_state.db_visite.get(animale_da_archiviare, []),
                             "terapie": st.session_state.db_terapie.get(animale_da_archiviare, []),
-                            "fatture": st.session_state.db_fatture.get(animale_da_archiviare, [])
+                            "fatture": st.session_state.db_fatture.get(animale_da_archiviare, []),
+                            "anagrafica": st.session_state.db_anagrafica.get(animale_da_archiviare, {})
                         }
-                        
-                        st.session_state.lista_animali.remove(animale_da_archiviare)
-                        
-                        if len(st.session_state.lista_animali) > 0:
-                            st.session_state.pet_selezionato = st.session_state.lista_animali[0]
-                        else:
-                            st.session_state.pet_selezionato = None
-                        
+elif st.session_state.sezione_attiva == "anagrafica":
+    if pet_selected:
+        st.markdown(f"<h2 style='color: #1E3A2B;'>📋 Scheda Anagrafica - {pet_selected}</h2>", unsafe_allow_html=True)
+        st.caption("Gestisci e aggiorna l'anagrafica completa dell'animale e le informazioni di contatto del proprietario per il libretto attivo.")
+
+        # Inizializza l'anagrafica per l'animale selezionato se non presente
+        if "db_anagrafica" not in st.session_state:
+            st.session_state.db_anagrafica = {}
+            
+        anagrafica_corrente = st.session_state.db_anagrafica.get(pet_selected, {
+            "tipo_animale": "Cane" if pet_selected == "Orlando" else "Cane",
+            "nome": pet_selected,
+            "razza": "Non specificata",
+            "data_nascita": "2020-01-01",
+            "microchip": "",
+            "segni_particolari": "Nessuno",
+            "proprietario_nome": f"{st.session_state.nome_utente} Veraldi",
+            "proprietario_indirizzo": "",
+            "proprietario_telefono": st.session_state.get("numero_whatsapp", ""),
+            "proprietario_citta": ""
+        })
+
+        # Visualizzazione Card Anagrafica Corrente
+        col_view1, col_view2 = st.columns(2)
+        with col_view1:
+            st.markdown(f"""
+                <div class="wellness-card" style="border-left: 5px solid #1E3A2B !important;">
+                    <span class="card-badge badge-purple">🐾 DATI ANAGRAFICI PET</span>
+                    <h3 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 12px;">{anagrafica_corrente.get('nome', pet_selected)}</h3>
+                    <p style="margin-bottom: 6px;">• <strong>Specie / Tipo:</strong> {anagrafica_corrente.get('tipo_animale', 'N/D')}</p>
+                    <p style="margin-bottom: 6px;">• <strong>Razza:</strong> {anagrafica_corrente.get('razza', 'N/D')}</p>
+                    <p style="margin-bottom: 6px;">• <strong>Data di Nascita:</strong> {anagrafica_corrente.get('data_nascita', 'N/D')}</p>
+                    <p style="margin-bottom: 6px;">• <strong>N° Microchip:</strong> <code style="background:#E2E8F0; padding:2px 6px; border-radius:4px;">{anagrafica_corrente.get('microchip') or 'Non inserito'}</code></p>
+                    <p style="margin-bottom: 0;">• <strong>Segni Particolari:</strong> {anagrafica_corrente.get('segni_particolari') or 'Nessuno'}</p>
+                </div>
+            """, unsafe_allow_html=True)
+
+        with col_view2:
+            st.markdown(f"""
+                <div class="wellness-card" style="border-left: 5px solid #3B82F6 !important;">
+                    <span class="card-badge badge-blue">👤 PROPRIETARIO & CONTATTI</span>
+                    <h3 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 12px;">{anagrafica_corrente.get('proprietario_nome') or st.session_state.nome_utente}</h3>
+                    <p style="margin-bottom: 6px;">• <strong>Indirizzo:</strong> {anagrafica_corrente.get('proprietario_indirizzo') or 'Non specificato'}</p>
+                    <p style="margin-bottom: 6px;">• <strong>Città:</strong> {anagrafica_corrente.get('proprietario_citta') or 'Non specificata'}</p>
+                    <p style="margin-bottom: 0;">• <strong>Telefono:</strong> {anagrafica_corrente.get('proprietario_telefono') or 'Non specificato'}</p>
+                </div>
+            """, unsafe_allow_html=True)
+
+        st.write("")
+        with st.expander("✏️ Modifica Anagrafica Pet e Dati Proprietario", expanded=True):
+            st.markdown("#### ✏️ Compila o Modifica i Dati Anagrafici")
+            with st.form("form_edit_anagrafica"):
+                st.markdown("##### 🐶 1. Informazioni sull'Animale")
+                col_a1, col_a2 = st.columns(2)
+                with col_a1:
+                    e_tipo = st.selectbox("Tipo / Specie Animale*", ["Cane", "Gatto", "Coniglio", "Uccello", "Rettile", "Altro"], index=["Cane", "Gatto", "Coniglio", "Uccello", "Rettile", "Altro"].index(anagrafica_corrente.get('tipo_animale', 'Cane')) if anagrafica_corrente.get('tipo_animale') in ["Cane", "Gatto", "Coniglio", "Uccello", "Rettile", "Altro"] else 0)
+                    e_nome = st.text_input("Nome Animale*", value=anagrafica_corrente.get('nome', pet_selected))
+                    e_razza = st.text_input("Razza", value=anagrafica_corrente.get('razza', ''))
+                with col_a2:
+                    try:
+                        dt_val = datetime.strptime(anagrafica_corrente.get('data_nascita', '2020-01-01'), "%Y-%m-%d").date()
+                    except Exception:
+                        dt_val = date.today()
+                    e_data_nascita = st.date_input("Data di Nascita", value=dt_val)
+                    e_microchip = st.text_input("Numero Microchip", value=anagrafica_corrente.get('microchip', ''))
+                    e_segni = st.text_area("Segni Particolari / Note Distinctive", value=anagrafica_corrente.get('segni_particolari', ''), placeholder="Es. Macchia bianca sul petto, cicatrici, orecchia tagliata...")
+
+                st.markdown("---")
+                st.markdown("##### 👤 2. Dati del Proprietario (Modificabili)")
+                col_p1, col_p2 = st.columns(2)
+                with col_p1:
+                    e_prop_nome = st.text_input("Nome e Cognome Proprietario*", value=anagrafica_corrente.get('proprietario_nome', f"{st.session_state.nome_utente} Veraldi"))
+                    e_prop_indirizzo = st.text_input("Indirizzo di Residenza (Modificabile)", value=anagrafica_corrente.get('proprietario_indirizzo', ''))
+                with col_p2:
+                    e_prop_telefono = st.text_input("Telefono (Modificabile)", value=anagrafica_corrente.get('proprietario_telefono', st.session_state.get('numero_whatsapp', '')))
+                    e_prop_citta = st.text_input("Città (Modificabile)", value=anagrafica_corrente.get('proprietario_citta', ''))
+
+                submit_anagrafica = st.form_submit_button("💾 Salva Modifiche Anagrafica")
+                if submit_anagrafica:
+                    if e_nome.strip() != "":
+                        vecchio_nome = pet_selected
+                        nuovo_nome = e_nome.strip()
+
+                        # Aggiornamento dati anagrafica
+                        nuovi_dati_anagrafica = {
+                            "tipo_animale": e_tipo,
+                            "nome": nuovo_nome,
+                            "razza": e_razza,
+                            "data_nascita": str(e_data_nascita),
+                            "microchip": e_microchip,
+                            "segni_particolari": e_segni,
+                            "proprietario_nome": e_prop_nome,
+                            "proprietario_indirizzo": e_prop_indirizzo,
+                            "proprietario_telefono": e_prop_telefono,
+                            "proprietario_citta": e_prop_citta
+                        }
+
+                        # Se il nome del pet è stato cambiato, aggiorna tutte le chiavi nel database
+                        if vecchio_nome != nuovo_nome:
+                            st.session_state.lista_animali = [nuovo_nome if p == vecchio_nome else p for p in st.session_state.lista_animali]
+                            st.session_state.db_visite[nuovo_nome] = st.session_state.db_visite.pop(vecchio_nome, [])
+                            st.session_state.db_terapie[nuovo_nome] = st.session_state.db_terapie.pop(vecchio_nome, [])
+                            st.session_state.db_fatture[nuovo_nome] = st.session_state.db_fatture.pop(vecchio_nome, [])
+                            st.session_state.db_anagrafica.pop(vecchio_nome, None)
+                            st.session_state.pet_selezionato = nuovo_nome
+
+                        st.session_state.db_anagrafica[nuovo_nome] = nuovi_dati_anagrafica
                         salva_dati()
-                        st.success(f"Registro archiviato con successo da Dr. (ID: {vet_id}). {animale_da_archiviare} è stato spostato con rispetto nella sezione 'I nostri angeli a 4 zampe'.")
-                        st.session_state.sezione_attiva = "angeli"
+                        st.success(f"Anagrafica di {nuovo_nome} aggiornata e salvata con successo!")
                         st.rerun()
                     else:
-                        st.error(f"Errore di autenticazione: {msg}")
-                else:
-                    st.error("Inserire N° Ordine, Provincia e PIN per procedere con l'archiviazione ufficiale.")
+                        st.error("Inserisci un nome valido per l'animale.")
     else:
-        st.info("Registra un nuovo animale o consulta la sezione 'I nostri angeli a 4 zampe'.")
+        st.warning("Seleziona o registra un animale attivo per gestire la sua anagrafica.")
 
 elif st.session_state.sezione_attiva == "visite":
     if pet_selected:
@@ -1504,30 +1608,57 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
     st.markdown('<div class="form-nuovo-animale">', unsafe_allow_html=True)
     
     with st.form("form_nuovo_animale"):
+        st.markdown("##### 🐶 Dati Animale")
         col1, col2 = st.columns(2)
         with col1:
             nome_animale = st.text_input("Nome dell'animale*")
-            specie = st.selectbox("Specie", ["Cane", "Gatto", "Coniglio", "Altro"])
+            specie = st.selectbox("Specie", ["Cane", "Gatto", "Coniglio", "Uccello", "Rettile", "Altro"])
             razza = st.text_input("Razza")
+            segni_particolari = st.text_input("Segni Particolari / Macchie / Note")
         with col2:
             data_nascita = st.date_input("Data di Nascita Presunta")
             microchip = st.text_input("Numero Microchip (Opzionale)")
             foto_profilo = st.file_uploader("Foto Profilo Animale (Opzionale)", type=["png", "jpg"])
+
+        st.markdown("---")
+        st.markdown("##### 👤 Dati Proprietario")
+        col_p1, col_p2 = st.columns(2)
+        with col_p1:
+            prop_nome = st.text_input("Nome e Cognome Proprietario*", value=f"{st.session_state.nome_utente} Veraldi")
+            prop_indirizzo = st.text_input("Indirizzo di Residenza")
+        with col_p2:
+            prop_telefono = st.text_input("Telefono di Contatto", value=st.session_state.get("numero_whatsapp", ""))
+            prop_citta = st.text_input("Città")
             
-        submit_animale = st.form_submit_button("Salva Scheda Animale")
+        submit_animale = st.form_submit_button("Salva Scheda & Registra Animale")
         
         if submit_animale:
             if nome_animale.strip() != "":
-                if nome_animale not in st.session_state.lista_animali:
-                    st.session_state.lista_animali.append(nome_animale)
-                    st.session_state.db_visite[nome_animale] = []
-                    st.session_state.db_terapie[nome_animale] = []
-                    st.session_state.db_fatture[nome_animale] = []
+                nome_pulito = nome_animale.strip()
+                if nome_pulito not in st.session_state.lista_animali:
+                    st.session_state.lista_animali.append(nome_pulito)
+                    st.session_state.db_visite[nome_pulito] = []
+                    st.session_state.db_terapie[nome_pulito] = []
+                    st.session_state.db_fatture[nome_pulito] = []
                 
-                st.session_state.pet_selezionato = nome_animale
-                st.session_state.sezione_attiva = "dashboard"
+                # Salvataggio immediato nell'Anagrafica
+                st.session_state.db_anagrafica[nome_pulito] = {
+                    "tipo_animale": specie,
+                    "nome": nome_pulito,
+                    "razza": razza,
+                    "data_nascita": str(data_nascita),
+                    "microchip": microchip,
+                    "segni_particolari": segni_particolari,
+                    "proprietario_nome": prop_nome,
+                    "proprietario_indirizzo": prop_indirizzo,
+                    "proprietario_telefono": prop_telefono,
+                    "proprietario_citta": prop_citta
+                }
+
+                st.session_state.pet_selezionato = nome_pulito
+                st.session_state.sezione_attiva = "anagrafica"
                 salva_dati()
-                st.success(f"Scheda di {nome_animale} creata con successo!")
+                st.success(f"Scheda ed Anagrafica di {nome_pulito} create con successo!")
                 st.rerun()
             else:
                 st.error("Inserisci un nome valido per l'animale.")
