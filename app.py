@@ -3,16 +3,81 @@ import json
 import os
 import urllib.parse
 import hashlib
+import uuid
 from datetime import datetime, date
 import streamlit.components.v1 as components
 
+# Configurazione della pagina Streamlit
+st.set_page_config(
+    page_title="PetHealth - Wellness & Care",
+    page_icon="🐾",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+DATA_FILE = "data_pethealth.json"
+
+def hash_password(password):
+    """Calcola l'hash SHA-256 della password per una conservazione sicura nel database."""
+    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+def genera_id_veterinario_permanente(num_ordine, provincia=""):
+    """Genera un ID univoco, deterministico e PERMANENTE per il Veterinario basato su FNOVI e Provincia."""
+    pulito = f"{str(num_ordine).strip().upper()}-{str(provincia).strip().upper()}"
+    hash_vet = hashlib.sha256(pulito.encode('utf-8')).hexdigest()[:6].upper()
+    return f"VET-ID-{hash_vet}"
+
+def genera_codice_certificazione(pet_name, vet_id, date_str, prestazione):
+    """Genera un codice univoco di certificazione sanitaria valida."""
+    raw = f"{pet_name}-{vet_id}-{date_str}-{prestazione}"
+    return f"CERT-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:8].upper()}"
+
+def carica_dati():
+    """Carica i dati del database da file JSON locale se esistente."""
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return None
+    return None
+
+def salva_dati():
+    """Salva lo stato globale e degli utenti registrati nel file JSON."""
+    dati = {
+        "users": st.session_state.get("db_users", {}),
+        "db_veterinari": st.session_state.get("db_veterinari", {})
+    }
+    try:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(dati, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        st.error(f"Errore durante il salvataggio dei dati: {e}")
+
+# Inizializzazione Session State
+if "db_users" not in st.session_state or "db_veterinari" not in st.session_state:
+    dati_salvati = carica_dati()
+    if dati_salvati and "users" in dati_salvati:
+        st.session_state.db_users = dati_salvati.get("users", {})
+        st.session_state.db_veterinari = dati_salvati.get("db_veterinari", {})
+    else:
+        st.session_state.db_users = {}
+        st.session_state.db_veterinari = {}
+        salva_dati()
+
+if "logged_user_email" not in st.session_state:
+    st.session_state.logged_user_email = None
+
+if "sezione_attiva" not in st.session_state:
+    st.session_state.sezione_attiva = "dashboard"
+
+if "verification_pending_email" not in st.session_state:
+    st.session_state.verification_pending_email = None
+
 def mostra_scansionatore_barre(titolo="📷 Scansiona Codice a Barre / Microchip con Fotocamera"):
-    """
-    Mostra un lettore di codici a barre, QR Code e Fustelle con isolamento dello sfondo
-    e ritaglio automatico dell'etichetta del vaccino.
-    """
+    """Mostra un lettore di codici a barre e QR Code integrato HTML5/JS."""
     st.markdown(f"##### {titolo}")
-    st.caption("Inquadra l'etichetta del vaccino nella cornice centrale. Lo sfondo verrà automaticamente oscurato ed escluso dalla scansione.")
+    st.caption("Inquadra l'etichetta del vaccino o il codice a barre nella cornice centrale.")
     
     html_code = """
     <!DOCTYPE html>
@@ -23,25 +88,14 @@ def mostra_scansionatore_barre(titolo="📷 Scansiona Codice a Barre / Microchip
             body { font-family: sans-serif; margin: 0; padding: 5px; background-color: #f8f7f2; text-align: center; }
             .scanner-wrapper { position: relative; width: 100%; max-width: 480px; margin: auto; border-radius: 14px; overflow: hidden; border: 2.5px solid #1E3A2B; background: #000; }
             #reader { width: 100%; }
-            
-            /* Maschera con oscuramento per isolare lo sfondo e mettere a fuoco solo l'etichetta */
             .scan-overlay {
-                position: absolute;
-                top: 0; left: 0; right: 0; bottom: 0;
-                pointer-events: none;
-                display: flex;
-                align-items: center;
-                justify-content: center;
+                position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+                pointer-events: none; display: flex; align-items: center; justify-content: center;
                 box-shadow: inset 0 0 0 2000px rgba(15, 23, 42, 0.65);
             }
             .focus-frame {
-                width: 270px;
-                height: 150px;
-                border: 3px dashed #A3E635;
-                border-radius: 12px;
-                box-shadow: 0 0 20px rgba(163, 230, 53, 0.9);
-                position: relative;
-                animation: focusPulse 2s infinite;
+                width: 270px; height: 150px; border: 3px dashed #A3E635; border-radius: 12px;
+                box-shadow: 0 0 20px rgba(163, 230, 53, 0.9); position: relative; animation: focusPulse 2s infinite;
             }
             @keyframes focusPulse {
                 0% { border-color: #A3E635; box-shadow: 0 0 12px rgba(163, 230, 53, 0.6); }
@@ -52,27 +106,17 @@ def mostra_scansionatore_barre(titolo="📷 Scansiona Codice a Barre / Microchip
             .code-display { font-family: monospace; font-size: 1.1rem; color: #0F172A; background: #FFFFFF; padding: 4px 8px; border-radius: 6px; border: 1px solid #CBD5E1; }
             button.copy-btn { background-color: #1E3A2B; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; margin-top: 10px; width: 100%; }
             button.copy-btn:hover { background-color: #2D4A3E; }
-            
-            #cropped-preview { display: none; margin-top: 10px; background: #ffffff; padding: 10px; border-radius: 10px; border: 1.5px solid #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-            #cropped-preview img { max-width: 100%; border-radius: 8px; border: 1px solid #94a3b8; }
         </style>
     </head>
     <body>
         <div class="scanner-wrapper">
             <div id="reader"></div>
-            <div class="scan-overlay">
-                <div class="focus-frame"></div>
-            </div>
+            <div class="scan-overlay"><div class="focus-frame"></div></div>
         </div>
         <div id="result-box">
-            ✅ <span>Etichetta Rilevata (Sfondo Escluso):</span><br><br>
+            ✅ <span>Etichetta / Codice Rilevato:</span><br><br>
             <span id="scanned-code" class="code-display">---</span><br>
             <button class="copy-btn" onclick="copiaCodice()">📋 Copia Codice Rilevato</button>
-        </div>
-        <div id="cropped-preview">
-            <p style="margin:0 0 6px 0; color:#1E3A2B; font-size:13px; font-weight:700;">🏷️ Ritaglio Istantaneo dell'Etichetta (Sfondo Rimosso):</p>
-            <canvas id="crop-canvas" style="display:none;"></canvas>
-            <img id="cropped-img" src="" alt="Etichetta Vaccino Ritagliata">
         </div>
         <script>
             function copiaCodice() {
@@ -83,624 +127,330 @@ def mostra_scansionatore_barre(titolo="📷 Scansiona Codice a Barre / Microchip
                 dummy.select();
                 document.execCommand("copy");
                 document.body.removeChild(dummy);
-                alert("Codice '" + text + "' copiato negli appunti!");
             }
-
-            function ritagliaSoloEtichetta() {
-                try {
-                    var video = document.querySelector("#reader video");
-                    if (video && video.videoWidth) {
-                        var canvas = document.getElementById("crop-canvas");
-                        var ctx = canvas.getContext("2d");
-                        
-                        // Calcolo delle proporzioni per estrarre ESCLUSIVAMENTE la zona dentro il rettangolo di messa a fuoco
-                        var scaleX = video.videoWidth / video.clientWidth;
-                        var scaleY = video.videoHeight / video.clientHeight;
-                        
-                        var cropW = 270 * scaleX;
-                        var cropH = 150 * scaleY;
-                        var cropX = (video.videoWidth - cropW) / 2;
-                        var cropY = (video.videoHeight - cropH) / 2;
-                        
-                        canvas.width = cropW;
-                        canvas.height = cropH;
-                        
-                        // Disegna e isola l'immagine del vaccino ritagliando qualsiasi elemento esterno
-                        ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-                        
-                        var croppedImg = document.getElementById("cropped-img");
-                        croppedImg.src = canvas.toDataURL("image/png");
-                        document.getElementById("cropped-preview").style.display = "block";
-                    }
-                } catch(e) {
-                    console.log("Ritaglio etichetta non disponibile:", e);
-                }
-            }
-
             function onScanSuccess(decodedText, decodedResult) {
                 document.getElementById("scanned-code").innerText = decodedText;
                 document.getElementById("result-box").style.display = "block";
-                ritagliaSoloEtichetta();
             }
-
-            var html5QrcodeScanner = new Html5QrcodeScanner(
-                "reader", { 
-                    fps: 15, 
-                    qrbox: { width: 270, height: 150 },
-                    aspectRatio: 1.0
-                }, false
-            );
+            var html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 15, qrbox: { width: 270, height: 150 } }, false);
             html5QrcodeScanner.render(onScanSuccess);
         </script>
     </body>
     </html>
     """
-    components.html(html_code, height=490)
+    components.html(html_code, height=450)
 
-st.set_page_config(
-    page_title="PetHealth - Wellness & Care",
-    page_icon="🐾",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+def genera_link_whatsapp(numero, animale, farmaco, dosaggio, orario, note=""):
+    testo = f"🐾 *PetHealth - Promemoria Terapia*\n\n🐶 *Animale:* {animale}\n💊 *Farmaco:* {farmaco}\n🥄 *Dose:* {dosaggio}\n⏰ *Orario:* {orario}\n"
+    if note: testo += f"📝 *Istruzioni:* {note}\n"
+    testo += "\n⚠️ *Ricordati di somministrare la terapia fino alla fine prevista!*"
+    numero_pulito = "".join(filter(str.isdigit, str(numero)))
+    return f"https://api.whatsapp.com/send?phone={numero_pulito}&text={urllib.parse.quote(testo)}" if numero_pulito else f"https://api.whatsapp.com/send?text={urllib.parse.quote(testo)}"
 
-DATA_FILE = "data_pethealth.json"
+def genera_link_whatsapp_visita(numero, animale, tipo_visita, data_visita, veterinario="", note=""):
+    testo = f"🐾 *PetHealth - Promemoria Visita*\n\n🐶 *Animale:* {animale}\n🏥 *Prestazione:* {tipo_visita}\n📅 *Data:* {data_visita}\n"
+    if veterinario: testo += f"🩺 *Veterinario:* {veterinario}\n"
+    if note: testo += f"📝 *Note:* {note}\n"
+    testo += "\n⚠️ *Ricordati di confermare o presentarti all'appuntamento!*"
+    numero_pulito = "".join(filter(str.isdigit, str(numero)))
+    return f"https://api.whatsapp.com/send?phone={numero_pulito}&text={urllib.parse.quote(testo)}" if numero_pulito else f"https://api.whatsapp.com/send?text={urllib.parse.quote(testo)}"
 
-def genera_id_veterinario_permanente(num_ordine, provincia=""):
-    """
-    Genera un ID univoco, deterministico e PERMANENTE per il Veterinario.
-    Basato sul Numero di Iscrizione all'Ordine FNOVI e la Provincia.
-    Questo ID rimane identico per tutte le prestazioni dello stesso medico.
-    """
-    pulito = f"{str(num_ordine).strip().upper()}-{str(provincia).strip().upper()}"
-    hash_vet = hashlib.sha256(pulito.encode('utf-8')).hexdigest()[:6].upper()
-    return f"VET-ID-{hash_vet}"
+def mostra_pulsanti_promemoria_terapia(animale, farmaco, dosaggio, orario, note=""):
+    user_data = st.session_state.db_users.get(st.session_state.logged_user_email, {})
+    num1 = user_data.get("numero_whatsapp", "")
+    num2 = user_data.get("numero_whatsapp_2", "")
+    if num1 and num2:
+        c1, c2 = st.columns(2)
+        with c1: st.link_button("📲 WhatsApp (Num 1)", url=genera_link_whatsapp(num1, animale, farmaco, dosaggio, orario, note))
+        with c2: st.link_button("📲 WhatsApp (Num 2)", url=genera_link_whatsapp(num2, animale, farmaco, dosaggio, orario, note))
+    else:
+        st.link_button("📲 Invia Promemoria WhatsApp", url=genera_link_whatsapp(num1 or num2, animale, farmaco, dosaggio, orario, note))
 
-def genera_codice_certificazione(pet_nome, vet_id_permanente, data_prestazione, tipo_prestazione):
-    """
-    Genera il codice univoco della SINGOLA prestazione sanitaria certificata,
-    collegandolo in modo inalterabile all'ID permanente del veterinario.
-    """
-    stringa_base = f"{pet_nome}-{vet_id_permanente}-{data_prestazione}-{tipo_prestazione}-{datetime.now().isoformat()}"
-    hash_cert = hashlib.sha256(stringa_base.encode('utf-8')).hexdigest()[:8].upper()
-    return f"CERT-{data_prestazione[:4]}-{hash_cert}"
+def mostra_pulsanti_promemoria_visita(animale, tipo_visita, data_visita, veterinario="", note=""):
+    user_data = st.session_state.db_users.get(st.session_state.logged_user_email, {})
+    num1 = user_data.get("numero_whatsapp", "")
+    num2 = user_data.get("numero_whatsapp_2", "")
+    if num1 and num2:
+        c1, c2 = st.columns(2)
+        with c1: st.link_button("📲 Promemoria Visita (Num 1)", url=genera_link_whatsapp_visita(num1, animale, tipo_visita, data_visita, veterinario, note))
+        with c2: st.link_button("📲 Promemoria Visita (Num 2)", url=genera_link_whatsapp_visita(num2, animale, tipo_visita, data_visita, veterinario, note))
+    else:
+        st.link_button("📲 Promemoria Visita WhatsApp", url=genera_link_whatsapp_visita(num1 or num2, animale, tipo_visita, data_visita, veterinario, note))
 
-def verifica_o_registra_pin_vet(num_ordine, provincia, nome_vet, pin_inserito):
-    """
-    Verifica se il veterinario è già presente nel registro.
-    Se è la prima volta, imposta il PIN segreto scelto dal medico.
-    Se esiste già, confronta il PIN inserito con quello registrato.
-    """
+def verifica_o_registra_pin_vet(num_ordine, provincia, nome_vet, pin_inserito, email="", telefono="", struttura="", indirizzo=""):
     db_vet = st.session_state.get("db_veterinari", {})
-    chiave_vet = str(num_ordine).strip().upper()
-    
+    chiave_vet = f"{str(num_ordine).strip().upper()}-{str(provincia).strip().upper()}"
     vet_id = genera_id_veterinario_permanente(num_ordine, provincia)
     
     if chiave_vet in db_vet:
-        # Veterinario già esistente
-        pin_corretto = db_vet[chiave_vet].get("pin")
-        if pin_inserito == pin_corretto:
+        if str(pin_inserito).strip() == str(db_vet[chiave_vet].get("pin")).strip():
             return True, "Autenticazione riuscita", vet_id
         else:
-            return False, "PIN errato per il numero di iscrizione FNOVI inserito.", None
+            return False, f"PIN errato per l'iscrizione FNOVI N° {num_ordine} ({provincia.upper()}).", None
     else:
-        # Prima volta: registra il veterinario ed imposta il suo PIN segreto personale
-        if len(pin_inserito) < 4:
-            return False, "Il PIN deve contenere almeno 4 cifre/caratteri.", None
-            
+        if len(str(pin_inserito).strip()) < 4:
+            return False, "Il PIN segreto deve contenere almeno 4 cifre o caratteri.", None
         db_vet[chiave_vet] = {
-            "nome": nome_vet,
-            "num_ordine": num_ordine,
-            "provincia": provincia,
-            "vet_id": vet_id,
-            "pin": pin_inserito,
-            "data_registrazione": str(date.today())
+            "nome": nome_vet.strip(), "num_ordine": str(num_ordine).strip(), "provincia": str(provincia).strip().upper(),
+            "struttura": struttura.strip(), "email": email.strip(), "telefono": telefono.strip(),
+            "indirizzo": indirizzo.strip(), "vet_id": vet_id, "pin": str(pin_inserito).strip(), "data_registrazione": str(date.today())
         }
         st.session_state.db_veterinari = db_vet
         salva_dati()
-        return True, f"Primo accesso! PIN impostato e account Medico creato (ID: {vet_id}).", vet_id
-
-def genera_link_whatsapp(numero, animale, farmaco, dosaggio, orario, note=""):
-    """Genera il link di invio immediato con messaggio pre-compilato per WhatsApp per le Terapie."""
-    testo = f"🐾 *PetHealth - Promemoria Terapia*\n\n🐶 *Animale:* {animale}\n💊 *Farmaco:* {farmaco}\n🥄 *Dose / Quantità:* {dosaggio}\n⏰ *Orario Somministrazione:* {orario}\n"
-    if note:
-        testo += f"📝 *Istruzioni:* {note}\n"
-    testo += "\n⚠️ *Ricordati di somministrare la terapia fino alla data di fine prevista!*"
-    
-    testo_encoded = urllib.parse.quote(testo)
-    numero_pulito = "".join(filter(str.isdigit, str(numero)))
-    if numero_pulito:
-        return f"https://api.whatsapp.com/send?phone={numero_pulito}&text={testo_encoded}"
-    return f"https://api.whatsapp.com/send?text={testo_encoded}"
-
-def genera_link_whatsapp_visita(numero, animale, tipo_visita, data_visita, veterinario="", note=""):
-    """Genera il link di invio immediato con messaggio pre-compilato per WhatsApp per Visite e Controlli."""
-    testo = f"🐾 *PetHealth - Promemoria Visita / Controllo*\n\n🐶 *Animale:* {animale}\n🏥 *Prestazione/Controllo:* {tipo_visita}\n📅 *Data Prevista:* {data_visita}\n"
-    if veterinario:
-        testo += f"🩺 *Veterinario / Clinica:* {veterinario}\n"
-    if note:
-        testo += f"📝 *Note:* {note}\n"
-    testo += "\n⚠️ *Ricordati di confermare o presentarti all'appuntamento!*"
-    
-    testo_encoded = urllib.parse.quote(testo)
-    numero_pulito = "".join(filter(str.isdigit, str(numero)))
-    if numero_pulito:
-        return f"https://api.whatsapp.com/send?phone={numero_pulito}&text={testo_encoded}"
-    return f"https://api.whatsapp.com/send?text={testo_encoded}"
-
-def mostra_pulsanti_promemoria_terapia(animale, farmaco, dosaggio, orario, note=""):
-    """Mostra i pulsanti di invio WhatsApp per il Numero 1, Numero 2 o entrambi."""
-    num1 = st.session_state.get("numero_whatsapp", "")
-    num2 = st.session_state.get("numero_whatsapp_2", "")
-    
-    if num1 and num2:
-        col_wa1, col_wa2 = st.columns(2)
-        with col_wa1:
-            link1 = genera_link_whatsapp(num1, animale, farmaco, dosaggio, orario, note)
-            st.link_button("📲 WhatsApp (Numero 1)", url=link1)
-        with col_wa2:
-            link2 = genera_link_whatsapp(num2, animale, farmaco, dosaggio, orario, note)
-            st.link_button("📲 WhatsApp (Numero 2)", url=link2)
-    elif num1:
-        link1 = genera_link_whatsapp(num1, animale, farmaco, dosaggio, orario, note)
-        st.link_button("📲 Invia Promemoria WhatsApp", url=link1)
-    elif num2:
-        link2 = genera_link_whatsapp(num2, animale, farmaco, dosaggio, orario, note)
-        st.link_button("📲 Invia Promemoria WhatsApp (Num 2)", url=link2)
-    else:
-        link_gen = genera_link_whatsapp("", animale, farmaco, dosaggio, orario, note)
-        st.link_button("📲 Invia Promemoria WhatsApp", url=link_gen)
-
-def mostra_pulsanti_promemoria_visita(animale, tipo_visita, data_visita, veterinario="", note=""):
-    """Mostra i pulsanti di invio WhatsApp per i promemoria visita su Numero 1 o Numero 2."""
-    num1 = st.session_state.get("numero_whatsapp", "")
-    num2 = st.session_state.get("numero_whatsapp_2", "")
-    
-    if num1 and num2:
-        col_wa1, col_wa2 = st.columns(2)
-        with col_wa1:
-            link1 = genera_link_whatsapp_visita(num1, animale, tipo_visita, data_visita, veterinario, note)
-            st.link_button("📲 Promemoria Visita (Num 1)", url=link1)
-        with col_wa2:
-            link2 = genera_link_whatsapp_visita(num2, animale, tipo_visita, data_visita, veterinario, note)
-            st.link_button("📲 Promemoria Visita (Num 2)", url=link2)
-    elif num1:
-        link1 = genera_link_whatsapp_visita(num1, animale, tipo_visita, data_visita, veterinario, note)
-        st.link_button("📲 Promemoria Visita WhatsApp", url=link1)
-    elif num2:
-        link2 = genera_link_whatsapp_visita(num2, animale, tipo_visita, data_visita, veterinario, note)
-        st.link_button("📲 Promemoria Visita WhatsApp", url=link2)
-    else:
-        link_gen = genera_link_whatsapp_visita("", animale, tipo_visita, data_visita, veterinario, note)
-        st.link_button("📲 Promemoria Visita WhatsApp", url=link_gen)
-
-def carica_dati():
-    """Carica i dati salvati su file JSON se esiste."""
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return None
-    return None
-
-def salva_dati():
-    """Salva lo stato attuale su file JSON per mantenerlo persistente ad ogni reload."""
-    dati = {
-        "nome_utente": st.session_state.get("nome_utente", "Francesco"),
-        "numero_whatsapp": st.session_state.get("numero_whatsapp", ""),
-        "numero_whatsapp_2": st.session_state.get("numero_whatsapp_2", ""),
-        "lista_animali": st.session_state.get("lista_animali", ["Orlando"]),
-        "pet_selezionato": st.session_state.get("pet_selezionato", "Orlando"),
-        "db_visite": st.session_state.get("db_visite", {"Orlando": []}),
-        "db_terapie": st.session_state.get("db_terapie", {"Orlando": []}),
-        "db_fatture": st.session_state.get("db_fatture", {"Orlando": []}),
-        "db_anagrafica": st.session_state.get("db_anagrafica", {}),
-        "db_veterinari": st.session_state.get("db_veterinari", {}),
-        "angeli_archiviati": st.session_state.get("angeli_archiviati", {})
-    }
-    try:
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(dati, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        st.error(f"Errore durante il salvataggio dei dati: {e}")
-
-if "inizializzato" not in st.session_state:
-    dati_salvati = carica_dati()
-    if dati_salvati:
-        st.session_state.nome_utente = dati_salvati.get("nome_utente", "Francesco")
-        st.session_state.numero_whatsapp = dati_salvati.get("numero_whatsapp", "")
-        st.session_state.numero_whatsapp_2 = dati_salvati.get("numero_whatsapp_2", "")
-        st.session_state.lista_animali = dati_salvati.get("lista_animali", ["Orlando"])
-        st.session_state.pet_selezionato = dati_salvati.get("pet_selezionato", "Orlando")
-        st.session_state.db_visite = dati_salvati.get("db_visite", {"Orlando": []})
-        st.session_state.db_terapie = dati_salvati.get("db_terapie", {"Orlando": []})
-        st.session_state.db_fatture = dati_salvati.get("db_fatture", {"Orlando": []})
-        st.session_state.db_anagrafica = dati_salvati.get("db_anagrafica", {})
-        st.session_state.db_veterinari = dati_salvati.get("db_veterinari", {})
-        st.session_state.angeli_archiviati = dati_salvati.get("angeli_archiviati", {})
-    else:
-        st.session_state.nome_utente = "Francesco"
-        st.session_state.numero_whatsapp = ""
-        st.session_state.numero_whatsapp_2 = ""
-        st.session_state.lista_animali = ["Orlando"]
-        st.session_state.pet_selezionato = "Orlando"
-        st.session_state.db_visite = {"Orlando": []}
-        st.session_state.db_terapie = {"Orlando": []}
-        st.session_state.db_fatture = {"Orlando": []}
-        st.session_state.db_anagrafica = {}
-        st.session_state.db_veterinari = {}
-        st.session_state.angeli_archiviati = {}
-        salva_dati()
-    st.session_state.inizializzato = True
-
-if "sezione_attiva" not in st.session_state:
-    st.session_state.sezione_attiva = "dashboard"
+        return True, f"Profilo Medico registrato con ID: {vet_id}", vet_id
 
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
-
-    :root {
-        color-scheme: light !important;
-    }
-
+    :root { color-scheme: light !important; }
     html, body, .stApp {
         font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
-        background-color: #F8F7F2 !important;
-        color: #1e293b !important;
+        background-color: #F8F7F2 !important; color: #1e293b !important;
     }
-
-    .stApp p:not([data-testid="stExpander"] *), 
-    .stApp label {
-        font-family: 'Plus Jakarta Sans', sans-serif !important;
-        line-height: 1.45 !important;
-    }
-
-    #MainMenu, footer {
-        visibility: hidden;
-    }
-
-    header[data-testid="stHeader"] {
-        background-color: transparent !important;
-    }
-
-    /* SIDEBAR */
+    #MainMenu, footer { visibility: hidden; }
+    header[data-testid="stHeader"] { background-color: transparent !important; }
     section[data-testid="stSidebar"] {
-        background-color: #1E3A2B !important;
-        border-right: 1px solid #2D4A3E !important;
+        background-color: #1E3A2B !important; border-right: 1px solid #2D4A3E !important;
     }
-
-    section[data-testid="stSidebar"] p, 
-    section[data-testid="stSidebar"] h1, 
-    section[data-testid="stSidebar"] h2, 
-    section[data-testid="stSidebar"] h3, 
-    section[data-testid="stSidebar"] span,
-    section[data-testid="stSidebar"] label {
+    section[data-testid="stSidebar"] p, section[data-testid="stSidebar"] h1, 
+    section[data-testid="stSidebar"] h2, section[data-testid="stSidebar"] h3, 
+    section[data-testid="stSidebar"] span, section[data-testid="stSidebar"] label {
         color: #FFFFFF !important;
     }
-
-    /* Assicura che tutti i testi degli input, etichette ed expander nella sidebar e nell'app siano visibili in colore NERO (#000000) */
-    section[data-testid="stSidebar"] div[data-testid="stExpander"] *,
-    section[data-testid="stSidebar"] div[data-testid="stExpander"] label p,
-    section[data-testid="stSidebar"] div[data-testid="stExpander"] input,
-    div[data-testid="stExpander"] label p,
-    div[data-testid="stExpander"] input {
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
-    }
-
-    @media (min-width: 768px) {
-        [data-testid="stSidebarCollapseButton"], 
-        [data-testid="stSidebarToggle"], 
-        [data-testid="collapsedControl"] {
-            display: none !important;
-            visibility: hidden !important;
-        }
-
-        section[data-testid="stSidebar"] {
-            display: block !important;
-            min-width: 21rem !important;
-            max-width: 21rem !important;
-        }
-    }
-
-    /* WELLNESS CARDS */
     .wellness-card {
-        background-color: #FFFFFF !important;
-        border-radius: 16px;
-        padding: 20px;
-        border: 1px solid #E2E8E4 !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
-        margin-bottom: 16px;
+        background-color: #FFFFFF !important; border-radius: 16px; padding: 20px;
+        border: 1px solid #E2E8E4 !important; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02); margin-bottom: 16px;
     }
-
-    /* ANGELS CARD SPECIFICA */
-    .angels-card {
-        background-color: #FFFFFF !important;
-        border-radius: 16px;
-        padding: 24px;
-        border: 1.5px solid #CBD5E1 !important;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
-        margin-bottom: 20px;
+    .auth-container {
+        max-width: 540px; margin: 30px auto; background-color: #FFFFFF; padding: 32px;
+        border-radius: 20px; border: 1px solid #E2E8F0; box-shadow: 0 10px 25px rgba(0,0,0,0.06);
     }
-
-    /* BADGES */
     .card-badge {
-        display: inline-block;
-        padding: 4px 12px;
-        background-color: #E8F0EC;
-        color: #1E3A2B;
-        font-weight: 700;
-        font-size: 0.78rem;
-        border-radius: 20px;
-        margin-bottom: 10px;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
+        display: inline-block; padding: 4px 12px; background-color: #E8F0EC; color: #1E3A2B;
+        font-weight: 700; font-size: 0.78rem; border-radius: 20px; margin-bottom: 10px;
+        text-transform: uppercase; letter-spacing: 0.04em;
     }
     .badge-purple { background-color: #f3e8ff; color: #6b21a8; }
     .badge-blue { background-color: #dbeafe; color: #1e40af; }
-    .badge-memorial { background-color: #F1F5F9; color: #475569; }
-
-    /* INPUT E FORM GENERICS */
-    label, div[data-testid="stWidgetLabel"] p {
-        color: #1E3A2B !important;
-        font-weight: 700 !important;
-        font-size: 0.92rem !important;
-        margin-bottom: 6px !important;
-    }
-
-    .stTextInput input, 
-    .stTextArea textarea, 
-    .stNumberInput input,
-    .stDateInput input,
-    div[data-baseweb="input"] input {
-        color: #000000 !important;
-        -webkit-text-fill-color: #000000 !important;
-        background-color: #ffffff !important;
-        border: 1.5px solid #cbd5e1 !important;
-        border-radius: 10px !important;
-        font-weight: 600 !important;
-    }
-
-    div[data-testid="stSelectbox"] div[data-baseweb="select"] {
-        background-color: #ffffff !important;
-        border: 1.5px solid #cbd5e1 !important;
-        border-radius: 10px !important;
-    }
-
-    div[data-testid="stSelectbox"] div[data-baseweb="select"] * {
-        color: #0f172a !important;
-        -webkit-text-fill-color: #0f172a !important;
-        font-weight: 600 !important;
-    }
-
-    div[data-testid="stFileUploader"] {
-        background-color: #ffffff !important;
-        border: 1.5px dashed #cbd5e1 !important;
-        border-radius: 12px !important;
-        padding: 10px !important;
-    }
-
-    div[data-testid="stFileUploader"] * {
-        color: #1e293b !important;
-    }
-
-    div[data-testid="stFileUploader"] button {
-        background-color: #f1f5f9 !important;
-        border: 1px solid #cbd5e1 !important;
-        color: #1e293b !important;
-    }
-
-    div[data-testid="stAlert"] {
-        background-color: #fefce8 !important;
-        border: 1px solid #fef08a !important;
-        border-radius: 12px !important;
-    }
-
-    div[data-testid="stAlert"] * {
-        color: #854d0e !important;
-        font-weight: 600 !important;
-    }
-
-    /* PULSANTI */
-    div[data-testid="stFormSubmitButton"] > button,
-    .stButton > button {
-        background-color: #1E3A2B !important;
-        border: 1px solid #1E3A2B !important;
-        border-radius: 12px !important;
-        padding: 0.75rem 1.5rem !important;
-        width: 100% !important;
-        box-shadow: 0 4px 12px rgba(30, 58, 43, 0.15) !important;
-        transition: all 0.2s ease !important;
-    }
-
-    div[data-testid="stFormSubmitButton"] > button p,
-    div[data-testid="stFormSubmitButton"] > button span,
-    div[data-testid="stFormSubmitButton"] > button div,
-    .stButton > button p,
-    .stButton > button span {
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
-        font-weight: 700 !important;
-        font-size: 1rem !important;
-    }
-
-    div[data-testid="stFormSubmitButton"] > button:hover,
-    .stButton > button:hover {
-        background-color: #2D4A3E !important;
-        border-color: #2D4A3E !important;
-    }
-
-    section[data-testid="stSidebar"] .stButton > button {
-        background-color: #2D4A3E !important;
-        border: 1px solid #3E6352 !important;
-        border-radius: 12px !important;
-        box-shadow: none !important;
-    }
-
-    section[data-testid="stSidebar"] .stButton > button:hover {
-        background-color: #3E6352 !important;
-    }
-
-    div[data-testid="stExpander"] {
-        background-color: #ffffff !important;
-        border: 1.5px solid #cbd5e1 !important;
-        border-radius: 14px !important;
-        margin-bottom: 12px !important;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.02) !important;
-    }
-
-    div[data-testid="stExpander"] summary {
-        background-color: #ffffff !important;
-        border-radius: 14px !important;
-    }
-
-    div[data-testid="stExpander"] details summary div[data-testid="stMarkdownContainer"] p,
-    div[data-testid="stExpander"] summary * {
-        color: #1E3A2B !important;
-        -webkit-text-fill-color: #1E3A2B !important;
-        font-weight: 700 !important;
-        font-size: 0.95rem !important;
-    }
-
-    section[data-testid="stSidebar"] div[data-testid="stSelectbox"] label p {
-        color: #D2E3D8 !important;
-        -webkit-text-fill-color: #D2E3D8 !important;
-    }
-
-    /* Riduzione dello spazio verticale tra i riquadri di testo nell'expander della sidebar */
-    section[data-testid="stSidebar"] div[data-testid="stExpander"] div[data-testid="stTextInput"] {
-        margin-bottom: -0.4rem !important;
-    }
-
-    /* STILI SCURI SEZIONE REGISTRA NUOVO ANIMALE */
-    .form-nuovo-animale input {
-        background-color: #1E293B !important;
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
-        border: 1px solid #334155 !important;
-        border-radius: 10px !important;
-    }
-
-    .form-nuovo-animale div[data-testid="stSelectbox"] div[data-baseweb="select"] {
-        background-color: #1E293B !important;
-        border: 1px solid #334155 !important;
-        border-radius: 10px !important;
-    }
-
-    .form-nuovo-animale div[data-testid="stSelectbox"] div[data-baseweb="select"] * {
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
-    }
-
-    .form-nuovo-animale div[data-testid="stFileUploader"] {
-        background-color: #1E293B !important;
-        border: 1.5px dashed #334155 !important;
-    }
-
-    .form-nuovo-animale div[data-testid="stFileUploader"] * {
-        color: #FFFFFF !important;
-        -webkit-text-fill-color: #FFFFFF !important;
-    }
-
-    .form-nuovo-animale div[data-testid="stFileUploader"] button {
-        background-color: #334155 !important;
-        border: 1px solid #475569 !important;
-        color: #FFFFFF !important;
-    }
+    .badge-green { background-color: #dcfce7; color: #15803d; }
     
-    /* STILE ROSSO PER I TAB 2 E 3 DELLA SEZIONE ANGELI */
-    [data-testid="stTabs"] button[data-baseweb="tab"]:nth-of-type(2) *,
-    [data-testid="stTabs"] button[data-baseweb="tab"]:nth-of-type(3) * {
-        color: #DC2626 !important;
-        -webkit-text-fill-color: #DC2626 !important;
-        font-weight: 700 !important;
+    div[data-testid="stFormSubmitButton"] > button, .stButton > button {
+        background-color: #1E3A2B !important; border: 1px solid #1E3A2B !important;
+        border-radius: 12px !important; padding: 0.75rem 1.5rem !important; width: 100% !important;
+        box-shadow: 0 4px 12px rgba(30, 58, 43, 0.15) !important; transition: all 0.2s ease !important;
+    }
+    div[data-testid="stFormSubmitButton"] > button p, div[data-testid="stFormSubmitButton"] > button span,
+    .stButton > button p, .stButton > button span {
+        color: #FFFFFF !important; font-weight: 700 !important; font-size: 1rem !important;
+    }
+    section[data-testid="stSidebar"] .stButton > button {
+        background-color: #2D4A3E !important; border: 1px solid #3E6352 !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
+if st.session_state.logged_user_email is None:
+    st.markdown("<h1 style='text-align: center; color: #1E3A2B; margin-top: 15px;'>🐾 PetHealth Platform</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #475569; font-size:1.1rem; margin-bottom: 25px;'>La piattaforma digitale per la gestione della salute, libretto sanitario ed anagrafica dei tuoi animali domestici.</p>", unsafe_allow_html=True)
+
+    auth_tab1, auth_tab2, auth_tab3 = st.tabs(["🔑 Accedi", "📝 Registrati", "📧 Attivazione Account"])
+
+    # --- SCHEDA ACCESSO ---
+    with auth_tab1:
+        st.markdown("<div class='auth-container'>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color: #1E3A2B; text-align: center; margin-bottom: 10px;'>Accedi al tuo Account</h3>", unsafe_allow_html=True)
+        st.caption("Inserisci le tue credenziali di accesso per entrare nell'applicazione.")
+        st.write("")
+        
+        with st.form("form_login"):
+            login_email = st.text_input("Indirizzo Email*", placeholder="es. mario.rossi@email.it")
+            login_pass = st.text_input("Password*", type="password", placeholder="••••••••")
+            btn_login = st.form_submit_button("🔑 Accedi alla Web App")
+            
+            if btn_login:
+                email_clean = login_email.strip().lower()
+                users_db = st.session_state.db_users
+                
+                if email_clean in users_db:
+                    user_info = users_db[email_clean]
+                    if user_info.get("stato") == "in_attesa":
+                        st.warning("⚠️ Il tuo profilo richiede prima l'attivazione. Utilizza la scheda 'Attivazione Account' per accedere.")
+                        st.session_state.verification_pending_email = email_clean
+                    elif user_info.get("password") == hash_password(login_pass):
+                        st.session_state.logged_user_email = email_clean
+                        st.success(f"Benvenuto/a {user_info.get('nome')}!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Password non corretta. Riprova.")
+                else:
+                    st.error("❌ Nessun profilo registrato con questa email. Effettua prima la registrazione nel tab 'Registrati'.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # --- SCHEDA REGISTRAZIONE ---
+    with auth_tab2:
+        st.markdown("<div class='auth-container'>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color: #1E3A2B; text-align: center; margin-bottom: 10px;'>Modulo di Registrazione Utente</h3>", unsafe_allow_html=True)
+        st.caption("Compila tutti i campi richiesti per creare il tuo profilo di gestione animali.")
+        st.write("")
+        
+        with st.form("form_registrazione"):
+            reg_nome = st.text_input("Nome e Cognome Proprietario*", placeholder="es. Mario Rossi")
+            reg_email = st.text_input("Indirizzo Email*", placeholder="es. mario.rossi@email.it")
+            reg_telefono = st.text_input("Numero di Cellulare / WhatsApp*", placeholder="es. +39 333 1234567")
+            
+            col_p1, col_p2 = st.columns(2)
+            with col_p1:
+                reg_pass = st.text_input("Crea Password*", type="password", placeholder="••••••••")
+            with col_p2:
+                reg_pass_conf = st.text_input("Conferma Password*", type="password", placeholder="••••••••")
+            
+            st.write("")
+            btn_register = st.form_submit_button("📝 Registra il tuo Account")
+            
+            if btn_register:
+                email_c = reg_email.strip().lower()
+                if not reg_nome.strip() or not email_c or not reg_pass or not reg_telefono.strip():
+                    st.error("⚠️ Compila tutti i campi obbligatori marcati con (*).")
+                elif reg_pass != reg_pass_conf:
+                    st.error("❌ Le password inserite non corrispondono.")
+                elif len(reg_pass) < 6:
+                    st.error("⚠️ La password deve essere di almeno 6 caratteri.")
+                elif email_c in st.session_state.db_users:
+                    st.error("❌ Risulta già presente un profilo con questa email.")
+                else:
+                    code_token = str(uuid.uuid4())[:8].upper()
+                    st.session_state.db_users[email_c] = {
+                        "nome": reg_nome.strip(),
+                        "email": email_c,
+                        "password": hash_password(reg_pass),
+                        "numero_whatsapp": reg_telefono.strip(),
+                        "numero_whatsapp_2": "",
+                        "stato": "in_attesa",
+                        "codice_conferma": code_token,
+                        "data_registrazione": str(date.today()),
+                        "lista_animali": [],
+                        "pet_selezionato": None,
+                        "db_visite": {},
+                        "db_terapie": {},
+                        "db_fatture": {},
+                        "db_anagrafica": {},
+                        "angeli_archiviati": {}
+                    }
+                    salva_dati()
+                    st.session_state.verification_pending_email = email_c
+                    st.success("✅ Registrazione effettuata con successo! È stato generato il tuo codice di attivazione.")
+                    st.info("👉 Passa alla scheda 'Attivazione Account' per attivare ed effettuare il tuo primo accesso.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # --- SCHEDA ATTIVAZIONE ACCOUNT ---
+    with auth_tab3:
+        st.markdown("<div class='auth-container'>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color: #1E3A2B; text-align: center; margin-bottom: 10px;'>Attivazione & Conferma Registrazione</h3>", unsafe_allow_html=True)
+        
+        target_email = st.session_state.verification_pending_email or ""
+        email_to_verify = st.text_input("Inserisci l'email con cui ti sei registrato:", value=target_email)
+        
+        if email_to_verify.strip().lower() in st.session_state.db_users:
+            u_data = st.session_state.db_users[email_to_verify.strip().lower()]
+            if u_data.get("stato") == "attivo":
+                st.success("🎉 Questo account risulta già attivo! Puoi accedere subito nella scheda 'Accedi'.")
+            else:
+                st.markdown(f"""
+                    <div style="background:#F0FDF4; border:1.5px dashed #16A34A; padding:20px; border-radius:12px; margin-top:15px; margin-bottom:15px;">
+                        <h4 style="margin:0 0 10px 0; color:#15803D;">✉️ Messaggio di Benvenuto PetHealth</h4>
+                        <p style="margin:0 0 8px 0; color:#1E293B;"><strong>Utente:</strong> {u_data['nome']}</p>
+                        <p style="margin:0 0 8px 0; color:#1E293B;"><strong>Email:</strong> {u_data['email']}</p>
+                        <p style="margin:0 0 12px 0; color:#1E293B;"><strong>Codice di Attivazione:</strong> <code>{u_data.get('codice_conferma')}</code></p>
+                        <hr style="border:0; border-top:1px solid #CBD5E1; margin:10px 0;">
+                        <p style="color:#334155; font-size:0.92rem;">Clicca sul pulsante sottostante per confermare e accedere direttamente alla Web App.</p>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+                if st.button("🔗 CONFERMA ATTIVAZIONE ED ENTRA SUBITO"):
+                    u_data["stato"] = "attivo"
+                    st.session_state.db_users[email_to_verify.strip().lower()] = u_data
+                    salva_dati()
+                    st.session_state.logged_user_email = email_to_verify.strip().lower()
+                    st.success("🎉 Registrazione attivata con successo!")
+                    st.rerun()
+        else:
+            if email_to_verify:
+                st.error("Nessun account in attesa di attivazione trovato per questa email.")
+            else:
+                st.info("Registrati nella scheda 'Registrati' prima di procedere all'attivazione.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.stop()
+
+user_email = st.session_state.logged_user_email
+user_db = st.session_state.db_users[user_email]
+
+if "lista_animali" not in user_db: user_db["lista_animali"] = []
+if "db_visite" not in user_db: user_db["db_visite"] = {}
+if "db_terapie" not in user_db: user_db["db_terapie"] = {}
+if "db_fatture" not in user_db: user_db["db_fatture"] = {}
+if "db_anagrafica" not in user_db: user_db["db_anagrafica"] = {}
+if "angeli_archiviati" not in user_db: user_db["angeli_archiviati"] = {}
+
+lista_animali = user_db["lista_animali"]
+pet_selezionato = user_db.get("pet_selezionato")
+
 with st.sidebar:
-    st.caption("BENTORNATO/A")
-    st.markdown(f"### {st.session_state.nome_utente} Veraldi")
+    st.caption("UTENTE REGISTRATO")
+    st.markdown(f"### 👤 {user_db.get('nome', 'Utente')}")
+    st.caption(f"📧 {user_email}")
+    
+    if st.button("🚪 Logout / Esci"):
+        st.session_state.logged_user_email = None
+        st.rerun()
+        
+    st.markdown("---")
     
     with st.expander("⚙️ Impostazioni Notifiche WhatsApp", expanded=False):
-        num_wa_1 = st.text_input("Primo numero di telefono", value=st.session_state.get("numero_whatsapp", ""))
-        num_wa_2 = st.text_input("Secondo numero di telefono (opzionale)", value=st.session_state.get("numero_whatsapp_2", ""))
-        if st.button("Salva / Modifica Numeri WhatsApp"):
-            st.session_state.numero_whatsapp = num_wa_1
-            st.session_state.numero_whatsapp_2 = num_wa_2
+        num_wa_1 = st.text_input("Primo numero di telefono", value=user_db.get("numero_whatsapp", ""))
+        num_wa_2 = st.text_input("Secondo numero di telefono (opzionale)", value=user_db.get("numero_whatsapp_2", ""))
+        if st.button("Salva Numeri WhatsApp"):
+            user_db["numero_whatsapp"] = num_wa_1
+            user_db["numero_whatsapp_2"] = num_wa_2
             salva_dati()
-            st.success("Numeri WhatsApp salvati e aggiornati con successo!")
+            st.success("Numeri WhatsApp aggiornati!")
             
     st.write("")
-    
     st.markdown("**LIBRETTO ATTIVO**")
     
-    if len(st.session_state.lista_animali) > 0:
+    if len(lista_animali) > 0:
         index_selezionato = 0
-        if st.session_state.pet_selezionato in st.session_state.lista_animali:
-            index_selezionato = st.session_state.lista_animali.index(st.session_state.pet_selezionato)
+        if pet_selezionato in lista_animali:
+            index_selezionato = lista_animali.index(pet_selezionato)
         
-        pet_selected = st.selectbox(
-            "", 
-            st.session_state.lista_animali, 
-            index=index_selezionato,
-            key="pet_select"
-        )
-        if pet_selected != st.session_state.pet_selezionato:
-            st.session_state.pet_selezionato = pet_selected
+        pet_selected = st.selectbox("", lista_animali, index=index_selezionato, key="pet_select")
+        if pet_selected != pet_selezionato:
+            user_db["pet_selezionato"] = pet_selected
             salva_dati()
     else:
-        st.info("Nessun animale attivo al momento.")
+        st.info("Nessun animale registrato nel tuo account.")
         pet_selected = None
     
     st.write("")
     st.markdown("**SEZIONI**")
     
-    if st.button("🏠 Riepilogo (Dashboard)"):
-        st.session_state.sezione_attiva = "dashboard"
-        st.rerun()
-
-    if st.button("📋 Anagrafica Pet & Proprietario"):
-        st.session_state.sezione_attiva = "anagrafica"
-        st.rerun()
-        
-    if st.button("🏥 Visite e Clinica"):
-        st.session_state.sezione_attiva = "visite"
-        st.rerun()
-        
-    if st.button("💊 Terapie e Farmaci"):
-        st.session_state.sezione_attiva = "terapie"
-        st.rerun()
-        
-    if st.button("📄 Fatture e Spese"):
-        st.session_state.sezione_attiva = "fatture"
-        st.rerun()
-        
-    if st.button("✈️ Passaporto & Viaggi"):
-        st.session_state.sezione_attiva = "passaporto"
-        st.rerun()
-
-    if st.button("🚨 Urgenze & Cliniche 24H"):
-        st.session_state.sezione_attiva = "urgenze"
-        st.rerun()
-
-    if st.button("🌈 I nostri angeli a 4 zampe"):
-        st.session_state.sezione_attiva = "angeli"
-        st.rerun()
+    if st.button("🏠 Riepilogo (Dashboard)"): st.session_state.sezione_attiva = "dashboard"; st.rerun()
+    if st.button("📋 Anagrafica Pet & Proprietario"): st.session_state.sezione_attiva = "anagrafica"; st.rerun()
+    if st.button("🏥 Visite e Clinica"): st.session_state.sezione_attiva = "visite"; st.rerun()
+    if st.button("💊 Terapie e Farmaci"): st.session_state.sezione_attiva = "terapie"; st.rerun()
+    if st.button("📄 Fatture e Spese"): st.session_state.sezione_attiva = "fatture"; st.rerun()
+    if st.button("✈️ Passaporto & Viaggi"): st.session_state.sezione_attiva = "passaporto"; st.rerun()
+    if st.button("🚨 Urgenze & Cliniche 24H"): st.session_state.sezione_attiva = "urgenze"; st.rerun()
+    if st.button("🌈 I nostri angeli a 4 zampe"): st.session_state.sezione_attiva = "angeli"; st.rerun()
     
     st.write("")
-    if st.button("Registra Nuovo Animale"):
-        st.session_state.sezione_attiva = "nuovo_animale"
-        st.rerun()
+    if st.button("➕ Registra Nuovo Animale"): st.session_state.sezione_attiva = "nuovo_animale"; st.rerun()
 
 if st.session_state.sezione_attiva == "dashboard":
     if pet_selected:
         col1, col2 = st.columns(2)
-
-        terapie_pet = st.session_state.db_terapie.get(pet_selected, [])
-        visite_pet = st.session_state.db_visite.get(pet_selected, [])
+        terapie_pet = user_db["db_terapie"].get(pet_selected, [])
+        visite_pet = user_db["db_visite"].get(pet_selected, [])
 
         with col1:
             st.markdown(f"""
@@ -711,7 +461,6 @@ if st.session_state.sezione_attiva == "dashboard":
             """, unsafe_allow_html=True)
             
             if terapie_pet:
-                # Ordinamento per data di inizio più recente
                 terapie_ordinate = sorted(enumerate(terapie_pet), key=lambda x: x[1].get('data_inizio', ''), reverse=True)
                 for idx, t in terapie_ordinate:
                     orario_txt = t.get('orario', 'Non specificato')
@@ -719,27 +468,13 @@ if st.session_state.sezione_attiva == "dashboard":
                         st.write(f"**Dose / Quantità:** {t['dosaggio']}")
                         st.write(f"**Orario di Somministrazione:** {orario_txt}")
                         st.write(f"**Periodo:** {t['periodo']}")
-                        if t.get('note'):
-                            st.write(f"**Note / Istruzioni:** {t['note']}")
-                        if t.get('ricetta'):
-                            st.caption(f"📄 Ricetta: {t['ricetta']}")
-                        
-                        mostra_pulsanti_promemoria_terapia(
-                            animale=pet_selected,
-                            farmaco=t['farmaco'],
-                            dosaggio=t['dosaggio'],
-                            orario=orario_txt,
-                            note=t.get('note', '')
-                        )
-                        
-                        st.write("")
+                        if t.get('note'): st.write(f"**Note:** {t['note']}")
+                        mostra_pulsanti_promemoria_terapia(pet_selected, t['farmaco'], t['dosaggio'], orario_txt, t.get('note', ''))
                         if st.button("🗑️ Elimina Terapia", key=f"del_ter_dash_{idx}"):
-                            st.session_state.db_terapie[pet_selected].pop(idx)
-                            salva_dati()
-                            st.success("Terapia eliminata con successo!")
-                            st.rerun()
+                            user_db["db_terapie"][pet_selected].pop(idx)
+                            salva_dati(); st.rerun()
             else:
-                st.info(f"Nessuna terapia attiva al momento per {pet_selected}.")
+                st.info(f"Nessuna terapia attiva registrata per {pet_selected}.")
 
         with col2:
             st.markdown(f"""
@@ -750,917 +485,328 @@ if st.session_state.sezione_attiva == "dashboard":
             """, unsafe_allow_html=True)
             
             if visite_pet:
-                # Ordinamento per data visita più recente
                 visite_ordinate = sorted(enumerate(visite_pet), key=lambda x: x[1].get('data', ''), reverse=True)
                 for idx, v in visite_ordinate:
                     with st.expander(f"🏥 {v['tipo']} - {v['data']}"):
-                        if v['veterinario']:
-                            st.write(f"**Veterinario:** {v['veterinario']}")
-                        if v.get('vet_id_permanente'):
-                            st.caption(f"🆔 ID Medico Permanente: `{v['vet_id_permanente']}`")
-                        if v.get('nome_vaccino'):
-                            st.write(f"💉 **Vaccino:** {v.get('nome_vaccino')} | **Lotto:** {v.get('lotto_vaccino', 'N/D')} | **Scadenza:** {v.get('scadenza_vaccino', 'N/D')}")
-                        if v['diagnosi']:
-                            st.write(f"**Diagnosi:** {v['diagnosi']}")
-                        if v.get('prossimo_controllo_data'):
-                            st.write(f"⏰ **Prossimo Controllo:** {v['prossimo_controllo_data']} ({v.get('prossimo_controllo_tipo', 'Controllo')})")
-                        if v.get('referto'):
-                            st.caption(f"📄 Referto: {v['referto']}")
-                        
-                        mostra_pulsanti_promemoria_visita(
-                            animale=pet_selected,
-                            tipo_visita=v.get('prossimo_controllo_tipo', v['tipo']),
-                            data_visita=v.get('prossimo_controllo_data', v['data']),
-                            veterinario=v.get('veterinario', ''),
-                            note=v.get('diagnosi', '')
-                        )
-
+                        if v.get('veterinario'): st.write(f"**Veterinario:** {v['veterinario']}")
+                        if v.get('vet_id_permanente'): st.caption(f"🆔 ID Medico Permanente: `{v['vet_id_permanente']}`")
+                        if v.get('nome_vaccino'): st.write(f"💉 **Vaccino:** {v.get('nome_vaccino')} | **Lotto:** {v.get('lotto_vaccino', 'N/D')}")
+                        if v.get('diagnosi'): st.write(f"**Diagnosi:** {v['diagnosi']}")
+                        mostra_pulsanti_promemoria_visita(pet_selected, v.get('prossimo_controllo_tipo', v['tipo']), v.get('prossimo_controllo_data', v['data']), v.get('veterinario', ''), v.get('diagnosi', ''))
                         if st.button("🗑️ Elimina Visita", key=f"del_vis_dash_{idx}"):
-                            st.session_state.db_visite[pet_selected].pop(idx)
-                            salva_dati()
-                            st.success("Visita eliminata con successo!")
-                            st.rerun()
+                            user_db["db_visite"][pet_selected].pop(idx)
+                            salva_dati(); st.rerun()
             else:
-                st.info(f"Nessuna visita recente registrata per {pet_selected}.")
+                st.info(f"Nessuna visita medica registrata per {pet_selected}.")
 
         st.write("")
-
         with st.expander("🩺 Registrazione & Impostazione PIN Medico Veterinario", expanded=False):
-            st.markdown("In questa sezione il Medico Veterinario o la Clinica possono effettuare il **primo inserimento** nel sistema, impostando il proprio **PIN Segreto personale** e generando il proprio **ID Medico Permanente Univoco** in totale riservatezza.")
-            
-            st.markdown("#### ➕ Registrazione Primo Accesso Medico Veterinario / Clinica")
+            st.markdown("#### ➕ Registrazione Scheda Medico Veterinario")
             with st.form("form_reg_vet_dash"):
-                col_rv1, col_rv2 = st.columns(2)
-                with col_rv1:
-                    r_nome_vet = st.text_input("Nome e Cognome Medico / Clinica*")
+                c_rv1, c_rv2 = st.columns(2)
+                with c_rv1:
+                    r_nome_vet = st.text_input("Nome e Cognome Medico / Titolare*")
+                    r_struttura = st.text_input("Nome Clinica / Studio")
                     r_num_ord = st.text_input("N° Iscrizione Ordine FNOVI*")
-                with col_rv2:
-                    r_prov_ord = st.text_input("Provincia Ordine (es. RM, MI)*")
-                    r_pin_vet = st.text_input("Imposta PIN Segreto Medico (min. 4 caratteri)*", type="password")
+                    r_prov_ord = st.text_input("Provincia Ordine*")
+                with c_rv2:
+                    r_email = st.text_input("Email / PEC")
+                    r_telefono = st.text_input("Telefono Studio")
+                    r_indirizzo = st.text_input("Indirizzo Clinica")
+                    r_pin_vet = st.text_input("Imposta PIN Segreto Medico*", type="password")
                 
-                sub_vet = st.form_submit_button("Registra Medico Veterinario")
+                sub_vet = st.form_submit_button("💾 Registra Veterinario")
                 if sub_vet:
-                    if r_nome_vet.strip() and r_num_ord.strip() and r_prov_ord.strip() and r_pin_vet:
-                        esito, msg, v_id = verifica_o_registra_pin_vet(r_num_ord, r_prov_ord, r_nome_vet, r_pin_vet)
-                        if esito:
-                            st.success(f"✅ Medico registrato con successo! {msg} | ID Permanente: `{v_id}`")
-                            st.rerun()
-                        else:
-                            st.error(f"❌ {msg}")
-                    else:
-                        st.error("Compila tutti i campi obbligatori per registrare il medico.")
+                    if r_nome_vet.strip() and r_num_ord.strip() and r_prov_ord.strip() and r_pin_vet.strip():
+                        esito, msg, v_id = verifica_o_registra_pin_vet(r_num_ord, r_prov_ord, r_nome_vet, r_pin_vet, r_email, r_telefono, r_struttura, r_indirizzo)
+                        if esito: st.success(f"✅ {msg}")
+                        else: st.error(f"❌ {msg}")
+                    else: st.error("Compila tutti i campi obbligatori (*).")
 
         with st.expander(f"⚠️ Area Riservata Medico Veterinario (Registro Decesso - {pet_selected})"):
-            st.warning(f"⚠️ Attenzione: questa procedura registrerà ufficialmente il decesso dell'animale {pet_selected}. L'azione sposterà l'intera cartella clinica nella sezione 'I nostri angeli a 4 zampe'.")
-            
             date_decesso = st.date_input("Data del decesso")
-            certificato = st.file_uploader("Allega Certificato di Morte (PDF/Foto)", type=["pdf", "png", "jpg"], key="cert_morte")
-            
-            st.markdown("**Credenziali Medico Veterinario:**")
+            certificato = st.file_uploader("Allega Certificato di Morte", type=["pdf", "png", "jpg"], key="cert_morte")
             col_d1, col_d2, col_d3 = st.columns(3)
-            with col_d1:
-                v_num_ord_d = st.text_input("N° Iscrizione Ordine FNOVI*", key="v_num_ord_d")
-            with col_d2:
-                v_prov_d = st.text_input("Provincia Ordine (es. RM, MI)*", key="v_prov_d")
-            with col_d3:
-                pin_vet_d = st.text_input("PIN Segreto Veterinario*", type="password", key="pin_morte")
+            with col_d1: v_num_ord_d = st.text_input("N° Ordine FNOVI*", key="v_num_ord_d")
+            with col_d2: v_prov_d = st.text_input("Provincia Ordine*", key="v_prov_d")
+            with col_d3: pin_vet_d = st.text_input("PIN Segreto Veterinario*", type="password", key="pin_morte")
             
-            if st.button("Conferma e Archivia Registro"):
+            if st.button("Conferma e Archivia Registro Decesso"):
                 if v_num_ord_d.strip() and v_prov_d.strip() and pin_vet_d:
                     esito, msg, vet_id = verifica_o_registra_pin_vet(v_num_ord_d, v_prov_d, "Veterinario Responsabile", pin_vet_d)
                     if esito:
-                        animale_da_archiviare = pet_selected
-                        
-                        st.session_state.angeli_archiviati[animale_da_archiviare] = {
+                        user_db["angeli_archiviati"][pet_selected] = {
                             "data_decesso": str(date_decesso),
                             "certificato": certificato.name if certificato else "Non allegato",
                             "veterinario_id": vet_id,
-                            "visite": st.session_state.db_visite.get(animale_da_archiviare, []),
-                            "terapie": st.session_state.db_terapie.get(animale_da_archiviare, []),
-                            "fatture": st.session_state.db_fatture.get(animale_da_archiviare, []),
-                            "anagrafica": st.session_state.db_anagrafica.get(animale_da_archiviare, {})
+                            "visite": user_db["db_visite"].pop(pet_selected, []),
+                            "terapie": user_db["db_terapie"].pop(pet_selected, []),
+                            "fatture": user_db["db_fatture"].pop(pet_selected, []),
+                            "anagrafica": user_db["db_anagrafica"].pop(pet_selected, {})
                         }
+                        user_db["lista_animali"].remove(pet_selected)
+                        user_db["pet_selezionato"] = user_db["lista_animali"][0] if user_db["lista_animali"] else None
+                        salva_dati(); st.success(f"{pet_selected} è stato spostato nel Registro degli Angeli."); st.rerun()
+    else:
+        st.info("Nessun animale selezionato. Registra il tuo primo animale per accedere alla Dashboard!")
+
 elif st.session_state.sezione_attiva == "anagrafica":
     if pet_selected:
         st.markdown(f"<h2 style='color: #1E3A2B;'>📋 Scheda Anagrafica - {pet_selected}</h2>", unsafe_allow_html=True)
-        st.caption("Gestisci e aggiorna l'anagrafica completa dell'animale e le informazioni di contatto del proprietario per il libretto attivo.")
-
-        # Inizializza l'anagrafica per l'animale selezionato se non presente
-        if "db_anagrafica" not in st.session_state:
-            st.session_state.db_anagrafica = {}
-            
-        anagrafica_corrente = st.session_state.db_anagrafica.get(pet_selected, {
-            "tipo_animale": "Cane" if pet_selected == "Orlando" else "Cane",
-            "nome": pet_selected,
-            "razza": "Non specificata",
-            "data_nascita": "2020-01-01",
-            "microchip": "",
-            "segni_particolari": "Nessuno",
-            "proprietario_nome": f"{st.session_state.nome_utente} Veraldi",
-            "proprietario_indirizzo": "",
-            "proprietario_telefono": st.session_state.get("numero_whatsapp", ""),
-            "proprietario_citta": ""
+        anagrafica_corrente = user_db["db_anagrafica"].get(pet_selected, {
+            "tipo_animale": "Cane", "nome": pet_selected, "razza": "", "data_nascita": str(date.today()),
+            "microchip": "", "segni_particolari": "", "proprietario_nome": user_db.get("nome", ""),
+            "proprietario_indirizzo": "", "proprietario_telefono": user_db.get("numero_whatsapp", ""), "proprietario_citta": ""
         })
 
-        # Visualizzazione Card Anagrafica Corrente
         col_view1, col_view2 = st.columns(2)
         with col_view1:
             st.markdown(f"""
                 <div class="wellness-card" style="border-left: 5px solid #1E3A2B !important;">
                     <span class="card-badge badge-purple">🐾 DATI ANAGRAFICI PET</span>
                     <h3 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 12px;">{anagrafica_corrente.get('nome', pet_selected)}</h3>
-                    <p style="margin-bottom: 6px;">• <strong>Specie / Tipo:</strong> {anagrafica_corrente.get('tipo_animale', 'N/D')}</p>
-                    <p style="margin-bottom: 6px;">• <strong>Razza:</strong> {anagrafica_corrente.get('razza', 'N/D')}</p>
-                    <p style="margin-bottom: 6px;">• <strong>Data di Nascita:</strong> {anagrafica_corrente.get('data_nascita', 'N/D')}</p>
-                    <p style="margin-bottom: 6px;">• <strong>N° Microchip:</strong> <code style="background:#E2E8F0; padding:2px 6px; border-radius:4px;">{anagrafica_corrente.get('microchip') or 'Non inserito'}</code></p>
-                    <p style="margin-bottom: 0;">• <strong>Segni Particolari:</strong> {anagrafica_corrente.get('segni_particolari') or 'Nessuno'}</p>
+                    <p>• <strong>Specie:</strong> {anagrafica_corrente.get('tipo_animale', 'N/D')}</p>
+                    <p>• <strong>Razza:</strong> {anagrafica_corrente.get('razza') or 'Non specificata'}</p>
+                    <p>• <strong>Data Nascita:</strong> {anagrafica_corrente.get('data_nascita', 'N/D')}</p>
+                    <p>• <strong>Microchip:</strong> <code>{anagrafica_corrente.get('microchip') or 'Non inserito'}</code></p>
+                    <p>• <strong>Segni Particolari:</strong> {anagrafica_corrente.get('segni_particolari') or 'Nessuno'}</p>
                 </div>
             """, unsafe_allow_html=True)
 
         with col_view2:
             st.markdown(f"""
                 <div class="wellness-card" style="border-left: 5px solid #3B82F6 !important;">
-                    <span class="card-badge badge-blue">👤 PROPRIETARIO & CONTATTI</span>
-                    <h3 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 12px;">{anagrafica_corrente.get('proprietario_nome') or st.session_state.nome_utente}</h3>
-                    <p style="margin-bottom: 6px;">• <strong>Indirizzo:</strong> {anagrafica_corrente.get('proprietario_indirizzo') or 'Non specificato'}</p>
-                    <p style="margin-bottom: 6px;">• <strong>Città:</strong> {anagrafica_corrente.get('proprietario_citta') or 'Non specificata'}</p>
-                    <p style="margin-bottom: 0;">• <strong>Telefono:</strong> {anagrafica_corrente.get('proprietario_telefono') or 'Non specificato'}</p>
+                    <span class="card-badge badge-blue">👤 PROPRIETARIO</span>
+                    <h3 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 12px;">{anagrafica_corrente.get('proprietario_nome') or user_db.get('nome')}</h3>
+                    <p>• <strong>Indirizzo:</strong> {anagrafica_corrente.get('proprietario_indirizzo') or 'Non specificato'}</p>
+                    <p>• <strong>Telefono:</strong> {anagrafica_corrente.get('proprietario_telefono') or 'Non specificato'}</p>
+                    <p>• <strong>Città:</strong> {anagrafica_corrente.get('proprietario_citta') or 'Non specificata'}</p>
                 </div>
             """, unsafe_allow_html=True)
 
-        st.write("")
-        with st.expander("✏️ Modifica Anagrafica Pet e Dati Proprietario", expanded=True):
-            st.markdown("#### ✏️ Compila o Modifica i Dati Anagrafici")
+        with st.expander("✏️ Modifica Anagrafica Pet e Proprietario", expanded=True):
             with st.form("form_edit_anagrafica"):
-                st.markdown("##### 🐶 1. Informazioni sull'Animale")
                 col_a1, col_a2 = st.columns(2)
                 with col_a1:
-                    e_tipo = st.selectbox("Tipo / Specie Animale*", ["Cane", "Gatto", "Coniglio", "Uccello", "Rettile", "Altro"], index=["Cane", "Gatto", "Coniglio", "Uccello", "Rettile", "Altro"].index(anagrafica_corrente.get('tipo_animale', 'Cane')) if anagrafica_corrente.get('tipo_animale') in ["Cane", "Gatto", "Coniglio", "Uccello", "Rettile", "Altro"] else 0)
+                    e_tipo = st.selectbox("Tipo / Specie Animale*", ["Cane", "Gatto", "Coniglio", "Uccello", "Rettile", "Altro"])
                     e_nome = st.text_input("Nome Animale*", value=anagrafica_corrente.get('nome', pet_selected))
                     e_razza = st.text_input("Razza", value=anagrafica_corrente.get('razza', ''))
                 with col_a2:
-                    try:
-                        dt_val = datetime.strptime(anagrafica_corrente.get('data_nascita', '2020-01-01'), "%Y-%m-%d").date()
-                    except Exception:
-                        dt_val = date.today()
-                    e_data_nascita = st.date_input("Data di Nascita", value=dt_val)
+                    e_data_nascita = st.date_input("Data di Nascita")
                     e_microchip = st.text_input("Numero Microchip", value=anagrafica_corrente.get('microchip', ''))
-                    e_segni = st.text_area("Segni Particolari / Note Distinctive", value=anagrafica_corrente.get('segni_particolari', ''), placeholder="Es. Macchia bianca sul petto, cicatrici, orecchia tagliata...")
+                    e_segni = st.text_area("Segni Particolari", value=anagrafica_corrente.get('segni_particolari', ''))
 
                 st.markdown("---")
-                st.markdown("##### 👤 2. Dati del Proprietario (Modificabili)")
                 col_p1, col_p2 = st.columns(2)
                 with col_p1:
-                    e_prop_nome = st.text_input("Nome e Cognome Proprietario*", value=anagrafica_corrente.get('proprietario_nome', f"{st.session_state.nome_utente} Veraldi"))
-                    e_prop_indirizzo = st.text_input("Indirizzo di Residenza (Modificabile)", value=anagrafica_corrente.get('proprietario_indirizzo', ''))
+                    e_prop_nome = st.text_input("Nome e Cognome Proprietario*", value=anagrafica_corrente.get('proprietario_nome', user_db.get('nome', '')))
+                    e_prop_indirizzo = st.text_input("Indirizzo", value=anagrafica_corrente.get('proprietario_indirizzo', ''))
                 with col_p2:
-                    e_prop_telefono = st.text_input("Telefono (Modificabile)", value=anagrafica_corrente.get('proprietario_telefono', st.session_state.get('numero_whatsapp', '')))
-                    e_prop_citta = st.text_input("Città (Modificabile)", value=anagrafica_corrente.get('proprietario_citta', ''))
+                    e_prop_telefono = st.text_input("Telefono", value=anagrafica_corrente.get('proprietario_telefono', user_db.get('numero_whatsapp', '')))
+                    e_prop_citta = st.text_input("Città", value=anagrafica_corrente.get('proprietario_citta', ''))
 
-                submit_anagrafica = st.form_submit_button("💾 Salva Modifiche Anagrafica")
-                if submit_anagrafica:
-                    if e_nome.strip() != "":
-                        vecchio_nome = pet_selected
-                        nuovo_nome = e_nome.strip()
-
-                        # Aggiornamento dati anagrafica
-                        nuovi_dati_anagrafica = {
-                            "tipo_animale": e_tipo,
-                            "nome": nuovo_nome,
-                            "razza": e_razza,
-                            "data_nascita": str(e_data_nascita),
-                            "microchip": e_microchip,
-                            "segni_particolari": e_segni,
-                            "proprietario_nome": e_prop_nome,
-                            "proprietario_indirizzo": e_prop_indirizzo,
-                            "proprietario_telefono": e_prop_telefono,
-                            "proprietario_citta": e_prop_citta
+                if st.form_submit_button("💾 Salva Modifiche Anagrafica"):
+                    if e_nome.strip():
+                        old_n = pet_selected; new_n = e_nome.strip()
+                        nuovi_dati = {
+                            "tipo_animale": e_tipo, "nome": new_n, "razza": e_razza, "data_nascita": str(e_data_nascita),
+                            "microchip": e_microchip, "segni_particolari": e_segni, "proprietario_nome": e_prop_nome,
+                            "proprietario_indirizzo": e_prop_indirizzo, "proprietario_telefono": e_prop_telefono, "proprietario_citta": e_prop_citta
                         }
-
-                        # Se il nome del pet è stato cambiato, aggiorna tutte le chiavi nel database
-                        if vecchio_nome != nuovo_nome:
-                            st.session_state.lista_animali = [nuovo_nome if p == vecchio_nome else p for p in st.session_state.lista_animali]
-                            st.session_state.db_visite[nuovo_nome] = st.session_state.db_visite.pop(vecchio_nome, [])
-                            st.session_state.db_terapie[nuovo_nome] = st.session_state.db_terapie.pop(vecchio_nome, [])
-                            st.session_state.db_fatture[nuovo_nome] = st.session_state.db_fatture.pop(vecchio_nome, [])
-                            st.session_state.db_anagrafica.pop(vecchio_nome, None)
-                            st.session_state.pet_selezionato = nuovo_nome
-
-                        st.session_state.db_anagrafica[nuovo_nome] = nuovi_dati_anagrafica
-                        salva_dati()
-                        st.success(f"Anagrafica di {nuovo_nome} aggiornata e salvata con successo!")
-                        st.rerun()
-                    else:
-                        st.error("Inserisci un nome valido per l'animale.")
-    else:
-        st.warning("Seleziona o registra un animale attivo per gestire la sua anagrafica.")
+                        if old_n != new_n:
+                            user_db["lista_animali"] = [new_n if p == old_n else p for p in user_db["lista_animali"]]
+                            user_db["db_visite"][new_n] = user_db["db_visite"].pop(old_n, [])
+                            user_db["db_terapie"][new_n] = user_db["db_terapie"].pop(old_n, [])
+                            user_db["db_fatture"][new_n] = user_db["db_fatture"].pop(old_n, [])
+                            user_db["db_anagrafica"].pop(old_n, None)
+                            user_db["pet_selezionato"] = new_n
+                        user_db["db_anagrafica"][new_n] = nuovi_dati
+                        salva_dati(); st.success(f"Anagrafica di {new_n} aggiornata!"); st.rerun()
 
 elif st.session_state.sezione_attiva == "visite":
     if pet_selected:
         st.markdown(f"<h2 style='color: #1E3A2B;'>🏥 Visite e Clinica - {pet_selected}</h2>", unsafe_allow_html=True)
-        
-        with st.expander("🔍 Scansiona Codice a Barre Medicinali / Fiale / Fustelle", expanded=False):
-            mostra_scansionatore_barre("📷 Lettore Codici a Barre Medicinali e Vaccini")
+        with st.expander("🔍 Scansiona Codice Medicinali / Fustella Vaccino"):
+            mostra_scansionatore_barre("📷 Lettore Codici a Barre e Fustelle")
 
-        with st.expander("➕ Aggiungi Nuova Visita Medica / Prestazione", expanded=True):
+        with st.expander("➕ Aggiungi Nuova Visita Medica", expanded=True):
             col1, col2 = st.columns(2)
             with col1:
                 data_visita = st.date_input("Data Visita")
-                tipo_visita = st.selectbox("Tipo di Visita", ["Controllo Generale", "Vaccinazione", "Visita Specialistica", "Urgenza", "Controllo Post-Operatorio", "Trattamento Antiparassitario Ufficiale"])
+                tipo_visita = st.selectbox("Tipo Visita", ["Controllo Generale", "Vaccinazione", "Visita Specialistica", "Urgenza", "Controllo Post-Operatorio"])
                 veterinario = st.text_input("Medico Veterinario / Clinica")
             with col2:
-                diagnosi = st.text_area("Diagnosi / Note Cliniche", placeholder="Descrivi il motivo della visita e l'esito...")
-                referto = st.file_uploader("Allega Referto o Esami (Opzionale)", type=["pdf", "png", "jpg"], key="visita_ref")
-                fattura_visita = st.file_uploader("Allega Ricevuta / Fattura (Opzionale)", type=["pdf", "png", "jpg"], key="visita_fat")
-            
-            # Sezione specifica per i Vaccini
-            nome_vaccino = ""
-            lotto_vaccino = ""
-            scadenza_vaccino = None
-            foto_etichetta_nome = None
+                diagnosi = st.text_area("Diagnosi / Note Cliniche")
+                referto = st.file_uploader("Allega Referto (Opzionale)", type=["pdf", "png", "jpg"], key="v_ref")
 
+            nome_vaccino, lotto_vaccino, scadenza_vaccino = "", "", None
             if tipo_visita == "Vaccinazione":
-                st.markdown("---")
-                st.markdown("💉 **Dettagli Specifici Vaccino & Registrazione Fustella / Etichetta**")
-                st.caption("Inserisci i dati del vaccino manualmente oppure acquisisci l'etichetta tramite scansione/foto.")
-
-                modalita_vaccino = st.radio(
-                    "Modalità inserimento dati vaccino:",
-                    ["📷 Scansione / Foto Etichetta o Fustella (Consigliata)", "✍️ Inserimento Manuale"],
-                    horizontal=True
-                )
-
-                if "Scansione" in modalita_vaccino:
-                    st.info("💡 Puoi utilizzare la fotocamera per scansionare il codice dell'etichetta ed allegare la foto della fustella originale al libretto sanitario.")
-                    mostra_scansionatore_barre("📷 Scansiona Codice Etichetta / Fustella Vaccino")
-                    foto_etichetta = st.file_uploader("📸 Allega / Scatta foto dell'Etichetta / Fustella Vaccino*", type=["png", "jpg", "jpeg"], key="vac_foto_upl")
-                    if foto_etichetta:
-                        foto_etichetta_nome = foto_etichetta.name
-
                 col_v1, col_v2, col_v3 = st.columns(3)
-                with col_v1:
-                    nome_vaccino = st.text_input("Nome Vaccino Somministrato*", placeholder="Es. Nobivac DHPPi, Rabisin...")
-                with col_v2:
-                    lotto_vaccino = st.text_input("N° Lotto Vaccino*", placeholder="Es. Lot 24B09X")
-                with col_v3:
-                    scadenza_vaccino = st.date_input("Data Scadenza Farmaco")
+                with col_v1: nome_vaccino = st.text_input("Nome Vaccino*")
+                with col_v2: lotto_vaccino = st.text_input("N° Lotto Vaccino*")
+                with col_v3: scadenza_vaccino = st.date_input("Scadenza Vaccino")
 
-            st.markdown("---")
-            st.markdown("🔒 **Certificazione Ufficiale Sanitaria (Per viaggi e validità legale)**")
-            chi_inserisce = st.radio("Chi sta registrando questa prestazione?", ["Utente (In attesa di convalida veterinaria)", "Veterinario (Certificazione e Firma Immediata)"], horizontal=True)
-            
-            certificato_valido = False
-            num_ordine_vet = ""
-            provincia_vet = ""
-            vet_id_perm = None
-            codice_cert = None
-            
-            if chi_inserisce == "Veterinario (Certificazione e Firma Immediata)":
-                st.caption("ℹ️ *Se è la prima volta che questo Medico firma un'attestazione nell'app, il PIN inserito verrà memorizzato come suo PIN personale permanente.*")
+            chi_inserisce = st.radio("Chi inserisce la prestazione?", ["Utente (In attesa di firma)", "Veterinario (Certificazione Ufficiale Immediata)"], horizontal=True)
+            certificato_valido, vet_id_perm, codice_cert, num_ordine_vet, provincia_vet = False, None, None, "", ""
+
+            if "Veterinario" in chi_inserisce:
                 col_v1, col_v2, col_v3 = st.columns(3)
-                with col_v1:
-                    num_ordine_vet = st.text_input("N° Ordine FNOVI*")
-                with col_v2:
-                    provincia_vet = st.text_input("Provincia Ordine (es. RM)*")
-                with col_v3:
-                    pin_convalida = st.text_input("PIN Segreto Veterinario*", type="password")
-                
-                if num_ordine_vet.strip() and provincia_vet.strip() and pin_convalida:
+                with col_v1: num_ordine_vet = st.text_input("N° Ordine FNOVI*")
+                with col_v2: provincia_vet = st.text_input("Provincia Ordine*")
+                with col_v3: pin_convalida = st.text_input("PIN Segreto Medico*", type="password")
+                if num_ordine_vet and provincia_vet and pin_convalida:
                     esito, msg, vet_id_perm = verifica_o_registra_pin_vet(num_ordine_vet, provincia_vet, veterinario, pin_convalida)
                     if esito:
                         certificato_valido = True
                         codice_cert = genera_codice_certificazione(pet_selected, vet_id_perm, str(data_visita), tipo_visita)
-                        st.success(f"✅ Medico Verificato! ID Vet Permanente: `{vet_id_perm}` | Codice Certificato: `{codice_cert}`")
-                    else:
-                        st.error(f"❌ Autenticazione fallita: {msg}")
+                        st.success(f"✅ Medico Verificato! Codice Certificato: `{codice_cert}`")
 
-            richiede_controllo = st.checkbox("🔄 Questa prestazione richiede un controllo successivo o va ripetuta?")
-            data_prossimo_ctrl = None
-            tipo_prestazione_ctrl = None
-            if richiede_controllo:
-                col_ctrl1, col_ctrl2 = st.columns(2)
-                with col_ctrl1:
-                    data_prossimo_ctrl = st.date_input("Data Prossimo Controllo / Ripetizione")
-                with col_ctrl2:
-                    tipo_prestazione_ctrl = st.text_input("Tipo di Prestazione da Eseguire", placeholder="Es. Richiamo Vaccino, Controllo Ecografico...")
-            
-            st.write("")
             if st.button("Salva Visita Medica"):
-                if chi_inserisce == "Veterinario (Certificazione e Firma Immediata)" and not certificato_valido:
-                    st.error("Impossibile salvare come certificata: credenziali o PIN del veterinario errati.")
-                else:
-                    nuova_visita = {
-                        "data": str(data_visita),
-                        "tipo": tipo_visita,
-                        "veterinario": veterinario,
-                        "diagnosi": diagnosi,
-                        "referto": referto.name if referto else None,
-                        "prossimo_controllo_data": str(data_prossimo_ctrl) if richiede_controllo and data_prossimo_ctrl else None,
-                        "prossimo_controllo_tipo": tipo_prestazione_ctrl if richiede_controllo else None,
-                        "certificata": certificato_valido,
-                        "num_ordine_vet": num_ordine_vet if certificato_valido else "",
-                        "provincia_vet": provincia_vet if certificato_valido else "",
-                        "vet_id_permanente": vet_id_perm if certificato_valido else None,
-                        "codice_certificato": codice_cert,
-                        "nome_vaccino": nome_vaccino if tipo_visita == "Vaccinazione" else "",
-                        "lotto_vaccino": lotto_vaccino if tipo_visita == "Vaccinazione" else "",
-                        "scadenza_vaccino": str(scadenza_vaccino) if (tipo_visita == "Vaccinazione" and scadenza_vaccino) else "",
-                        "foto_etichetta": foto_etichetta_nome if tipo_visita == "Vaccinazione" else None
-                    }
-                    
-                    if pet_selected not in st.session_state.db_visite:
-                        st.session_state.db_visite[pet_selected] = []
-                        
-                    st.session_state.db_visite[pet_selected].append(nuova_visita)
-                    salva_dati()
-                    st.success(f"Visita medica registrata con successo per {pet_selected}!")
-                    st.rerun()
+                nuova_visita = {
+                    "data": str(data_visita), "tipo": tipo_visita, "veterinario": veterinario, "diagnosi": diagnosi,
+                    "referto": referto.name if referto else None, "certificata": certificato_valido,
+                    "num_ordine_vet": num_ordine_vet, "provincia_vet": provincia_vet, "vet_id_permanente": vet_id_perm,
+                    "codice_certificato": codice_cert, "nome_vaccino": nome_vaccino, "lotto_vaccino": lotto_vaccino,
+                    "scadenza_vaccino": str(scadenza_vaccino) if scadenza_vaccino else ""
+                }
+                if pet_selected not in user_db["db_visite"]: user_db["db_visite"][pet_selected] = []
+                user_db["db_visite"][pet_selected].append(nuova_visita)
+                salva_dati(); st.success("Visita registrata con successo!"); st.rerun()
 
         st.markdown("### 📋 Visite e Certificati Registrati")
-        visite_list = st.session_state.db_visite.get(pet_selected, [])
-        if visite_list:
-            # Ordinamento per data visita più recente
-            visite_ordinate = sorted(enumerate(visite_list), key=lambda x: x[1].get('data', ''), reverse=True)
-            for idx, v in visite_ordinate:
-                is_cert = v.get("certificata", False)
-                badge_cert = f"✅ CERTIFICATA ({v.get('codice_certificato', '')})" if is_cert else "⏳ IN ATTESA DI CONVALIDA VETERINARIA"
-                
-                with st.expander(f"🏥 {v['data']} - {v['tipo']} | {badge_cert}"):
-                    if is_cert:
-                        st.success(f"🛡️ **Prestazione Sanitaria Ufficiale Certificata**\n\n• **Medico:** Dr. {v['veterinario']}\n• **ID Vet Permanente Univoco:** `{v.get('vet_id_permanente', 'N/D')}`\n• **Iscrizione Ordine:** N° {v.get('num_ordine_vet', 'N/D')} Prov. {v.get('provincia_vet', '')}\n• **Codice Certificato Prestazione:** `{v.get('codice_certificato')}`")
-                    else:
-                        st.warning("⚠️ Questa prestazione è stata inserita dall'utente ed è in attesa di firma/convalida da parte del Medico Veterinario per avere valore di espatrio/viaggio.")
-                    
-                    if v.get('tipo') == "Vaccinazione" or v.get('nome_vaccino'):
-                        st.markdown(f"""
-                            <div style="background-color: #f0fdf4; border: 1.5px solid #86efac; padding: 12px; border-radius: 10px; margin-bottom: 12px;">
-                                <strong style="color:#166534; font-size: 1.02rem;">💉 Dettagli Vaccino Somministrato:</strong><br>
-                                • <strong>Nome Vaccino:</strong> {v.get('nome_vaccino', 'N/D')}<br>
-                                • <strong>N° Lotto:</strong> <code style="background:#dcfce7; padding:2px 6px; border-radius:4px;">{v.get('lotto_vaccino', 'N/D')}</code><br>
-                                • <strong>Data Scadenza Farmaco:</strong> {v.get('scadenza_vaccino', 'N/D')}
-                                {f"<br>• 📸 <strong>Allegato Foto Etichetta/Fustella:</strong> {v.get('foto_etichetta')}" if v.get('foto_etichetta') else ""}
-                            </div>
-                        """, unsafe_allow_html=True)
-
-                    st.write(f"**Diagnosi / Dettagli:** {v['diagnosi']}")
-                    if v.get('prossimo_controllo_data'):
-                        st.write(f"⏰ **Prossimo Controllo:** {v['prossimo_controllo_data']} ({v.get('prossimo_controllo_tipo', 'Controllo')})")
-                    if v.get('referto'):
-                        st.caption(f"📄 Referto: {v['referto']}")
-                    
-                    if not is_cert:
-                        st.markdown("---")
-                        st.markdown("🩺 **Area Riservata al Veterinario - Convalida Ora**")
-                        st.caption("Firma questa bozza inserendo le tue credenziali e il tuo PIN segreto.")
-                        c_v1, c_v2, c_v3, c_btn = st.columns([2, 2, 2, 2])
-                        with c_v1:
-                            v_nome = st.text_input("Nome Veterinario", value=v.get('veterinario', ''), key=f"v_nome_{idx}")
-                        with c_v2:
-                            v_ord = st.text_input("N° Ordine FNOVI", key=f"v_ord_{idx}")
-                        with c_v3:
-                            v_prov = st.text_input("Prov. Ordine", key=f"v_prov_{idx}")
-                        with c_btn:
-                            v_pin = st.text_input("PIN Segreto", type="password", key=f"v_pin_{idx}")
-                            if st.button("Firma e Convalida", key=f"btn_cert_{idx}"):
-                                if v_ord.strip() and v_prov.strip() and v_pin:
-                                    esito_c, msg_c, v_id_perm = verifica_o_registra_pin_vet(v_ord, v_prov, v_nome, v_pin)
-                                    if esito_c:
-                                        v["certificata"] = True
-                                        v["veterinario"] = v_nome
-                                        v["num_ordine_vet"] = v_ord
-                                        v["provincia_vet"] = v_prov
-                                        v["vet_id_permanente"] = v_id_perm
-                                        v["codice_certificato"] = genera_codice_certificazione(pet_selected, v_id_perm, v['data'], v['tipo'])
-                                        salva_dati()
-                                        st.success("Visita convalidata e firmata con successo!")
-                                        st.rerun()
-                                    else:
-                                        st.error(f"Errore: {msg_c}")
-                                else:
-                                    st.error("Compila tutti i campi obbligatori per convalidare.")
-
-                    mostra_pulsanti_promemoria_visita(
-                        animale=pet_selected,
-                        tipo_visita=v.get('prossimo_controllo_tipo', v['tipo']),
-                        data_visita=v.get('prossimo_controllo_data', v['data']),
-                        veterinario=v.get('veterinario', ''),
-                        note=v.get('diagnosi', '')
-                    )
-
-                    if st.button("🗑️ Elimina Questa Visita", key=f"del_vis_page_{idx}"):
-                        st.session_state.db_visite[pet_selected].pop(idx)
-                        salva_dati()
-                        st.success("Visita eliminata!")
-                        st.rerun()
-        else:
-            st.info("Nessuna visita salvata al momento.")
-
-    else:
-        st.warning("Seleziona o registra un animale attivo per gestire le visite.")
-
-elif st.session_state.sezione_attiva == "passaporto":
-    if pet_selected:
-        st.markdown(f"<h2 style='color: #1E3A2B;'>✈️ Passaporto Sanitario & Certificati di Viaggio - {pet_selected}</h2>", unsafe_allow_html=True)
-        st.info("In questa sezione sono raccolte esclusivamente le prestazioni e le vaccinazioni **ufficialmente verificate e certificate dal Medico Veterinario**, idonee ai controlli sanitari e agli spostamenti/viaggi.")
-        
-        visite_cert = [v for v in st.session_state.db_visite.get(pet_selected, []) if v.get("certificata", False)]
-        visite_cert = sorted(visite_cert, key=lambda x: x.get('data', ''), reverse=True)
-        
-        if visite_cert:
-            for v in visite_cert:
-                dettagli_vac_html = ""
-                if v.get('tipo') == "Vaccinazione" or v.get('nome_vaccino'):
-                    dettagli_vac_html = f"""
-                        <div style="background-color: #f0fdf4; border: 1px solid #86efac; padding: 10px; border-radius: 8px; margin-top: 8px; margin-bottom: 8px; color: #166534;">
-                            <strong>💉 Dettagli Vaccino:</strong> {v.get('nome_vaccino', 'N/D')}<br>
-                            • <strong>N° Lotto:</strong> <code style="background:#dcfce7; padding:2px 6px; border-radius:4px;">{v.get('lotto_vaccino', 'N/D')}</code> | <strong>Scadenza:</strong> {v.get('scadenza_vaccino', 'N/D')}
-                            {f"<br>• 📸 <strong>Etichetta / Fustella:</strong> {v.get('foto_etichetta')}" if v.get('foto_etichetta') else ""}
-                        </div>
-                    """
-                
-                st.markdown(f"""
-                    <div class="wellness-card" style="border-left: 5px solid #10B981 !important;">
-                        <span class="card-badge badge-purple">CERTIFICATO VETERINARIO UFFICIALE</span>
-                        <h4 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 5px;">💉 {v['tipo']} — {v['data']}</h4>
-                        <p style="margin-bottom: 4px;"><strong>Medico Responsabile:</strong> Dr. {v['veterinario']} (N° Ordine FNOVI: {v.get('num_ordine_vet')} {v.get('provincia_vet', '')})</p>
-                        <p style="margin-bottom: 4px;"><strong>ID Veterinario Permanente:</strong> <code style="background-color:#E2E8F0; padding:2px 6px; border-radius:4px;">{v.get('vet_id_permanente', 'N/D')}</code></p>
-                        <p style="margin-bottom: 4px;"><strong>Codice Certificato Univoco:</strong> <code style="background-color:#FEF08A; padding:2px 6px; border-radius:4px;">{v.get('codice_certificato')}</code></p>
-                        {dettagli_vac_html}
-                        <p style="margin-bottom: 0;"><strong>Diagnosi/Note Cliniche:</strong> {v['diagnosi']}</p>
-                    </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.warning(f"Al momento {pet_selected} non ha ancora prestazioni sanitarie certificate dal veterinario per il passaporto.")
-    else:
-        st.warning("Seleziona o registra un animale attivo per accedere al passaporto.")
-
-elif st.session_state.sezione_attiva == "urgenze":
-    st.markdown("<h2 style='color: #1E3A2B;'>🚨 Urgenze & Cliniche Veterinarie 24H</h2>", unsafe_allow_html=True)
-    st.info("La ricerca delle cliniche e dei pronti soccorsi veterinari H24 avviene in tempo reale tramite **Google Maps**, garantendoti informazioni sempre aggiornate su aperture, numeri di telefono diretti e navigazione GPS.")
-    
-    st.markdown("""
-        <div class="wellness-card" style="border-left: 5px solid #EF4444 !important;">
-            <span class="card-badge badge-purple" style="background-color: #FEE2E2; color: #991B1B;">RICERCA IN TEMPO REALE GOOGLE MAPS</span>
-            <h3 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 10px;">🔍 Trova Clinica H24 Vicino a Te (Anche in Vacanza)</h3>
-            <p style="color: #475569; margin-bottom: 15px;">Sei in viaggio o in vacanza? Usa il rilevamento GPS in tempo reale del tuo dispositivo oppure inserisci manualmente la località in cui ti trovi.</p>
-        </div>
-    """, unsafe_allow_html=True)
-
-    import streamlit.components.v1 as components
-    
-    st.markdown("#### 🎯 Opzione 1: Rileva Posizione GPS Attuale (Consigliata in Vacanza)")
-    components.html("""
-        <script>
-        function trovaGPS() {
-            var btn = document.getElementById("btn-gps");
-            var status = document.getElementById("gps-status");
-            btn.innerHTML = "⏳ Rilevamento coordinate GPS in corso...";
-            status.style.display = "none";
-            
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(function(position) {
-                    var lat = position.coords.latitude;
-                    var lng = position.coords.longitude;
-                    var mapUrl = "https://www.google.com/maps/search/pronto+soccorso+veterinario+24+ore/@" + lat + "," + lng + ",13z";
-                    window.open(mapUrl, "_blank");
-                    btn.innerHTML = "🎯 Posizione Rilevata! Clicca per Riaprire Google Maps GPS";
-                }, function(error) {
-                    btn.innerHTML = "🎯 Rileva Posizione GPS Attuale del Dispositivo";
-                    status.innerHTML = "⚠️ Impossibile accedere al GPS. Assicurati di aver concesso i permessi di geolocalizzazione al browser o seleziona la città qui sotto.";
-                    status.style.display = "block";
-                }, {enableHighAccuracy: true, timeout: 10000});
-            } else {
-                btn.innerHTML = "🎯 Rileva Posizione GPS Attuale del Dispositivo";
-                status.innerHTML = "⚠️ Geolocalizzazione non supportata dal tuo browser.";
-                status.style.display = "block";
-            }
-        }
-        </script>
-        <button id="btn-gps" onclick="trovaGPS()" style="
-            background-color: #1E3A2B;
-            color: #FFFFFF;
-            padding: 14px 20px;
-            border: none;
-            border-radius: 12px;
-            font-weight: 700;
-            font-size: 15px;
-            cursor: pointer;
-            width: 100%;
-            box-shadow: 0 4px 12px rgba(30, 58, 43, 0.2);
-            transition: all 0.2s ease;
-        ">🎯 Rileva Posizione GPS Attuale del Dispositivo (In Vacanza / In Viaggio)</button>
-        <div id="gps-status" style="display:none; color: #b91c1c; font-size: 13px; font-weight: 600; margin-top: 8px; text-align: center;"></div>
-    """, height=85)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("#### 🏙️ Opzione 2: Cerca per Città o Località di Vacanza Specificare")
-    citta_ricerca = st.text_input("📍 Inserisci la Città o Località di Vacanza:", placeholder="Es. Rimini, Olbia, Otranto, Courmayeur...")
-
-    if citta_ricerca.strip():
-        # Costruzione query esplicita con "a <città>" per forzare il centramento geografico
-        query_testo = f"pronto soccorso veterinario 24 ore a {citta_ricerca.strip()}"
-        query_map = urllib.parse.quote_plus(query_testo)
-        url_maps = f"https://www.google.com/maps/search/?api=1&query={query_map}"
-        label_bottone = f"🗺️ Cerca Cliniche H24 a '{citta_ricerca.strip()}' su Google Maps"
-    else:
-        query_testo = "pronto soccorso veterinario 24 ore clinica vicina a me"
-        query_map = urllib.parse.quote_plus(query_testo)
-        url_maps = f"https://www.google.com/maps/search/?api=1&query={query_map}"
-        label_bottone = "🗺️ Apri Google Maps per Ricerca Generica"
-
-    st.write("")
-    st.link_button(label_bottone, url_maps)
-
-    st.markdown("---")
-    st.markdown("### ⚡ Scorciatoie di Ricerca Rapida Google Maps")
-    st.caption("Clicca su una città o area per aprire direttamente i risultati urgenti H24 su Google Maps:")
-
-    col_q1, col_q2, col_q3, col_q4 = st.columns(4)
-    with col_q1:
-        st.link_button("🏛️ Roma H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('pronto soccorso veterinario 24 ore a Roma')}")
-        st.link_button("🏰 Torino H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('pronto soccorso veterinario 24 ore a Torino')}")
-    with col_q2:
-        st.link_button("🏢 Milano H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('pronto soccorso veterinario 24 ore a Milano')}")
-        st.link_button("🍝 Bologna H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('pronto soccorso veterinario 24 ore a Bologna')}")
-    with col_q3:
-        st.link_button("🍕 Napoli H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('pronto soccorso veterinario 24 ore a Napoli')}")
-        st.link_button("🎨 Firenze H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('pronto soccorso veterinario 24 ore a Firenze')}")
-    with col_q4:
-        st.link_button("🌊 Bari H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('pronto soccorso veterinario 24 ore a Bari')}")
-        st.link_button("☀️ Palermo H24", f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus('pronto soccorso veterinario 24 ore a Palermo')}")
-
-    st.markdown("---")
-    st.markdown("### ☎️ Numeri Utili d'Emergenza")
-    
-    col_num1, col_num2, col_num3 = st.columns(3)
-    with col_num1:
-        st.markdown("""
-            <div class="wellness-card">
-                <h4 style="color: #1E3A2B;">📞 Numero Unico 112</h4>
-                <p>Per incidenti stradali o emergenze gravi su strade ed autostrade.</p>
-            </div>
-        """, unsafe_allow_html=True)
-    with col_num2:
-        st.markdown("""
-            <div class="wellness-card">
-                <h4 style="color: #1E3A2B;">🧪 Centro Antiveleni</h4>
-                <p><strong>CAV Niguarda:</strong> <a href="tel:0266101029">02 66101029</a> per ingestioni sospette o avvelenamenti.</p>
-            </div>
-        """, unsafe_allow_html=True)
-    with col_num3:
-        st.markdown("""
-            <div class="wellness-card">
-                <h4 style="color: #1E3A2B;">🐾 Soccorso Animali ENPA</h4>
-                <p>Per segnalare animali in difficoltà o interventi sul territorio.</p>
-            </div>
-        """, unsafe_allow_html=True)
-
-    with st.expander("💡 Consigli di Primo Soccorso Veterinario Prima di Arrivare in Clinica"):
-        st.markdown("""
-        1. **Mantenere la calma:** L'animale percepisce l'ansia. Parla con tono di voce rassicurante e basso.
-        2. **Chiamare la clinica mentre viaggi:** Telefona alla struttura individuata su Google Maps prima di arrivare, in modo che il team medico possa allestire la sala per l'emergenza.
-        3. **Colpo di calore:** Sposta l'animale all'ombra, bagna zampe e collo con acqua a temperatura ambiente (MAI acqua ghiacciata per evitare shock termici).
-        4. **Ingestione tossica:** NON somministrare latte, olio o farmaci di testa tua. Porta con te la confezione della sostanza ingerita.
-        5. **Traumi o ferite:** Copri eventuali ferite con un panno pulito applicando una leggera pressione.
-        """)
+        visite_list = user_db["db_visite"].get(pet_selected, [])
+        visite_ordinate = sorted(enumerate(visite_list), key=lambda x: x[1].get('data', ''), reverse=True)
+        for idx, v in visite_ordinate:
+            is_cert = v.get("certificata", False)
+            with st.expander(f"🏥 {v['data']} - {v['tipo']} | {'✅ CERTIFICATA' if is_cert else '⏳ IN ATTESA DI FIRMA'}"):
+                st.write(f"**Veterinario:** Dr. {v.get('veterinario', 'N/D')}")
+                if is_cert: st.success(f"🛡️ **Codice Certificato:** `{v.get('codice_certificato')}` | ID Medico: `{v.get('vet_id_permanente')}`")
+                if v.get('diagnosi'): st.write(f"**Diagnosi:** {v['diagnosi']}")
+                mostra_pulsanti_promemoria_visita(pet_selected, v['tipo'], v['data'], v.get('veterinario', ''), v.get('diagnosi', ''))
 
 elif st.session_state.sezione_attiva == "terapie":
     if pet_selected:
         st.markdown(f"<h2 style='color: #1E3A2B;'>💊 Terapie e Farmaci - {pet_selected}</h2>", unsafe_allow_html=True)
-        
-        with st.expander("🔍 Scansiona Codice a Barre Medicinali / Fustella Farmaco", expanded=False):
-            mostra_scansionatore_barre("📷 Lettore Codici a Barre Medicinali (EAN / Codice Farmaco)")
+        with st.expander("🔍 Scansiona Barcode Farmaco"): mostra_scansionatore_barre("📷 Lettore Codici Farmaci")
 
         with st.expander("➕ Nuova Terapia o Prescrizione", expanded=True):
             col1, col2 = st.columns(2)
             with col1:
-                nome_farmaco = st.text_input("Nome del Farmaco / Principio Attivo*")
-                dosaggio = st.text_input("Dose / Quantità (es. 1/2 compressa, 5ml, 1 fiala)*")
-                
-                # Checkbox per somministrazione per più giorni
-                is_multigiorno = st.checkbox("📅 La terapia va somministrata per più giorni?", value=False)
-                
-                data_inizio = st.date_input("Data Somministrazione / Inizio Terapia", value=date.today())
-                
-                if is_multigiorno:
-                    data_fine = st.date_input("Data Fine Terapia (Presunta)")
-                    st.markdown("---")
-                    st.caption("🔔 **Configurazione Promemoria**")
-                    attiva_promemoria = st.checkbox("📲 Attiva Promemoria Giornaliero WhatsApp", value=True)
-                    if attiva_promemoria:
-                        orario_somministrazione = st.time_input("Orario di Somministrazione Giornaliero", value=datetime.strptime("09:00", "%H:%M").time())
-                    else:
-                        orario_somministrazione = None
-                else:
-                    data_fine = data_inizio
-                    attiva_promemoria = False
-                    orario_somministrazione = None
-
+                nome_farmaco = st.text_input("Nome del Farmaco*")
+                dosaggio = st.text_input("Dose / Quantità*")
+                is_multigiorno = st.checkbox("📅 Terapia somministrata per più giorni?")
+                data_inizio = st.date_input("Data Inizio Terapia", value=date.today())
+                data_fine = st.date_input("Data Fine Terapia") if is_multigiorno else data_inizio
+                orario_somm = st.time_input("Orario Somministrazione", value=datetime.strptime("09:00", "%H:%M").time())
             with col2:
-                note_somministrazione = st.text_area("Istruzioni e Note", placeholder="Es. Somministrare a stomaco pieno, 1 ora prima dei pasti...")
-                ricetta = st.file_uploader("Allega Ricetta Medica / Prescrizione (Opzionale)", type=["pdf", "png", "jpg"], key="terapia_ric")
-                fattura_farmaco = st.file_uploader("Allega Scontrino / Fattura Acquisto (Opzionale)", type=["pdf", "png", "jpg"], key="terapia_fat")
-                
-            st.markdown("---")
-            richiede_controllo_terapia = st.checkbox("🔄 La terapia richiede una verifica intermedia o un richiamo?")
-            
-            if richiede_controllo_terapia:
-                col_tctrl1, col_tctrl2 = st.columns(2)
-                with col_tctrl1:
-                    data_prossimo_controllo_t = st.date_input("Data Controllo Terapia / Visita di Verifica")
-                with col_tctrl2:
-                    tipo_prestazione_terapia = st.text_input("Tipo di Controllo Richiesto", placeholder="Es. Controllo valori ematici, Visita di controllo efficacia...")
+                note_somm = st.text_area("Istruzioni e Note")
+                ricetta = st.file_uploader("Allega Ricetta Medica", type=["pdf", "png", "jpg"], key="t_ric")
 
-            st.write("")
-            if st.button("Salva Terapia e Programma Promemoria"):
+            if st.button("Salva Terapia"):
                 if nome_farmaco.strip() and dosaggio.strip():
-                    if is_multigiorno:
-                        periodo_txt = f"{data_inizio.strftime('%d/%m/%Y')} - {data_fine.strftime('%d/%m/%Y')}"
-                        orario_str = orario_somministrazione.strftime("%H:%M") if (attiva_promemoria and orario_somministrazione) else "Non impostato"
-                    else:
-                        periodo_txt = f"Dose Unica ({data_inizio.strftime('%d/%m/%Y')})"
-                        orario_str = "Dose singola"
-
+                    periodo_txt = f"{data_inizio.strftime('%d/%m/%Y')} - {data_fine.strftime('%d/%m/%Y')}" if is_multigiorno else f"Dose Unica ({data_inizio.strftime('%d/%m/%Y')})"
                     nuova_terapia = {
-                        "farmaco": nome_farmaco,
-                        "dosaggio": dosaggio,
-                        "orario": orario_str,
-                        "periodo": periodo_txt,
-                        "data_inizio": str(data_inizio),
-                        "multigiorno": is_multigiorno,
-                        "promemoria_attivo": attiva_promemoria if is_multigiorno else False,
-                        "note": note_somministrazione,
-                        "ricetta": ricetta.name if ricetta else None
+                        "farmaco": nome_farmaco, "dosaggio": dosaggio, "orario": orario_somm.strftime("%H:%M"),
+                        "periodo": periodo_txt, "data_inizio": str(data_inizio), "note": note_somm, "ricetta": ricetta.name if ricetta else None
                     }
-                    
-                    if pet_selected not in st.session_state.db_terapie:
-                        st.session_state.db_terapie[pet_selected] = []
-                        
-                    st.session_state.db_terapie[pet_selected].append(nuova_terapia)
-                    salva_dati()
-                    st.success(f"Terapia per {nome_farmaco} registrata con successo!")
-                    st.rerun()
-                else:
-                    st.error("Inserisci il nome del farmaco e la dose esatta.")
+                    if pet_selected not in user_db["db_terapie"]: user_db["db_terapie"][pet_selected] = []
+                    user_db["db_terapie"][pet_selected].append(nuova_terapia)
+                    salva_dati(); st.success("Terapia salvata con successo!"); st.rerun()
 
-        st.markdown("### 📋 Terapie e Promemoria Programmati")
-        terapie_list = st.session_state.db_terapie.get(pet_selected, [])
-        if terapie_list:
-            # Ordinamento per data di inizio più recente
-            terapie_ordinate = sorted(enumerate(terapie_list), key=lambda x: x[1].get('data_inizio', ''), reverse=True)
-            for idx, t in terapie_ordinate:
-                orario_txt = t.get('orario', 'Non specificato')
-                with st.expander(f"💊 {t['farmaco']} - Dose: {t['dosaggio']} ({t['periodo']})"):
-                    st.write(f"**Dose / Quantità:** {t['dosaggio']}")
-                    st.write(f"**Orario Somministrazione:** {orario_txt}")
-                    st.write(f"**Periodo Terapia:** {t['periodo']}")
-                    if t.get('note'):
-                        st.write(f"**Istruzioni:** {t['note']}")
-                    if t.get('ricetta'):
-                        st.caption(f"📄 Ricetta allegata: {t['ricetta']}")
-                    
-                    mostra_pulsanti_promemoria_terapia(
-                        animale=pet_selected,
-                        farmaco=t['farmaco'],
-                        dosaggio=t['dosaggio'],
-                        orario=orario_txt,
-                        note=t.get('note', '')
-                    )
-                    
-                    st.write("")
-                    if st.button("🗑️ Elimina Questa Terapia", key=f"del_ter_page_{idx}"):
-                        st.session_state.db_terapie[pet_selected].pop(idx)
-                        salva_dati()
-                        st.success("Terapia eliminata!")
-                        st.rerun()
-        else:
-            st.info("Nessuna terapia salvata al momento.")
-
-    else:
-        st.warning("Seleziona o registra un animale attivo per gestire le terapie.")
+        st.markdown("### 📋 Terapie Programmate")
+        terapie_list = user_db["db_terapie"].get(pet_selected, [])
+        terapie_ordinate = sorted(enumerate(terapie_list), key=lambda x: x[1].get('data_inizio', ''), reverse=True)
+        for idx, t in terapie_ordinate:
+            with st.expander(f"💊 {t['farmaco']} - Dose: {t['dosaggio']} ({t['periodo']})"):
+                st.write(f"**Orario:** {t.get('orario')}")
+                if t.get('note'): st.write(f"**Istruzioni:** {t['note']}")
+                mostra_pulsanti_promemoria_terapia(pet_selected, t['farmaco'], t['dosaggio'], t.get('orario', ''), t.get('note', ''))
 
 elif st.session_state.sezione_attiva == "fatture":
     if pet_selected:
         st.markdown(f"<h2 style='color: #1E3A2B;'>📄 Fatture e Spese - {pet_selected}</h2>", unsafe_allow_html=True)
-        
-        with st.expander("➕ Carica Nuova Fattura o Ricevuta", expanded=True):
+        with st.expander("➕ Carica Nuova Fattura", expanded=True):
             col1, col2 = st.columns(2)
             with col1:
                 data_spesa = st.date_input("Data Documento")
-                categoria_spesa = st.selectbox("Categoria Spesa", ["Visita Veterinaria", "Farmaci", "Esami di Laboratorio", "Chirurgia", "Cibo / Integratori", "Altro"])
+                categoria_spesa = st.selectbox("Categoria", ["Visita Veterinaria", "Farmaci", "Esami", "Chirurgia", "Cibo / Integratori"])
                 importo = st.number_input("Importo (€)", min_value=0.0, step=0.5, format="%.2f")
             with col2:
-                fornitore = st.text_input("Clinica / Farmacia / Fornitore")
-                file_fattura = st.file_uploader("Allega Documento Fattura / Ricevuta", type=["pdf", "png", "jpg"], key="spesa_fat")
-                note_spesa = st.text_input("Note Aggiuntive (Opzionale)")
-                
+                fornitore = st.text_input("Clinica / Farmacia")
+                file_fattura = st.file_uploader("Allega Ricevuta/Fattura", type=["pdf", "png", "jpg"], key="f_upl")
+
             if st.button("Salva Fattura"):
-                nuova_fattura = {
-                    "data": str(data_spesa),
-                    "categoria": categoria_spesa,
-                    "importo": importo,
-                    "fornitore": fornitore,
-                    "documento": file_fattura.name if file_fattura else None
-                }
-                
-                if pet_selected not in st.session_state.db_fatture:
-                    st.session_state.db_fatture[pet_selected] = []
-                    
-                st.session_state.db_fatture[pet_selected].append(nuova_fattura)
-                salva_dati()
-                st.success("Fattura / Spesa registrata con successo!")
-                st.rerun()
+                nuova_fattura = {"data": str(data_spesa), "categoria": categoria_spesa, "importo": importo, "fornitore": fornitore, "documento": file_fattura.name if file_fattura else None}
+                if pet_selected not in user_db["db_fatture"]: user_db["db_fatture"][pet_selected] = []
+                user_db["db_fatture"][pet_selected].append(nuova_fattura)
+                salva_dati(); st.success("Fattura salvata!"); st.rerun()
 
         st.markdown("### 📋 Fatture Registrate")
-        fatture_list = st.session_state.db_fatture.get(pet_selected, [])
-        if fatture_list:
-            for idx, f in enumerate(fatture_list):
-                with st.expander(f"📄 €{f['importo']:.2f} - {f['categoria']} ({f['data']})"):
-                    st.write(f"**Fornitore:** {f['fornitore']}")
-                    if f.get('documento'):
-                        st.caption(f"📄 Documento: {f['documento']}")
-                    if st.button("🗑️ Elimina Fattura", key=f"del_fat_page_{idx}"):
-                        st.session_state.db_fatture[pet_selected].pop(idx)
-                        salva_dati()
-                        st.success("Fattura eliminata!")
-                        st.rerun()
-        else:
-            st.info("Nessuna fattura salvata al momento.")
+        for idx, f in enumerate(user_db["db_fatture"].get(pet_selected, [])):
+            with st.expander(f"📄 €{f['importo']:.2f} - {f['categoria']} ({f['data']})"):
+                st.write(f"**Fornitore:** {f['fornitore']}")
 
-    else:
-        st.warning("Seleziona o registra un animale attivo per gestire le fatture.")
+elif st.session_state.sezione_attiva == "passaporto":
+    if pet_selected:
+        st.markdown(f"<h2 style='color: #1E3A2B;'>✈️ Passaporto & Viaggi - {pet_selected}</h2>", unsafe_allow_html=True)
+        visite_cert = [v for v in user_db["db_visite"].get(pet_selected, []) if v.get("certificata", False)]
+        if visite_cert:
+            for v in visite_cert:
+                st.markdown(f"""
+                    <div class="wellness-card" style="border-left: 5px solid #10B981 !important;">
+                        <span class="card-badge badge-purple">CERTIFICATO UFFICIALE</span>
+                        <h4>💉 {v['tipo']} — {v['data']}</h4>
+                        <p><strong>Medico:</strong> Dr. {v['veterinario']}</p>
+                        <p><strong>Codice Certificato:</strong> <code>{v.get('codice_certificato')}</code></p>
+                    </div>
+                """, unsafe_allow_html=True)
+        else: st.warning("Nessuna prestazione ufficialmente certificata dal veterinario per il passaporto.")
+
+elif st.session_state.sezione_attiva == "urgenze":
+    st.markdown("<h2 style='color: #1E3A2B;'>🚨 Urgenze & Cliniche Veterinarie 24H</h2>", unsafe_allow_html=True)
+    citta_ricerca = st.text_input("📍 Inserisci la Città o Località di Vacanza:", placeholder="es. Rimini, Olbia, Roma...")
+    q = urllib.parse.quote_plus(f"pronto soccorso veterinario 24 ore a {citta_ricerca.strip()}" if citta_ricerca else "pronto soccorso veterinario 24 ore vicino a me")
+    st.link_button(f"🗺️ Apri Mappa Cliniche 24H per '{citta_ricerca or 'posizione attuale'}' su Google Maps", f"https://www.google.com/maps/search/?api=1&query={q}")
 
 elif st.session_state.sezione_attiva == "angeli":
     st.markdown("<h2 style='color: #1E3A2B;'>🌈 I Nostri Angeli a 4 Zampe</h2>", unsafe_allow_html=True)
-    
-    st.markdown(f"""
-        <div class="angels-card">
-            <span class="card-badge badge-memorial">MEMORIALE</span>
-            <p style="font-size: 1.1rem; color: #334155; font-weight: 600; line-height: 1.6; margin-top: 10px; margin-bottom: 0;">
-                Ricorda <strong>{st.session_state.nome_utente}</strong>, per quanto doloroso i nostri amici a 4 zampe non ci abbandonano mai veramente, ma ci proteggono da lassù 🐾
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    lista_angeli = list(st.session_state.angeli_archiviati.keys())
-    
-    if len(lista_angeli) > 0:
-        col_select, col_restore = st.columns([2, 1])
-        
-        with col_select:
-            angelo_selezionato = st.selectbox("Seleziona un angelo per consultare la sua cartella clinica archiviata:", lista_angeli)
-            
-        with col_restore:
-            st.write("")
-            st.write("")
-            if st.button("🔄 Ripristina Animale Attivo"):
-                if angelo_selezionato not in st.session_state.lista_animali:
-                    st.session_state.lista_animali.append(angelo_selezionato)
-                
-                dati_ripristinati = st.session_state.angeli_archiviati.pop(angelo_selezionato)
-                st.session_state.db_visite[angelo_selezionato] = dati_ripristinati.get("visite", [])
-                st.session_state.db_terapie[angelo_selezionato] = dati_ripristinati.get("terapie", [])
-                st.session_state.db_fatture[angelo_selezionato] = dati_ripristinati.get("fatture", [])
-                
-                st.session_state.pet_selezionato = angelo_selezionato
-                
-                if len(st.session_state.angeli_archiviati) == 0:
-                    st.session_state.sezione_attiva = "dashboard"
-                
-                salva_dati()
-                st.success(f"{angelo_selezionato} è stato ripristinato con successo tra gli animali attivi!")
-                st.rerun()
-
-        if angelo_selezionato in st.session_state.angeli_archiviati:
-            dati_angelo = st.session_state.angeli_archiviati[angelo_selezionato]
-            
-            st.write("")
-            st.markdown(f"### 📁 Cartella Clinica Archiviata: **{angelo_selezionato}**")
-            st.caption(f"Data del decesso registrata: {dati_angelo['data_decesso']} | Certificato allegato: {dati_angelo['certificato']}")
-            if dati_angelo.get("veterinario_id"):
-                st.caption(f"ID Medico Veterinario Certificatore: {dati_angelo['veterinario_id']}")
-            st.markdown("---")
-            
-            tab_visite, tab_terapie, tab_fatture = st.tabs([
-                "🏥 Storico Visite", 
-                "💊 Terapie Registrate", 
-                "📄 Fatture e Documenti"
-            ])
-            
-            with tab_visite:
-                if dati_angelo.get("visite"):
-                    visite_ang_ord = sorted(enumerate(dati_angelo["visite"]), key=lambda x: x[1].get('data', ''), reverse=True)
-                    for idx_v, v in visite_ang_ord:
-                        with st.expander(f"🏥 {v['data']} - {v['tipo']} ({v['veterinario']})"):
-                            if v.get('nome_vaccino'):
-                                st.write(f"💉 **Vaccino:** {v.get('nome_vaccino')} | **Lotto:** {v.get('lotto_vaccino', 'N/D')} | **Scadenza:** {v.get('scadenza_vaccino', 'N/D')}")
-                            st.write(f"**Diagnosi:** {v['diagnosi']}")
-                            if v.get('referto'):
-                                st.caption(f"📄 Referto: {v['referto']}")
-                            if st.button("🗑️ Elimina Questa Visita", key=f"del_vis_ang_{idx_v}"):
-                                dati_angelo["visite"].pop(idx_v)
-                                salva_dati()
-                                st.success("Visita eliminata dall'archivio!")
-                                st.rerun()
-                else:
-                    st.info("Nessuna visita salvata nello storico al momento dell'archiviazione.")
-                    
-            with tab_terapie:
-                if dati_angelo.get("terapie"):
-                    terapie_ang_ord = sorted(enumerate(dati_angelo["terapie"]), key=lambda x: x[1].get('data_inizio', ''), reverse=True)
-                    for idx_t, t in terapie_ang_ord:
-                        with st.expander(f"💊 {t['farmaco']} ({t['periodo']})"):
-                            st.write(f"**Dosaggio:** {t['dosaggio']}")
-                            st.write(f"**Note:** {t['note']}")
-                            if t.get('ricetta'):
-                                st.caption(f"📄 Ricetta: {t['ricetta']}")
-                            if st.button("🗑️ Elimina Questa Terapia", key=f"del_ter_ang_{idx_t}"):
-                                dati_angelo["terapie"].pop(idx_t)
-                                salva_dati()
-                                st.success("Terapia eliminata dall'archivio!")
-                                st.rerun()
-                else:
-                    st.info("Nessuna terapia salvata nello storico al momento dell'archiviazione.")
-                    
-            with tab_fatture:
-                if dati_angelo.get("fatture"):
-                    for idx_f, f in enumerate(dati_angelo["fatture"]):
-                        with st.expander(f"📄 €{f['importo']:.2f} - {f['categoria']} ({f['data']})"):
-                            st.write(f"**Fornitore:** {f['fornitore']}")
-                            if f.get('documento'):
-                                st.caption(f"📄 Ricevuta/Fattura: {f['documento']}")
-                            if st.button("🗑️ Elimina Questa Fattura", key=f"del_fat_ang_{idx_f}"):
-                                dati_angelo["fatture"].pop(idx_f)
-                                salva_dati()
-                                st.success("Fattura eliminata dall'archivio!")
-                                st.rerun()
-                else:
-                    st.info("Nessuna fattura salvata nello storico al momento dell'archiviazione.")
-    else:
-        st.info("Nessun animale è attualmente presente nella sezione 'I nostri angeli a 4 zampe'. Gli animali archiviati tramite il registro nell'Area Riservata della Dashboard appariranno qui insieme alla loro intera cartella clinica.")
+    angeli_list = list(user_db["angeli_archiviati"].keys())
+    if angeli_list:
+        sel_ang = st.selectbox("Seleziona un angelo per consultare la cartella clinica:", angeli_list)
+        if st.button("🔄 Ripristina Animale tra gli Attivi"):
+            user_db["lista_animali"].append(sel_ang)
+            dati_ang = user_db["angeli_archiviati"].pop(sel_ang)
+            user_db["db_visite"][sel_ang] = dati_ang.get("visite", [])
+            user_db["db_terapie"][sel_ang] = dati_ang.get("terapie", [])
+            user_db["db_fatture"][sel_ang] = dati_ang.get("fatture", [])
+            user_db["pet_selezionato"] = sel_ang
+            salva_dati(); st.success(f"{sel_ang} è stato ripristinato!"); st.rerun()
+    else: st.info("Nessun animale registrato nella sezione Angeli.")
 
 elif st.session_state.sezione_attiva == "nuovo_animale":
     st.markdown("<h2 style='color: #1E3A2B;'>🐾 Registra Nuovo Animale</h2>", unsafe_allow_html=True)
-    
-    with st.expander("🔍 Scansiona Codice a Barre Microchip dall'Adesivo del Libretto", expanded=False):
-        mostra_scansionatore_barre("📷 Lettore Codice Microchip Animale")
-
-    st.markdown('<div class="form-nuovo-animale">', unsafe_allow_html=True)
-    
     with st.form("form_nuovo_animale"):
-        st.markdown("##### 🐶 Dati Animale")
-        col1, col2 = st.columns(2)
-        with col1:
-            nome_animale = st.text_input("Nome dell'animale*")
-            specie = st.selectbox("Specie", ["Cane", "Gatto", "Coniglio", "Uccello", "Rettile", "Altro"])
-            razza = st.text_input("Razza")
-            segni_particolari = st.text_input("Segni Particolari / Macchie / Note")
-        with col2:
-            data_nascita = st.date_input("Data di Nascita Presunta")
-            microchip = st.text_input("Numero Microchip (Opzionale)")
-            foto_profilo = st.file_uploader("Foto Profilo Animale (Opzionale)", type=["png", "jpg"])
-
-        st.markdown("---")
-        st.markdown("##### 👤 Dati Proprietario")
-        col_p1, col_p2 = st.columns(2)
-        with col_p1:
-            prop_nome = st.text_input("Nome e Cognome Proprietario*", value=f"{st.session_state.nome_utente} Veraldi")
-            prop_indirizzo = st.text_input("Indirizzo di Residenza")
-        with col_p2:
-            prop_telefono = st.text_input("Telefono di Contatto", value=st.session_state.get("numero_whatsapp", ""))
-            prop_citta = st.text_input("Città")
-            
-        submit_animale = st.form_submit_button("Salva Scheda & Registra Animale")
+        c1, c2 = st.columns(2)
+        with c1:
+            n_nome = st.text_input("Nome dell'animale*")
+            n_specie = st.selectbox("Specie", ["Cane", "Gatto", "Coniglio", "Uccello", "Rettile", "Altro"])
+            n_razza = st.text_input("Razza")
+        with c2:
+            n_data = st.date_input("Data di Nascita Presunta")
+            n_microchip = st.text_input("Numero Microchip")
         
-        if submit_animale:
-            if nome_animale.strip() != "":
-                nome_pulito = nome_animale.strip()
-                if nome_pulito not in st.session_state.lista_animali:
-                    st.session_state.lista_animali.append(nome_pulito)
-                    st.session_state.db_visite[nome_pulito] = []
-                    st.session_state.db_terapie[nome_pulito] = []
-                    st.session_state.db_fatture[nome_pulito] = []
-                
-                # Salvataggio immediato nell'Anagrafica
-                st.session_state.db_anagrafica[nome_pulito] = {
-                    "tipo_animale": specie,
-                    "nome": nome_pulito,
-                    "razza": razza,
-                    "data_nascita": str(data_nascita),
-                    "microchip": microchip,
-                    "segni_particolari": segni_particolari,
-                    "proprietario_nome": prop_nome,
-                    "proprietario_indirizzo": prop_indirizzo,
-                    "proprietario_telefono": prop_telefono,
-                    "proprietario_citta": prop_citta
+        if st.form_submit_button("💾 Registra Animale nel tuo Account"):
+            if n_nome.strip():
+                pet_name = n_nome.strip()
+                if pet_name not in user_db["lista_animali"]:
+                    user_db["lista_animali"].append(pet_name)
+                    user_db["db_visite"][pet_name] = []
+                    user_db["db_terapie"][pet_name] = []
+                    user_db["db_fatture"][pet_name] = []
+                user_db["db_anagrafica"][pet_name] = {
+                    "tipo_animale": n_specie, "nome": pet_name, "razza": n_razza, "data_nascita": str(n_data),
+                    "microchip": n_microchip, "proprietario_nome": user_db.get("nome"), "proprietario_telefono": user_db.get("numero_whatsapp")
                 }
-
-                st.session_state.pet_selezionato = nome_pulito
+                user_db["pet_selezionato"] = pet_name
                 st.session_state.sezione_attiva = "anagrafica"
-                salva_dati()
-                st.success(f"Scheda ed Anagrafica di {nome_pulito} create con successo!")
-                st.rerun()
-            else:
-                st.error("Inserisci un nome valido per l'animale.")
-                
-    st.markdown('</div>', unsafe_allow_html=True)
+                salva_dati(); st.success(f"Scheda di {pet_name} creata!"); st.rerun()
