@@ -7,12 +7,16 @@ import uuid
 from datetime import datetime, date
 import streamlit.components.v1 as components
 
+# Inizializzazione dello stato della sidebar prima della configurazione della pagina
+if "sidebar_state" not in st.session_state:
+    st.session_state.sidebar_state = "expanded"
+
 # Configurazione della pagina Streamlit
 st.set_page_config(
     page_title="PetHealth - Wellness & Care",
     page_icon="🐾",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state=st.session_state.sidebar_state
 )
 
 DATA_FILE = "data_pethealth.json"
@@ -73,6 +77,13 @@ if "sezione_attiva" not in st.session_state:
 
 if "verification_pending_email" not in st.session_state:
     st.session_state.verification_pending_email = None
+
+def cambia_sezione(nuova_sezione):
+    """Imposta la sezione attiva e chiude automaticamente la sidebar per facilitare la visione."""
+    st.session_state.sezione_attiva = nuova_sezione
+    st.session_state.sidebar_state = "collapsed"
+    st.session_state.trigger_close_sidebar = True
+    st.rerun()
 
 def mostra_scansionatore_barre(titolo="📷 Scansiona Codice a Barre / Microchip con Fotocamera"):
     """Mostra un lettore di codici a barre e QR Code integrato HTML5/JS."""
@@ -249,6 +260,22 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Esecuzione script JS per chiusura istantanea della sidebar
+if st.session_state.get("trigger_close_sidebar", False):
+    st.session_state.trigger_close_sidebar = False
+    components.html("""
+        <script>
+            setTimeout(function() {
+                var collapseBtn = window.parent.document.querySelector('button[data-testid="stSidebarCollapseButton"]') || 
+                                  window.parent.document.querySelector('button[aria-label="Close sidebar"]') ||
+                                  window.parent.document.querySelector('button[aria-label="Collapse sidebar"]');
+                if (collapseBtn) {
+                    collapseBtn.click();
+                }
+            }, 100);
+        </script>
+    """, height=0, width=0)
+
 if st.session_state.logged_user_email is None:
     st.markdown("<h1 style='text-align: center; color: #1E3A2B; margin-top: 15px;'>🐾 PetHealth Platform</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #475569; font-size:1.1rem; margin-bottom: 25px;'>La piattaforma digitale per la gestione della salute, libretto sanitario ed anagrafica dei tuoi animali domestici.</p>", unsafe_allow_html=True)
@@ -310,7 +337,7 @@ if st.session_state.logged_user_email is None:
             if btn_register:
                 email_c = reg_email.strip().lower()
                 if not reg_nome.strip() or not email_c or not reg_pass or not reg_telefono.strip():
-                    st.error("⚠️ Compila tutti i campi obbligatori marcati con (*).")
+                    st.error("⚠️️ Compila tutti i campi obbligatori marcati con (*).")
                 elif reg_pass != reg_pass_conf:
                     st.error("❌ Le password inserite non corrispondono.")
                 elif len(reg_pass) < 6:
@@ -357,7 +384,7 @@ if st.session_state.logged_user_email is None:
             else:
                 st.markdown(f"""
                     <div style="background:#F0FDF4; border:1.5px dashed #16A34A; padding:20px; border-radius:12px; margin-top:15px; margin-bottom:15px;">
-                        <h4 style="margin:0 0 10px 0; color:#15803D;">✉️ Messaggio di Benvenuto PetHealth</h4>
+                        <h4 style="margin:0 0 10px 0; color:#15803D;">✉️️ Messaggio di Benvenuto PetHealth</h4>
                         <p style="margin:0 0 8px 0; color:#1E293B;"><strong>Utente:</strong> {u_data['nome']}</p>
                         <p style="margin:0 0 8px 0; color:#1E293B;"><strong>Email:</strong> {u_data['email']}</p>
                         <p style="margin:0 0 12px 0; color:#1E293B;"><strong>Codice di Attivazione:</strong> <code>{u_data.get('codice_conferma')}</code></p>
@@ -434,17 +461,17 @@ with st.sidebar:
     st.write("")
     st.markdown("**SEZIONI**")
     
-    if st.button("🏠 Riepilogo (Dashboard)"): st.session_state.sezione_attiva = "dashboard"; st.rerun()
-    if st.button("📋 Anagrafica Pet & Proprietario"): st.session_state.sezione_attiva = "anagrafica"; st.rerun()
-    if st.button("🏥 Visite e Clinica"): st.session_state.sezione_attiva = "visite"; st.rerun()
-    if st.button("💊 Terapie e Farmaci"): st.session_state.sezione_attiva = "terapie"; st.rerun()
-    if st.button("📄 Fatture e Spese"): st.session_state.sezione_attiva = "fatture"; st.rerun()
-    if st.button("✈️ Passaporto & Viaggi"): st.session_state.sezione_attiva = "passaporto"; st.rerun()
-    if st.button("🚨 Urgenze & Cliniche 24H"): st.session_state.sezione_attiva = "urgenze"; st.rerun()
-    if st.button("🌈 I nostri angeli a 4 zampe"): st.session_state.sezione_attiva = "angeli"; st.rerun()
+    if st.button("🏠 Riepilogo (Dashboard)"): cambia_sezione("dashboard")
+    if st.button("📋 Anagrafica Pet & Proprietario"): cambia_sezione("anagrafica")
+    if st.button("🏥 Visite e Clinica"): cambia_sezione("visite")
+    if st.button("💊 Terapie e Farmaci"): cambia_sezione("terapie")
+    if st.button("📄 Fatture e Spese"): cambia_sezione("fatture")
+    if st.button("✈️ Passaporto & Viaggi"): cambia_sezione("passaporto")
+    if st.button("🚨 Urgenze & Cliniche 24H"): cambia_sezione("urgenze")
+    if st.button("🌈 I nostri angeli a 4 zampe"): cambia_sezione("angeli")
     
     st.write("")
-    if st.button("➕ Registra Nuovo Animale"): st.session_state.sezione_attiva = "nuovo_animale"; st.rerun()
+    if st.button("➕ Registra Nuovo Animale"): cambia_sezione("nuovo_animale")
 
 if st.session_state.sezione_attiva == "dashboard":
     if pet_selected:
@@ -523,7 +550,7 @@ if st.session_state.sezione_attiva == "dashboard":
                         else: st.error(f"❌ {msg}")
                     else: st.error("Compila tutti i campi obbligatori (*).")
 
-        with st.expander(f"⚠️ Area Riservata Medico Veterinario (Registro Decesso - {pet_selected})"):
+        with st.expander(f"⚠️️ Area Riservata Medico Veterinario (Registro Decesso - {pet_selected})"):
             date_decesso = st.date_input("Data del decesso")
             certificato = st.file_uploader("Allega Certificato di Morte", type=["pdf", "png", "jpg"], key="cert_morte")
             col_d1, col_d2, col_d3 = st.columns(3)
