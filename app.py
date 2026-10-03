@@ -245,6 +245,7 @@ SCANNER_HTML = r"""<!DOCTYPE html>
 </div>
 <script>
 (function () {
+  var wrap = document.getElementById("wrap");
   var video = document.getElementById("video");
   var stage = document.getElementById("stage");
   var frame = document.getElementById("frame");
@@ -266,7 +267,13 @@ SCANNER_HTML = r"""<!DOCTYPE html>
     for (var k in data) { m[k] = data[k]; }
     window.parent.postMessage(m, "*");
   }
-  function setHeight() { send("streamlit:setFrameHeight", { height: document.documentElement.scrollHeight + 4 }); }
+  var ultimaAltezza = 0;
+  function setHeight() {
+    var h = Math.ceil(wrap.getBoundingClientRect().height) + 6;
+    if (Math.abs(h - ultimaAltezza) < 2) { return; }
+    ultimaAltezza = h;
+    send("streamlit:setFrameHeight", { height: h });
+  }
   function setStatus(t, err) { statusEl.textContent = t || ""; statusEl.className = err ? "err" : ""; }
 
   function applicaFrame() {
@@ -411,6 +418,7 @@ SCANNER_HTML = r"""<!DOCTYPE html>
     }
   });
   window.addEventListener("resize", setHeight);
+  if ("ResizeObserver" in window) { new ResizeObserver(setHeight).observe(wrap); }
   window.addEventListener("pagehide", ferma);
 
   send("streamlit:componentReady", { apiVersion: 1 });
