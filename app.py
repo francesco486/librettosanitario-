@@ -119,8 +119,8 @@ def _soglia_otsu(a):
             migliore, soglia = varianza, t
     return soglia
 
-def _ritaglia_etichetta(img):
-    """Individua la zona chiara (l'etichetta) e ritaglia via il resto della foto."""
+def _riquadro_etichetta(img):
+    """Individua la zona chiara (l'etichetta). Restituisce (x0, y0, x1, y1) in pixel, oppure None."""
     grigio = ImageOps.grayscale(img)
     w, h = grigio.size
     piccola = grigio.resize((max(1, w // 4), max(1, h // 4))).filter(ImageFilter.GaussianBlur(2))
@@ -131,21 +131,25 @@ def _ritaglia_etichetta(img):
     righe = np.where(chiaro.mean(axis=1) > 0.30)[0]
     colonne = np.where(chiaro.mean(axis=0) > 0.30)[0]
     if len(righe) == 0 or len(colonne) == 0:
-        return img
+        return None
 
     y0, y1 = righe[0], righe[-1] + 1
     x0, x1 = colonne[0], colonne[-1] + 1
-    # Se la zona trovata è troppo piccola non ci fidiamo: lasciamo la foto intera
+    # Se la zona trovata è troppo piccola non ci fidiamo
     if (y1 - y0) * (x1 - x0) < 0.15 * ph * pw:
-        return img
+        return None
 
     margine_y, margine_x = int(0.02 * ph), int(0.02 * pw)
     y0, y1 = max(0, y0 - margine_y), min(ph, y1 + margine_y)
     x0, x1 = max(0, x0 - margine_x), min(pw, x1 + margine_x)
 
     sx, sy = w / pw, h / ph
-    box = (int(x0 * sx), int(y0 * sy), min(w, int(x1 * sx)), min(h, int(y1 * sy)))
-    return img.crop(box)
+    return (int(x0 * sx), int(y0 * sy), min(w, int(x1 * sx)), min(h, int(y1 * sy)))
+
+def _ritaglia_etichetta(img):
+    """Ritaglio automatico sulla zona chiara trovata (se non la trova lascia l'immagine intera)."""
+    box = _riquadro_etichetta(img)
+    return img.crop(box) if box else img
 
 def _appiattisci_sfondo(grigio):
     """Elimina ombre e sfondo: la carta diventa bianco puro, inchiostro e barre restano nitidi."""
@@ -179,14 +183,14 @@ def _leggi_codici(immagine):
         return []
 
 @st.cache_data(show_spinner=False, max_entries=20)
-def elabora_etichetta(raw_bytes, rimuovi_sfondo=True):
+def elabora_etichetta(raw_bytes, rimuovi_sfondo=True, ritaglio_auto=True):
     """Riceve la foto, rimuove lo sfondo e restituisce (immagine in base64, codici letti)."""
     img = Image.open(io.BytesIO(raw_bytes))
     img = ImageOps.exif_transpose(img).convert("RGB")
     img.thumbnail((1600, 1600))
 
     if rimuovi_sfondo:
-        ritagliata = _ritaglia_etichetta(img)
+        ritagliata = _ritaglia_etichetta(img) if ritaglio_auto else img
         risultato = _appiattisci_sfondo(ImageOps.grayscale(ritagliata))
         codici = _leggi_codici(risultato) or _leggi_codici(ritagliata)
     else:
@@ -200,6 +204,39 @@ def elabora_etichetta(raw_bytes, rimuovi_sfondo=True):
     else:
         risultato.save(buf, format="JPEG", quality=82)
     return base64.b64encode(buf.getvalue()).decode("ascii"), codici
+
+@st.cache_data(show_spinner=False, max_entries=10)
+def prepara_anteprima_ritaglio(raw_bytes):
+    """Crea l'anteprima leggera per lo strumento di ritaglio e il riquadro iniziale suggerito."""
+    img = Image.open(io.BytesIO(raw_bytes))
+    img = ImageOps.exif_transpose(img).convert("RGB")
+    w, h = img.size
+    box = _riquadro_etichetta(img)
+    if box:
+        iniziale = [box[0] / w, box[1] / h, box[2] / w, box[3] / h]
+    else:
+        iniziale = [0.04, 0.04, 0.96, 0.96]
+    anteprima = img.copy()
+    anteprima.thumbnail((900, 900))
+    buf = io.BytesIO()
+    anteprima.save(buf, format="JPEG", quality=80)
+    data_url = "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+    return data_url, iniziale
+
+def ritaglia_bytes(raw_bytes, box):
+    """Ritaglia la foto originale (alta qualità) secondo il riquadro scelto [x0, y0, x1, y1] in frazioni 0-1."""
+    img = Image.open(io.BytesIO(raw_bytes))
+    img = ImageOps.exif_transpose(img).convert("RGB")
+    w, h = img.size
+    x0 = int(max(0.0, min(1.0, float(box[0]))) * w)
+    y0 = int(max(0.0, min(1.0, float(box[1]))) * h)
+    x1 = int(max(0.0, min(1.0, float(box[2]))) * w)
+    y1 = int(max(0.0, min(1.0, float(box[3]))) * h)
+    if x1 - x0 < 10 or y1 - y0 < 10:
+        return raw_bytes
+    buf = io.BytesIO()
+    img.crop((x0, y0, x1, y1)).save(buf, format="JPEG", quality=92)
+    return buf.getvalue()
 
 # ---------------------------------------------------------------------------
 # FOTOCAMERA GUIDATA: riquadro verde + ritaglio automatico.
@@ -431,25 +468,198 @@ SCANNER_HTML = r"""<!DOCTYPE html>
 </html>
 """
 
-COMPONENT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "componente_scanner")
+CROP_HTML = r"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  #wrap { width: 100%; max-width: 640px; margin: 0 auto; padding: 2px; box-sizing: border-box; }
+  #area { padding: 16px; background: #111; border-radius: 14px; border: 2.5px solid #1E3A2B; box-sizing: border-box; overflow: hidden; }
+  #inner { position: relative; line-height: 0; user-select: none; -webkit-user-select: none; }
+  #img { width: 100%; height: auto; display: block; pointer-events: none; -webkit-user-drag: none; }
+  #box { position: absolute; border: 2px solid #22c55e; box-shadow: 0 0 0 4000px rgba(15,23,42,0.62); touch-action: none; cursor: move; box-sizing: border-box; }
+  .h { position: absolute; width: 30px; height: 30px; margin: -15px 0 0 -15px; touch-action: none; }
+  .h::after { content: ""; position: absolute; left: 7px; top: 7px; width: 16px; height: 16px; background: #22c55e; border: 2px solid #fff; border-radius: 50%; box-sizing: border-box; }
+  .h[data-h="nw"] { left: 0; top: 0; cursor: nwse-resize; }
+  .h[data-h="n"]  { left: 50%; top: 0; cursor: ns-resize; }
+  .h[data-h="ne"] { left: 100%; top: 0; cursor: nesw-resize; }
+  .h[data-h="e"]  { left: 100%; top: 50%; cursor: ew-resize; }
+  .h[data-h="se"] { left: 100%; top: 100%; cursor: nwse-resize; }
+  .h[data-h="s"]  { left: 50%; top: 100%; cursor: ns-resize; }
+  .h[data-h="sw"] { left: 0; top: 100%; cursor: nesw-resize; }
+  .h[data-h="w"]  { left: 0; top: 50%; cursor: ew-resize; }
+  .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  button { flex: 1; min-width: 130px; border: none; border-radius: 10px; padding: 11px 12px; font-size: 14px; font-weight: 700; cursor: pointer; color: #fff; background: #475569; }
+  button:active { transform: scale(0.98); }
+  #info { margin-top: 8px; font-size: 13px; color: #1E3A2B; text-align: center; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="area">
+    <div id="inner">
+      <img id="img" alt="Foto da ritagliare">
+      <div id="box">
+        <div class="h" data-h="nw"></div><div class="h" data-h="n"></div><div class="h" data-h="ne"></div>
+        <div class="h" data-h="e"></div><div class="h" data-h="se"></div><div class="h" data-h="s"></div>
+        <div class="h" data-h="sw"></div><div class="h" data-h="w"></div>
+      </div>
+    </div>
+  </div>
+  <div class="row">
+    <button id="btnIniziale">🎯 Riquadro suggerito</button>
+    <button id="btnTutta">⬜ Tutta l'immagine</button>
+  </div>
+  <div id="info">Trascina gli angoli e i bordi per ritagliare. Sposta il riquadro trascinandolo al centro.</div>
+</div>
+<script>
+(function () {
+  var wrap = document.getElementById("wrap");
+  var inner = document.getElementById("inner");
+  var img = document.getElementById("img");
+  var boxEl = document.getElementById("box");
+  var btnIniziale = document.getElementById("btnIniziale");
+  var btnTutta = document.getElementById("btnTutta");
 
-def _prepara_componente_scanner():
-    """Crea (se serve) la cartella del componente fotocamera e lo registra in Streamlit."""
-    os.makedirs(COMPONENT_DIR, exist_ok=True)
-    percorso = os.path.join(COMPONENT_DIR, "index.html")
+  var box = { x0: 0.04, y0: 0.04, x1: 0.96, y1: 0.96 };
+  var iniziale = [0.04, 0.04, 0.96, 0.96];
+  var srcAttuale = null;
+  var drag = null;
+  var ultimaAltezza = 0;
+  var MIN = 0.06;
+
+  function send(type, data) {
+    var m = { isStreamlitMessage: true, type: type };
+    for (var k in data) { m[k] = data[k]; }
+    window.parent.postMessage(m, "*");
+  }
+  function setHeight() {
+    var h = Math.ceil(wrap.getBoundingClientRect().height) + 6;
+    if (Math.abs(h - ultimaAltezza) < 2) { return; }
+    ultimaAltezza = h;
+    send("streamlit:setFrameHeight", { height: h });
+  }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+  function aplica() {
+    boxEl.style.left = (box.x0 * 100) + "%";
+    boxEl.style.top = (box.y0 * 100) + "%";
+    boxEl.style.width = ((box.x1 - box.x0) * 100) + "%";
+    boxEl.style.height = ((box.y1 - box.y0) * 100) + "%";
+  }
+  function invia() {
+    send("streamlit:setComponentValue", {
+      value: { box: [box.x0, box.y0, box.x1, box.y1], n: Date.now() },
+      dataType: "json"
+    });
+  }
+
+  function onDown(e) {
+    var t = e.target;
+    var h = t.getAttribute ? t.getAttribute("data-h") : null;
+    var mode = h || (t === boxEl ? "move" : null);
+    if (!mode) { return; }
+    e.preventDefault();
+    try { t.setPointerCapture(e.pointerId); } catch (err) {}
+    var r = inner.getBoundingClientRect();
+    drag = { mode: mode, sx: e.clientX, sy: e.clientY, w: r.width || 1, h: r.height || 1,
+             b: { x0: box.x0, y0: box.y0, x1: box.x1, y1: box.y1 } };
+  }
+  function onMove(e) {
+    if (!drag) { return; }
+    e.preventDefault();
+    var dx = (e.clientX - drag.sx) / drag.w;
+    var dy = (e.clientY - drag.sy) / drag.h;
+    var b = drag.b, m = drag.mode;
+    var x0 = b.x0, y0 = b.y0, x1 = b.x1, y1 = b.y1;
+    if (m === "move") {
+      var w = b.x1 - b.x0, h = b.y1 - b.y0;
+      x0 = clamp(b.x0 + dx, 0, 1 - w); y0 = clamp(b.y0 + dy, 0, 1 - h);
+      x1 = x0 + w; y1 = y0 + h;
+    } else {
+      if (m.indexOf("w") >= 0) { x0 = clamp(b.x0 + dx, 0, b.x1 - MIN); }
+      if (m.indexOf("e") >= 0) { x1 = clamp(b.x1 + dx, b.x0 + MIN, 1); }
+      if (m.indexOf("n") >= 0) { y0 = clamp(b.y0 + dy, 0, b.y1 - MIN); }
+      if (m.indexOf("s") >= 0) { y1 = clamp(b.y1 + dy, b.y0 + MIN, 1); }
+    }
+    box = { x0: x0, y0: y0, x1: x1, y1: y1 };
+    aplica();
+  }
+  function onUp() {
+    if (!drag) { return; }
+    drag = null;
+    invia();
+  }
+
+  boxEl.addEventListener("pointerdown", onDown);
+  boxEl.addEventListener("pointermove", onMove);
+  boxEl.addEventListener("pointerup", onUp);
+  boxEl.addEventListener("pointercancel", onUp);
+
+  btnIniziale.addEventListener("click", function () {
+    box = { x0: iniziale[0], y0: iniziale[1], x1: iniziale[2], y1: iniziale[3] };
+    aplica(); invia();
+  });
+  btnTutta.addEventListener("click", function () {
+    box = { x0: 0, y0: 0, x1: 1, y1: 1 };
+    aplica(); invia();
+  });
+
+  img.addEventListener("load", function () { aplica(); setHeight(); });
+
+  window.addEventListener("message", function (ev) {
+    if (ev.data && ev.data.type === "streamlit:render") {
+      var a = ev.data.args || {};
+      // Il riquadro viene reimpostato SOLO quando arriva una nuova foto
+      if (a.src && a.src !== srcAttuale) {
+        srcAttuale = a.src;
+        img.src = a.src;
+        if (a.box && a.box.length === 4) {
+          iniziale = a.box;
+          box = { x0: a.box[0], y0: a.box[1], x1: a.box[2], y1: a.box[3] };
+        }
+        aplica();
+      }
+      setHeight();
+    }
+  });
+  window.addEventListener("resize", setHeight);
+  if ("ResizeObserver" in window) { new ResizeObserver(setHeight).observe(wrap); }
+
+  send("streamlit:componentReady", { apiVersion: 1 });
+  aplica();
+  setHeight();
+})();
+</script>
+</body>
+</html>
+"""
+
+def _registra_componente(nome, sottocartella, html):
+    """Crea (se serve) la cartella del componente e lo registra in Streamlit."""
+    cartella = os.path.join(os.path.dirname(os.path.abspath(__file__)), sottocartella)
+    os.makedirs(cartella, exist_ok=True)
+    percorso = os.path.join(cartella, "index.html")
     aggiorna = True
     if os.path.exists(percorso):
         with open(percorso, "r", encoding="utf-8") as f:
-            aggiorna = (f.read() != SCANNER_HTML)
+            aggiorna = (f.read() != html)
     if aggiorna:
         with open(percorso, "w", encoding="utf-8") as f:
-            f.write(SCANNER_HTML)
-    return components.declare_component("pethealth_scanner", path=COMPONENT_DIR)
+            f.write(html)
+    return components.declare_component(nome, path=cartella)
 
 try:
-    _scanner_cam = _prepara_componente_scanner()
+    _scanner_cam = _registra_componente("pethealth_scanner", "componente_scanner", SCANNER_HTML)
 except Exception:
     _scanner_cam = None  # in questo caso si usa la fotocamera standard di Streamlit
+
+try:
+    _cropper = _registra_componente("pethealth_cropper", "componente_ritaglio", CROP_HTML)
+except Exception:
+    _cropper = None  # in questo caso il ritaglio si fa con i cursori
 
 def azzera_scansione(chiave):
     """Svuota il riquadro di scansione (da chiamare dopo il salvataggio)."""
@@ -509,6 +719,34 @@ def scansiona_etichetta(chiave, titolo, descrizione, modo_guida="etichetta"):
     if foto_bytes is None:
         return None, ""
 
+    # --- Ritaglio manuale (facoltativo) ---
+    foto_lavoro = foto_bytes
+    ritaglio_auto = True
+    if st.checkbox("✂️ Ritaglia l'immagine acquisita", key=f"scan_crop_on_{chiave}_{n}",
+                   help="Trascina il riquadro verde per tenere solo l'etichetta."):
+        try:
+            anteprima, box_iniziale = prepara_anteprima_ritaglio(foto_bytes)
+            box_scelto = box_iniziale
+            if _cropper is not None:
+                st.caption("Trascina gli angoli e i bordi del riquadro verde per tenere solo l'etichetta. "
+                           "Il riquadro parte già posizionato sull'etichetta riconosciuta.")
+                chiave_foto = hashlib.md5(foto_bytes).hexdigest()[:10]
+                sel = _cropper(key=f"scan_crop_{chiave}_{n}_{chiave_foto}", src=anteprima, box=box_iniziale, default=None)
+                if sel and sel.get("box") and len(sel["box"]) == 4:
+                    box_scelto = sel["box"]
+            else:
+                st.caption("Usa i cursori per scegliere la parte da tenere.")
+                sx = st.slider("Ritaglio orizzontale (%)", 0, 100, (int(box_iniziale[0] * 100), int(box_iniziale[2] * 100)), key=f"scan_sx_{chiave}_{n}")
+                sy = st.slider("Ritaglio verticale (%)", 0, 100, (int(box_iniziale[1] * 100), int(box_iniziale[3] * 100)), key=f"scan_sy_{chiave}_{n}")
+                if sx[1] - sx[0] >= 3 and sy[1] - sy[0] >= 3:
+                    box_scelto = [sx[0] / 100, sy[0] / 100, sx[1] / 100, sy[1] / 100]
+            foto_lavoro = ritaglia_bytes(foto_bytes, box_scelto)
+            ritaglio_auto = False  # il ritaglio lo ha deciso l'utente
+        except Exception as e:
+            st.warning(f"Ritaglio non disponibile per questa foto: {e}")
+            foto_lavoro = foto_bytes
+            ritaglio_auto = True
+
     scelta = st.radio(
         "Versione da salvare",
         ["✨ Etichetta pulita (sfondo rimosso)", "📄 Foto originale"],
@@ -517,15 +755,15 @@ def scansiona_etichetta(chiave, titolo, descrizione, modo_guida="etichetta"):
     rimuovi = scelta.startswith("✨")
 
     try:
-        b64, codici = elabora_etichetta(foto_bytes, rimuovi)
+        b64, codici = elabora_etichetta(foto_lavoro, rimuovi, ritaglio_auto)
     except Exception as e:
         st.error(f"Non è stato possibile elaborare l'immagine: {e}")
         return None, ""
 
     c1, c2 = st.columns(2)
     with c1:
-        st.caption("Foto acquisita")
-        st.image(foto_bytes)
+        st.caption("Foto acquisita" if foto_lavoro is foto_bytes else "Foto ritagliata")
+        st.image(foto_lavoro)
     with c2:
         st.caption("Risultato che verrà salvato")
         st.image(base64.b64decode(b64))
