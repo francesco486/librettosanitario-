@@ -384,21 +384,49 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# ---------------------------------------------------------------------------
+# CHIUSURA AUTOMATICA DELLA SIDEBAR (dopo la scelta di una sezione)
+# Lo script riprova più volte e prova più selettori, così funziona anche se
+# Streamlit disegna il pulsante con un po' di ritardo.
+# L'utente può sempre riaprire il menù con la freccia in alto a sinistra.
+# ---------------------------------------------------------------------------
 if st.session_state.get("trigger_close_sidebar", False):
     st.session_state.trigger_close_sidebar = False
     components.html("""
         <script>
-            setTimeout(function() {
-                var sidebar = window.parent.document.querySelector('section[data-testid="stSidebar"]');
-                if (sidebar && sidebar.getAttribute('aria-expanded') === 'true') {
-                    var collapseBtn = window.parent.document.querySelector('button[data-testid="stSidebarCollapseButton"]') || 
-                                      window.parent.document.querySelector('button[aria-label="Close sidebar"]') ||
-                                      window.parent.document.querySelector('button[aria-label="Collapse sidebar"]');
-                    if (collapseBtn) {
-                        collapseBtn.click();
+            (function() {
+                var doc = window.parent.document;
+                var tentativi = 0;
+
+                function chiudiSidebar() {
+                    var sidebar = doc.querySelector('section[data-testid="stSidebar"]');
+                    if (!sidebar) return false;
+
+                    // Se è già chiusa non fare nulla
+                    if (sidebar.getAttribute('aria-expanded') === 'false') return true;
+
+                    var btn =
+                        doc.querySelector('[data-testid="stSidebarCollapseButton"] button') ||
+                        doc.querySelector('button[data-testid="stSidebarCollapseButton"]') ||
+                        doc.querySelector('[data-testid="stSidebarHeader"] button') ||
+                        doc.querySelector('button[aria-label="Close sidebar"]') ||
+                        doc.querySelector('button[aria-label="Collapse sidebar"]');
+
+                    if (btn) {
+                        btn.click();
+                        return true;
                     }
+                    return false;
                 }
-            }, 120);
+
+                // Riprova ogni 100 ms (max ~2 secondi) finché il pulsante è disponibile
+                var timer = setInterval(function() {
+                    tentativi++;
+                    if (chiudiSidebar() || tentativi >= 20) {
+                        clearInterval(timer);
+                    }
+                }, 100);
+            })();
         </script>
     """, height=0, width=0)
 
