@@ -92,16 +92,21 @@ def mostra_scansionatore_barre(titolo="📷 Scansiona Etichetta Vaccino o Microc
     <head>
         <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
         <style>
-            body { font-family: -apple-system, sans-serif; margin: 0; padding: 5px; background-color: #f8f7f2; text-align: center; }
-            .scanner-container { position: relative; width: 100%; max-width: 480px; margin: auto; border-radius: 16px; overflow: hidden; border: 2.5px solid #1E3A2B; background: #000; }
-            #video-feed { width: 100%; height: auto; display: block; object-fit: cover; }
+            body { font-family: -apple-system, sans-serif; margin: 0; padding: 2px; background-color: #f8f7f2; text-align: center; }
+            .main-wrapper { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; }
+            .controls-panel { width: 100%; display: flex; gap: 8px; justify-content: center; margin-bottom: 8px; flex-wrap: wrap; }
+            .btn-action { background-color: #1E3A2B; color: #ffffff !important; border: none; padding: 12px 18px; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 0.95rem; flex: 1; min-width: 160px; box-shadow: 0 4px 6px rgba(0,0,0,0.15); transition: background-color 0.2s; }
+            .btn-action:hover { opacity: 0.9; }
+            .btn-action:active { transform: scale(0.98); }
+            .scanner-container { position: relative; width: 100%; max-height: 280px; border-radius: 16px; overflow: hidden; border: 2.5px solid #1E3A2B; background: #000; display: flex; justify-content: center; align-items: center; }
+            #video-feed { width: 100%; max-height: 280px; object-fit: cover; display: block; }
             .scan-mask {
                 position: absolute; top: 0; left: 0; right: 0; bottom: 0;
                 pointer-events: none; display: flex; align-items: center; justify-content: center;
-                box-shadow: inset 0 0 0 2000px rgba(15, 23, 42, 0.7);
+                box-shadow: inset 0 0 0 2000px rgba(15, 23, 42, 0.65);
             }
             .target-box {
-                width: 280px; height: 140px; border: 3px solid #22c55e; border-radius: 12px;
+                width: 240px; height: 120px; border: 3px solid #22c55e; border-radius: 12px;
                 box-shadow: 0 0 20px rgba(34, 197, 94, 0.8); position: relative; animation: pulseGlow 2s infinite;
             }
             @keyframes pulseGlow {
@@ -109,31 +114,30 @@ def mostra_scansionatore_barre(titolo="📷 Scansiona Etichetta Vaccino o Microc
                 50% { border-color: #86efac; box-shadow: 0 0 25px rgba(134, 239, 172, 1); }
                 100% { border-color: #22c55e; box-shadow: 0 0 10px rgba(34, 197, 94, 0.6); }
             }
-            .controls-panel { margin-top: 10px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
-            .btn-action { background-color: #1E3A2B; color: white; border: none; padding: 10px 16px; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 0.9rem; flex: 1; min-width: 140px; }
-            .btn-action:hover { background-color: #2D4A3E; }
-            #result-box { margin-top: 12px; padding: 12px; background: #FFFFFF; border-radius: 12px; border: 1.5px solid #22c55e; display: none; }
-            .code-text { font-family: monospace; font-size: 1.1rem; font-weight: bold; color: #1E3A2B; background: #F1F5F9; padding: 4px 8px; border-radius: 6px; }
-            #cropped-preview { max-width: 100%; height: auto; border-radius: 8px; border: 1px solid #CBD5E1; margin-top: 8px; }
+            #result-box { width: 100%; margin-top: 10px; padding: 12px; background: #FFFFFF; border-radius: 12px; border: 1.5px solid #22c55e; display: none; box-sizing: border-box; }
+            .code-text { font-family: monospace; font-size: 1.05rem; font-weight: bold; color: #1E3A2B; background: #F1F5F9; padding: 6px 10px; border-radius: 6px; word-break: break-all; }
+            #cropped-preview { max-width: 100%; height: auto; max-height: 140px; border-radius: 8px; border: 1px solid #CBD5E1; margin-top: 8px; object-fit: contain; }
         </style>
     </head>
     <body>
-        <div class="scanner-container">
-            <video id="video-feed" autoplay playsinline muted></video>
-            <div class="scan-mask"><div class="target-box" id="target-box"></div></div>
-        </div>
-        
-        <div class="controls-panel">
-            <button class="btn-action" onclick="scattaRitaglio()">📸 Scatta ed Isola Etichetta</button>
-            <button class="btn-action" style="background:#475569;" onclick="riavviaCamera()">🔄 Riavvia Fotocamera</button>
-        </div>
+        <div class="main-wrapper">
+            <div class="controls-panel">
+                <button class="btn-action" style="background-color: #16a34a;" onclick="scattaRitaglio()">📸 Scatta ed Isola Etichetta</button>
+                <button class="btn-action" style="background-color: #475569;" onclick="riavviaCamera()">🔄 Riavvia Camera</button>
+            </div>
 
-        <div id="result-box">
-            <div style="color:#15803d; font-weight:bold; margin-bottom:6px;">✅ Etichetta Acquisita (Sfondo Eliminato)</div>
-            <div id="code-output" class="code-text">Nessun testo/barcode leggibile</div>
-            <img id="cropped-preview" alt="Etichetta Ritagliata">
-            <br>
-            <button class="btn-action" style="margin-top:8px;" onclick="copiaEIncolla()">📋 Copia Dati Etichetta</button>
+            <div class="scanner-container">
+                <video id="video-feed" autoplay playsinline muted></video>
+                <div class="scan-mask"><div class="target-box" id="target-box"></div></div>
+            </div>
+
+            <div id="result-box">
+                <div style="color:#15803d; font-weight:bold; margin-bottom:6px;">✅ Etichetta Acquisita (Sfondo Eliminato)</div>
+                <div id="code-output" class="code-text">Nessun testo/barcode leggibile</div>
+                <img id="cropped-preview" alt="Etichetta Ritagliata">
+                <br>
+                <button class="btn-action" style="margin-top:8px; width: 100%;" onclick="copiaEIncolla()">📋 Copia Dati Etichetta</button>
+            </div>
         </div>
 
         <canvas id="crop-canvas" style="display:none;"></canvas>
@@ -218,7 +222,7 @@ def mostra_scansionatore_barre(titolo="📷 Scansiona Etichetta Vaccino o Microc
     </body>
     </html>
     """
-    components.html(html_code, height=480)
+    components.html(html_code, height=560)
 
 def mostra_avviso_nessun_animale():
     """Mostra un avviso amichevole quando l'utente non ha ancora registrato animali."""
