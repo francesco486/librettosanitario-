@@ -58,7 +58,6 @@ def salva_dati():
     except Exception as e:
         st.error(f"Errore durante il salvataggio dei dati: {e}")
 
-# Inizializzazione Session State
 if "db_users" not in st.session_state or "db_veterinari" not in st.session_state:
     dati_salvati = carica_dati()
     if dati_salvati and "users" in dati_salvati:
@@ -79,9 +78,8 @@ if "verification_pending_email" not in st.session_state:
     st.session_state.verification_pending_email = None
 
 def cambia_sezione(nuova_sezione):
-    """Imposta la sezione attiva e chiude automaticamente la sidebar per facilitare la visione."""
+    """Imposta la sezione attiva e richiede la chiusura automatica della sidebar."""
     st.session_state.sezione_attiva = nuova_sezione
-    st.session_state.sidebar_state = "collapsed"
     st.session_state.trigger_close_sidebar = True
     st.rerun()
 
@@ -150,6 +148,21 @@ def mostra_scansionatore_barre(titolo="📷 Scansiona Codice a Barre / Microchip
     </html>
     """
     components.html(html_code, height=450)
+
+def mostra_avviso_nessun_animale():
+    """Mostra un avviso amichevole quando l'utente non ha ancora registrato animali."""
+    st.markdown("""
+        <div class="wellness-card" style="text-align: center; padding: 35px; border-left: 6px solid #1E3A2B !important;">
+            <h2 style="color: #1E3A2B; margin-bottom: 10px;">🐾 Nessun Animale Registrato</h2>
+            <p style="color: #475569; font-size: 1.05rem;">
+                Non hai ancora inserito un animale domestico nel tuo account.<br>
+                Registra ora il tuo primo pet per accedere a tutte le funzionalità del libretto sanitario digitale!
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+    st.write("")
+    if st.button("➕ Registra Subito il Tuo Primo Animale", type="primary"):
+        cambia_sezione("nuovo_animale")
 
 def genera_link_whatsapp(numero, animale, farmaco, dosaggio, orario, note=""):
     testo = f"🐾 *PetHealth - Promemoria Terapia*\n\n🐶 *Animale:* {animale}\n💊 *Farmaco:* {farmaco}\n🥄 *Dose:* {dosaggio}\n⏰ *Orario:* {orario}\n"
@@ -260,19 +273,21 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Esecuzione script JS per chiusura istantanea della sidebar
 if st.session_state.get("trigger_close_sidebar", False):
     st.session_state.trigger_close_sidebar = False
     components.html("""
         <script>
             setTimeout(function() {
-                var collapseBtn = window.parent.document.querySelector('button[data-testid="stSidebarCollapseButton"]') || 
-                                  window.parent.document.querySelector('button[aria-label="Close sidebar"]') ||
-                                  window.parent.document.querySelector('button[aria-label="Collapse sidebar"]');
-                if (collapseBtn) {
-                    collapseBtn.click();
+                var sidebar = window.parent.document.querySelector('section[data-testid="stSidebar"]');
+                if (sidebar && sidebar.getAttribute('aria-expanded') === 'true') {
+                    var collapseBtn = window.parent.document.querySelector('button[data-testid="stSidebarCollapseButton"]') || 
+                                      window.parent.document.querySelector('button[aria-label="Close sidebar"]') ||
+                                      window.parent.document.querySelector('button[aria-label="Collapse sidebar"]');
+                    if (collapseBtn) {
+                        collapseBtn.click();
+                    }
                 }
-            }, 100);
+            }, 120);
         </script>
     """, height=0, width=0)
 
@@ -337,7 +352,7 @@ if st.session_state.logged_user_email is None:
             if btn_register:
                 email_c = reg_email.strip().lower()
                 if not reg_nome.strip() or not email_c or not reg_pass or not reg_telefono.strip():
-                    st.error("⚠️️ Compila tutti i campi obbligatori marcati con (*).")
+                    st.error("⚠ Compila tutti i campi obbligatori marcati con (*).")
                 elif reg_pass != reg_pass_conf:
                     st.error("❌ Le password inserite non corrispondono.")
                 elif len(reg_pass) < 6:
@@ -384,7 +399,7 @@ if st.session_state.logged_user_email is None:
             else:
                 st.markdown(f"""
                     <div style="background:#F0FDF4; border:1.5px dashed #16A34A; padding:20px; border-radius:12px; margin-top:15px; margin-bottom:15px;">
-                        <h4 style="margin:0 0 10px 0; color:#15803D;">✉️️ Messaggio di Benvenuto PetHealth</h4>
+                        <h4 style="margin:0 0 10px 0; color:#15803D;">✉ Messaggio di Benvenuto PetHealth</h4>
                         <p style="margin:0 0 8px 0; color:#1E293B;"><strong>Utente:</strong> {u_data['nome']}</p>
                         <p style="margin:0 0 8px 0; color:#1E293B;"><strong>Email:</strong> {u_data['email']}</p>
                         <p style="margin:0 0 12px 0; color:#1E293B;"><strong>Codice di Attivazione:</strong> <code>{u_data.get('codice_conferma')}</code></p>
@@ -550,7 +565,7 @@ if st.session_state.sezione_attiva == "dashboard":
                         else: st.error(f"❌ {msg}")
                     else: st.error("Compila tutti i campi obbligatori (*).")
 
-        with st.expander(f"⚠️️ Area Riservata Medico Veterinario (Registro Decesso - {pet_selected})"):
+        with st.expander(f"⚠ Area Riservata Medico Veterinario (Registro Decesso - {pet_selected})"):
             date_decesso = st.date_input("Data del decesso")
             certificato = st.file_uploader("Allega Certificato di Morte", type=["pdf", "png", "jpg"], key="cert_morte")
             col_d1, col_d2, col_d3 = st.columns(3)
@@ -575,7 +590,7 @@ if st.session_state.sezione_attiva == "dashboard":
                         user_db["pet_selezionato"] = user_db["lista_animali"][0] if user_db["lista_animali"] else None
                         salva_dati(); st.success(f"{pet_selected} è stato spostato nel Registro degli Angeli."); st.rerun()
     else:
-        st.info("Nessun animale selezionato. Registra il tuo primo animale per accedere alla Dashboard!")
+        mostra_avviso_nessun_animale()
 
 elif st.session_state.sezione_attiva == "anagrafica":
     if pet_selected:
@@ -611,7 +626,7 @@ elif st.session_state.sezione_attiva == "anagrafica":
                 </div>
             """, unsafe_allow_html=True)
 
-        with st.expander("✏️ Modifica Anagrafica Pet e Proprietario", expanded=True):
+        with st.expander("✏️️ Modifica Anagrafica Pet e Proprietario", expanded=True):
             with st.form("form_edit_anagrafica"):
                 col_a1, col_a2 = st.columns(2)
                 with col_a1:
@@ -649,6 +664,8 @@ elif st.session_state.sezione_attiva == "anagrafica":
                             user_db["pet_selezionato"] = new_n
                         user_db["db_anagrafica"][new_n] = nuovi_dati
                         salva_dati(); st.success(f"Anagrafica di {new_n} aggiornata!"); st.rerun()
+    else:
+        mostra_avviso_nessun_animale()
 
 elif st.session_state.sezione_attiva == "visite":
     if pet_selected:
@@ -710,6 +727,8 @@ elif st.session_state.sezione_attiva == "visite":
                 if is_cert: st.success(f"🛡️ **Codice Certificato:** `{v.get('codice_certificato')}` | ID Medico: `{v.get('vet_id_permanente')}`")
                 if v.get('diagnosi'): st.write(f"**Diagnosi:** {v['diagnosi']}")
                 mostra_pulsanti_promemoria_visita(pet_selected, v['tipo'], v['data'], v.get('veterinario', ''), v.get('diagnosi', ''))
+    else:
+        mostra_avviso_nessun_animale()
 
 elif st.session_state.sezione_attiva == "terapie":
     if pet_selected:
@@ -748,6 +767,8 @@ elif st.session_state.sezione_attiva == "terapie":
                 st.write(f"**Orario:** {t.get('orario')}")
                 if t.get('note'): st.write(f"**Istruzioni:** {t['note']}")
                 mostra_pulsanti_promemoria_terapia(pet_selected, t['farmaco'], t['dosaggio'], t.get('orario', ''), t.get('note', ''))
+    else:
+        mostra_avviso_nessun_animale()
 
 elif st.session_state.sezione_attiva == "fatture":
     if pet_selected:
@@ -772,6 +793,8 @@ elif st.session_state.sezione_attiva == "fatture":
         for idx, f in enumerate(user_db["db_fatture"].get(pet_selected, [])):
             with st.expander(f"📄 €{f['importo']:.2f} - {f['categoria']} ({f['data']})"):
                 st.write(f"**Fornitore:** {f['fornitore']}")
+    else:
+        mostra_avviso_nessun_animale()
 
 elif st.session_state.sezione_attiva == "passaporto":
     if pet_selected:
@@ -788,6 +811,8 @@ elif st.session_state.sezione_attiva == "passaporto":
                     </div>
                 """, unsafe_allow_html=True)
         else: st.warning("Nessuna prestazione ufficialmente certificata dal veterinario per il passaporto.")
+    else:
+        mostra_avviso_nessun_animale()
 
 elif st.session_state.sezione_attiva == "urgenze":
     st.markdown("<h2 style='color: #1E3A2B;'>🚨 Urgenze & Cliniche Veterinarie 24H</h2>", unsafe_allow_html=True)
@@ -837,3 +862,7 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
                 user_db["pet_selezionato"] = pet_name
                 st.session_state.sezione_attiva = "anagrafica"
                 salva_dati(); st.success(f"Scheda di {pet_name} creata!"); st.rerun()
+
+else:
+    st.session_state.sezione_attiva = "dashboard"
+    st.rerun()
