@@ -837,17 +837,35 @@ elif st.session_state.sezione_attiva == "angeli":
 
 elif st.session_state.sezione_attiva == "nuovo_animale":
     st.markdown("<h2 style='color: #1E3A2B;'>🐾 Registra Nuovo Animale</h2>", unsafe_allow_html=True)
+    st.caption("Compila la scheda anagrafica sottostante per creare il nuovo libretto sanitario digitale.")
+    
+    with st.expander("📷 Scansiona Codice Microchip da Libretto Cartaceo", expanded=False):
+        mostra_scansionatore_barre("📷 Scansiona Adesivo Microchip dell'Animale")
+
     with st.form("form_nuovo_animale"):
+        st.markdown("### 🐾 1. Dati Anagrafici dell'Animale")
         c1, c2 = st.columns(2)
         with c1:
-            n_nome = st.text_input("Nome dell'animale*")
-            n_specie = st.selectbox("Specie", ["Cane", "Gatto", "Coniglio", "Uccello", "Rettile", "Altro"])
-            n_razza = st.text_input("Razza")
+            n_nome = st.text_input("Nome dell'Animale*", placeholder="es. Luna, Max, Baffo...")
+            n_specie = st.selectbox("Specie / Tipo Animale*", ["Cane", "Gatto", "Coniglio", "Uccello", "Rettile", "Altro"])
+            n_razza = st.text_input("Razza dell'Animale", placeholder="es. Meticcio, Labradoodle, Europeo...")
         with c2:
-            n_data = st.date_input("Data di Nascita Presunta")
-            n_microchip = st.text_input("Numero Microchip")
+            n_data = st.date_input("Data di Nascita Presunta / Effettiva")
+            n_microchip = st.text_input("Numero Microchip (15 Cifre)", placeholder="es. 380260000000000")
+            n_segni = st.text_input("Segni Particolari o Note", placeholder="es. Macchia sul petto, macchia nera zampa destra...")
         
-        if st.form_submit_button("💾 Registra Animale nel tuo Account"):
+        st.markdown("---")
+        st.markdown("### 👤 2. Dati Anagrafici del Proprietario")
+        cp1, cp2 = st.columns(2)
+        with cp1:
+            n_prop_nome = st.text_input("Nome e Cognome Proprietario*", value=user_db.get("nome", ""))
+            n_prop_tel = st.text_input("Telefono / WhatsApp Proprietario*", value=user_db.get("numero_whatsapp", ""))
+        with cp2:
+            n_prop_indirizzo = st.text_input("Indirizzo di Residenza", placeholder="es. Via Roma 12")
+            n_prop_citta = st.text_input("Città", placeholder="es. Milano, Roma...")
+
+        st.write("")
+        if st.form_submit_button("💾 Salva e Crea Libretto Sanitario"):
             if n_nome.strip():
                 pet_name = n_nome.strip()
                 if pet_name not in user_db["lista_animali"]:
@@ -856,12 +874,24 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
                     user_db["db_terapie"][pet_name] = []
                     user_db["db_fatture"][pet_name] = []
                 user_db["db_anagrafica"][pet_name] = {
-                    "tipo_animale": n_specie, "nome": pet_name, "razza": n_razza, "data_nascita": str(n_data),
-                    "microchip": n_microchip, "proprietario_nome": user_db.get("nome"), "proprietario_telefono": user_db.get("numero_whatsapp")
+                    "tipo_animale": n_specie,
+                    "nome": pet_name,
+                    "razza": n_razza,
+                    "data_nascita": str(n_data),
+                    "microchip": n_microchip.strip(),
+                    "segni_particolari": n_segni,
+                    "proprietario_nome": n_prop_nome.strip(),
+                    "proprietario_telefono": n_prop_tel.strip(),
+                    "proprietario_indirizzo": n_prop_indirizzo.strip(),
+                    "proprietario_citta": n_prop_citta.strip()
                 }
                 user_db["pet_selezionato"] = pet_name
                 st.session_state.sezione_attiva = "anagrafica"
-                salva_dati(); st.success(f"Scheda di {pet_name} creata!"); st.rerun()
+                salva_dati()
+                st.success(f"🎉 Scheda e libretto sanitario di {pet_name} creati con successo!")
+                st.rerun()
+            else:
+                st.error("⚠️ Inserisci almeno il Nome dell'Animale.")
 
 else:
     st.session_state.sezione_attiva = "dashboard"
