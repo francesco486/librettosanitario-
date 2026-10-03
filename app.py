@@ -82,9 +82,9 @@ def cambia_sezione(nuova_sezione):
     st.rerun()
 
 def mostra_scansionatore_barre(titolo="📷 Scansiona Etichetta Vaccino o Microchip"):
-    """Mostra un lettore avanzato di etichette e microchip con isolamento dello sfondo e ritaglio automatico."""
+    """Mostra un lettore avanzato di etichette e microchip con rimozione automatica dello sfondo ed esaltazione testo."""
     st.markdown(f"##### {titolo}")
-    st.caption("Inquadra l'etichetta del vaccino o il microchip nel riquadro verde. Premi 'Scatta ed Isola Etichetta' o lascia rilevare il codice.")
+    st.caption("Inquadra l'etichetta del vaccino o del microchip nel riquadro verde. Clicca su 'Scatta ed Isola Etichetta' per rimuovere lo sfondo e pulire la scansione.")
     
     html_code = """
     <!DOCTYPE html>
@@ -94,10 +94,11 @@ def mostra_scansionatore_barre(titolo="📷 Scansiona Etichetta Vaccino o Microc
         <style>
             body { font-family: -apple-system, sans-serif; margin: 0; padding: 2px; background-color: #f8f7f2; text-align: center; }
             .main-wrapper { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; }
-            .controls-panel { width: 100%; display: flex; gap: 8px; justify-content: center; margin-bottom: 8px; flex-wrap: wrap; }
-            .btn-action { background-color: #1E3A2B; color: #ffffff !important; border: none; padding: 12px 18px; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 0.95rem; flex: 1; min-width: 160px; box-shadow: 0 4px 6px rgba(0,0,0,0.15); transition: background-color 0.2s; }
+            .controls-panel { width: 100%; display: flex; gap: 8px; justify-content: center; margin-bottom: 10px; flex-wrap: wrap; }
+            .btn-action { background-color: #16a34a; color: #ffffff !important; border: none; padding: 12px 18px; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 0.95rem; flex: 1; min-width: 160px; box-shadow: 0 4px 6px rgba(0,0,0,0.15); transition: background-color 0.2s; }
             .btn-action:hover { opacity: 0.9; }
             .btn-action:active { transform: scale(0.98); }
+            .btn-sec { background-color: #475569 !important; }
             .scanner-container { position: relative; width: 100%; max-height: 280px; border-radius: 16px; overflow: hidden; border: 2.5px solid #1E3A2B; background: #000; display: flex; justify-content: center; align-items: center; }
             #video-feed { width: 100%; max-height: 280px; object-fit: cover; display: block; }
             .scan-mask {
@@ -115,15 +116,15 @@ def mostra_scansionatore_barre(titolo="📷 Scansiona Etichetta Vaccino o Microc
                 100% { border-color: #22c55e; box-shadow: 0 0 10px rgba(34, 197, 94, 0.6); }
             }
             #result-box { width: 100%; margin-top: 10px; padding: 12px; background: #FFFFFF; border-radius: 12px; border: 1.5px solid #22c55e; display: none; box-sizing: border-box; }
-            .code-text { font-family: monospace; font-size: 1.05rem; font-weight: bold; color: #1E3A2B; background: #F1F5F9; padding: 6px 10px; border-radius: 6px; word-break: break-all; }
-            #cropped-preview { max-width: 100%; height: auto; max-height: 140px; border-radius: 8px; border: 1px solid #CBD5E1; margin-top: 8px; object-fit: contain; }
+            .code-text { font-family: monospace; font-size: 1.05rem; font-weight: bold; color: #1E3A2B; background: #F1F5F9; padding: 6px 10px; border-radius: 6px; word-break: break-all; margin-top: 6px; }
+            #cropped-preview { max-width: 100%; height: auto; max-height: 160px; border-radius: 8px; border: 1px solid #CBD5E1; margin-top: 8px; object-fit: contain; background-color: #ffffff; }
         </style>
     </head>
     <body>
         <div class="main-wrapper">
             <div class="controls-panel">
-                <button class="btn-action" style="background-color: #16a34a;" onclick="scattaRitaglio()">📸 Scatta ed Isola Etichetta</button>
-                <button class="btn-action" style="background-color: #475569;" onclick="riavviaCamera()">🔄 Riavvia Camera</button>
+                <button class="btn-action" onclick="scattaRitaglio()">📸 Scatta ed Isola Etichetta</button>
+                <button class="btn-action btn-sec" onclick="riavviaCamera()">🔄 Riavvia Camera</button>
             </div>
 
             <div class="scanner-container">
@@ -132,11 +133,10 @@ def mostra_scansionatore_barre(titolo="📷 Scansiona Etichetta Vaccino o Microc
             </div>
 
             <div id="result-box">
-                <div style="color:#15803d; font-weight:bold; margin-bottom:6px;">✅ Etichetta Acquisita (Sfondo Eliminato)</div>
-                <div id="code-output" class="code-text">Nessun testo/barcode leggibile</div>
-                <img id="cropped-preview" alt="Etichetta Ritagliata">
-                <br>
-                <button class="btn-action" style="margin-top:8px; width: 100%;" onclick="copiaEIncolla()">📋 Copia Dati Etichetta</button>
+                <div style="color:#15803d; font-weight:bold; margin-bottom:4px;">✅ Etichetta Acquisita & Sfondo Eliminato</div>
+                <img id="cropped-preview" alt="Etichetta Pulita e Isolata">
+                <div id="code-output" class="code-text">Etichetta/Fustella Acquisita</div>
+                <button class="btn-action" style="margin-top:8px; width: 100%;" onclick="copiaEIncolla()">📋 Copia Testo Rilevato</button>
             </div>
         </div>
 
@@ -161,6 +161,39 @@ def mostra_scansionatore_barre(titolo="📷 Scansiona Etichetta Vaccino o Microc
                 }
             }
 
+            // ALGORITMO DI RIMOZIONE DELLO SFONDO E PULIZIA CARTA
+            function rimuoviSfondoEPulisci(ctx, width, height) {
+                const imgData = ctx.getImageData(0, 0, width, height);
+                const d = imgData.data;
+
+                // Calcolo luminosità media per adattamento dinamico
+                let sumLum = 0;
+                for (let i = 0; i < d.length; i += 4) {
+                    sumLum += (0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2]);
+                }
+                const avgLum = sumLum / (width * height);
+                const threshold = Math.min(Math.max(avgLum * 1.02, 115), 185);
+
+                for (let i = 0; i < d.length; i += 4) {
+                    let r = d[i], g = d[i+1], b = d[i+2];
+                    let lum = 0.299 * r + 0.587 * g + 0.114 * b;
+
+                    // Se il pixel appartiene allo sfondo / tavolo / carta chiara, rendilo BIANCO PURO (#FFFFFF)
+                    if (lum > threshold) {
+                        d[i] = 255;
+                        d[i+1] = 255;
+                        d[i+2] = 255;
+                    } else {
+                        // Esalta il contrasto del testo e delle righe dei codici a barre
+                        let factor = 1.35;
+                        d[i] = Math.max(0, Math.min(255, (r - 128) * factor + 128 - 25));
+                        d[i+1] = Math.max(0, Math.min(255, (g - 128) * factor + 128 - 25));
+                        d[i+2] = Math.max(0, Math.min(255, (b - 128) * factor + 128 - 25));
+                    }
+                }
+                ctx.putImageData(imgData, 0, 0);
+            }
+
             function scattaRitaglio() {
                 if (!video.videoWidth) return;
                 const canvas = document.getElementById('crop-canvas');
@@ -178,6 +211,9 @@ def mostra_scansionatore_barre(titolo="📷 Scansiona Etichetta Vaccino o Microc
                 canvas.height = cropH;
 
                 ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+                // Applicazione dell'algoritmo di pulizia e isolamento dello sfondo
+                rimuoviSfondoEPulisci(ctx, cropW, cropH);
 
                 const dataUrl = canvas.toDataURL('image/png');
                 document.getElementById('cropped-preview').src = dataUrl;
@@ -431,7 +467,7 @@ if st.session_state.logged_user_email is None:
                 elif reg_pass != reg_pass_conf:
                     st.error("❌ Le password inserite non corrispondono.")
                 elif len(reg_pass) < 6:
-                    st.error("⚠️ La password deve essere di almeno 6 caratteri.")
+                    st.error("⚠️️ La password deve essere di almeno 6 caratteri.")
                 elif email_c in st.session_state.db_users:
                     st.error("❌ Risulta già presente un profilo con questa email.")
                 else:
@@ -974,7 +1010,7 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
                 st.success(f"🎉 Scheda e libretto sanitario di {pet_name} creati con successo!")
                 st.rerun()
             else:
-                st.error("⚠️ Inserisci almeno il Nome dell'Animale.")
+                st.error("⚠️️ Inserisci almeno il Nome dell'Animale.")
 
 else:
     st.session_state.sezione_attiva = "dashboard"
