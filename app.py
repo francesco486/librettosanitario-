@@ -7,11 +7,9 @@ import uuid
 from datetime import datetime, date
 import streamlit.components.v1 as components
 
-# Inizializzazione dello stato della sidebar prima della configurazione della pagina
 if "sidebar_state" not in st.session_state:
     st.session_state.sidebar_state = "expanded"
 
-# Configurazione della pagina Streamlit
 st.set_page_config(
     page_title="PetHealth - Wellness & Care",
     page_icon="🐾",
@@ -83,71 +81,144 @@ def cambia_sezione(nuova_sezione):
     st.session_state.trigger_close_sidebar = True
     st.rerun()
 
-def mostra_scansionatore_barre(titolo="📷 Scansiona Codice a Barre / Microchip con Fotocamera"):
-    """Mostra un lettore di codici a barre e QR Code integrato HTML5/JS."""
+def mostra_scansionatore_barre(titolo="📷 Scansiona Etichetta Vaccino o Microchip"):
+    """Mostra un lettore avanzato di etichette e microchip con isolamento dello sfondo e ritaglio automatico."""
     st.markdown(f"##### {titolo}")
-    st.caption("Inquadra l'etichetta del vaccino o il codice a barre nella cornice centrale.")
+    st.caption("Inquadra l'etichetta del vaccino o il microchip nel riquadro verde. Premi 'Scatta ed Isola Etichetta' o lascia rilevare il codice.")
     
     html_code = """
     <!DOCTYPE html>
     <html>
     <head>
-        <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+        <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
         <style>
-            body { font-family: sans-serif; margin: 0; padding: 5px; background-color: #f8f7f2; text-align: center; }
-            .scanner-wrapper { position: relative; width: 100%; max-width: 480px; margin: auto; border-radius: 14px; overflow: hidden; border: 2.5px solid #1E3A2B; background: #000; }
-            #reader { width: 100%; }
-            .scan-overlay {
+            body { font-family: -apple-system, sans-serif; margin: 0; padding: 5px; background-color: #f8f7f2; text-align: center; }
+            .scanner-container { position: relative; width: 100%; max-width: 480px; margin: auto; border-radius: 16px; overflow: hidden; border: 2.5px solid #1E3A2B; background: #000; }
+            #video-feed { width: 100%; height: auto; display: block; object-fit: cover; }
+            .scan-mask {
                 position: absolute; top: 0; left: 0; right: 0; bottom: 0;
                 pointer-events: none; display: flex; align-items: center; justify-content: center;
-                box-shadow: inset 0 0 0 2000px rgba(15, 23, 42, 0.65);
+                box-shadow: inset 0 0 0 2000px rgba(15, 23, 42, 0.7);
             }
-            .focus-frame {
-                width: 270px; height: 150px; border: 3px dashed #A3E635; border-radius: 12px;
-                box-shadow: 0 0 20px rgba(163, 230, 53, 0.9); position: relative; animation: focusPulse 2s infinite;
+            .target-box {
+                width: 280px; height: 140px; border: 3px solid #22c55e; border-radius: 12px;
+                box-shadow: 0 0 20px rgba(34, 197, 94, 0.8); position: relative; animation: pulseGlow 2s infinite;
             }
-            @keyframes focusPulse {
-                0% { border-color: #A3E635; box-shadow: 0 0 12px rgba(163, 230, 53, 0.6); }
-                50% { border-color: #22c55e; box-shadow: 0 0 24px rgba(34, 197, 94, 1); }
-                100% { border-color: #A3E635; box-shadow: 0 0 12px rgba(163, 230, 53, 0.6); }
+            @keyframes pulseGlow {
+                0% { border-color: #22c55e; box-shadow: 0 0 10px rgba(34, 197, 94, 0.6); }
+                50% { border-color: #86efac; box-shadow: 0 0 25px rgba(134, 239, 172, 1); }
+                100% { border-color: #22c55e; box-shadow: 0 0 10px rgba(34, 197, 94, 0.6); }
             }
-            #result-box { margin-top: 10px; padding: 12px; background-color: #E8F0EC; border-radius: 10px; font-weight: bold; text-align: center; color: #1E3A2B; border: 1px solid #A3E635; display: none; }
-            .code-display { font-family: monospace; font-size: 1.1rem; color: #0F172A; background: #FFFFFF; padding: 4px 8px; border-radius: 6px; border: 1px solid #CBD5E1; }
-            button.copy-btn { background-color: #1E3A2B; color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; cursor: pointer; margin-top: 10px; width: 100%; }
-            button.copy-btn:hover { background-color: #2D4A3E; }
+            .controls-panel { margin-top: 10px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+            .btn-action { background-color: #1E3A2B; color: white; border: none; padding: 10px 16px; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 0.9rem; flex: 1; min-width: 140px; }
+            .btn-action:hover { background-color: #2D4A3E; }
+            #result-box { margin-top: 12px; padding: 12px; background: #FFFFFF; border-radius: 12px; border: 1.5px solid #22c55e; display: none; }
+            .code-text { font-family: monospace; font-size: 1.1rem; font-weight: bold; color: #1E3A2B; background: #F1F5F9; padding: 4px 8px; border-radius: 6px; }
+            #cropped-preview { max-width: 100%; height: auto; border-radius: 8px; border: 1px solid #CBD5E1; margin-top: 8px; }
         </style>
     </head>
     <body>
-        <div class="scanner-wrapper">
-            <div id="reader"></div>
-            <div class="scan-overlay"><div class="focus-frame"></div></div>
+        <div class="scanner-container">
+            <video id="video-feed" autoplay playsinline muted></video>
+            <div class="scan-mask"><div class="target-box" id="target-box"></div></div>
         </div>
+        
+        <div class="controls-panel">
+            <button class="btn-action" onclick="scattaRitaglio()">📸 Scatta ed Isola Etichetta</button>
+            <button class="btn-action" style="background:#475569;" onclick="riavviaCamera()">🔄 Riavvia Fotocamera</button>
+        </div>
+
         <div id="result-box">
-            ✅ <span>Etichetta / Codice Rilevato:</span><br><br>
-            <span id="scanned-code" class="code-display">---</span><br>
-            <button class="copy-btn" onclick="copiaCodice()">📋 Copia Codice Rilevato</button>
+            <div style="color:#15803d; font-weight:bold; margin-bottom:6px;">✅ Etichetta Acquisita (Sfondo Eliminato)</div>
+            <div id="code-output" class="code-text">Nessun testo/barcode leggibile</div>
+            <img id="cropped-preview" alt="Etichetta Ritagliata">
+            <br>
+            <button class="btn-action" style="margin-top:8px;" onclick="copiaEIncolla()">📋 Copia Dati Etichetta</button>
         </div>
+
+        <canvas id="crop-canvas" style="display:none;"></canvas>
+
         <script>
-            function copiaCodice() {
-                var text = document.getElementById("scanned-code").innerText;
-                var dummy = document.createElement("textarea");
+            let currentStream = null;
+            const video = document.getElementById('video-feed');
+
+            async function avviaFotocamera() {
+                try {
+                    if (currentStream) {
+                        currentStream.getTracks().forEach(track => track.stop());
+                    }
+                    const constraints = {
+                        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
+                    };
+                    currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                    video.srcObject = currentStream;
+                } catch (err) {
+                    console.error("Errore accesso fotocamera:", err);
+                }
+            }
+
+            function scattaRitaglio() {
+                if (!video.videoWidth) return;
+                const canvas = document.getElementById('crop-canvas');
+                const ctx = canvas.getContext('2d');
+
+                const videoWidth = video.videoWidth;
+                const videoHeight = video.videoHeight;
+                
+                const cropW = Math.floor(videoWidth * 0.65);
+                const cropH = Math.floor(videoHeight * 0.35);
+                const cropX = Math.floor((videoWidth - cropW) / 2);
+                const cropY = Math.floor((videoHeight - cropH) / 2);
+
+                canvas.width = cropW;
+                canvas.height = cropH;
+
+                ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+                const dataUrl = canvas.toDataURL('image/png');
+                document.getElementById('cropped-preview').src = dataUrl;
+                document.getElementById('result-box').style.display = 'block';
+
+                if (window.Html5Qrcode) {
+                    const html5QrCode = new Html5Qrcode("crop-canvas");
+                    html5QrCode.scanFileV2(dataURLtoFile(dataUrl, "label.png"), false)
+                        .then(decodedResult => {
+                            document.getElementById('code-output').innerText = decodedResult.decodedText;
+                        })
+                        .catch(() => {
+                            document.getElementById('code-output').innerText = "Etichetta/Fustella Acquisita";
+                        });
+                }
+            }
+
+            function dataURLtoFile(dataurl, filename) {
+                let arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1],
+                    bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
+                while(n--){ u8arr[n] = bstr.charCodeAt(n); }
+                return new File([u8arr], filename, {type:mime});
+            }
+
+            function copiaEIncolla() {
+                const text = document.getElementById('code-output').innerText;
+                const dummy = document.createElement("textarea");
                 document.body.appendChild(dummy);
                 dummy.value = text;
                 dummy.select();
                 document.execCommand("copy");
                 document.body.removeChild(dummy);
             }
-            function onScanSuccess(decodedText, decodedResult) {
-                document.getElementById("scanned-code").innerText = decodedText;
-                document.getElementById("result-box").style.display = "block";
+
+            function riavviaCamera() {
+                document.getElementById('result-box').style.display = 'none';
+                avviaFotocamera();
             }
-            var html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 15, qrbox: { width: 270, height: 150 } }, false);
-            html5QrcodeScanner.render(onScanSuccess);
+
+            window.onload = avviaFotocamera;
         </script>
     </body>
     </html>
     """
-    components.html(html_code, height=450)
+    components.html(html_code, height=480)
 
 def mostra_avviso_nessun_animale():
     """Mostra un avviso amichevole quando l'utente non ha ancora registrato animali."""
@@ -297,7 +368,7 @@ if st.session_state.logged_user_email is None:
 
     auth_tab1, auth_tab2, auth_tab3 = st.tabs(["🔑 Accedi", "📝 Registrati", "📧 Attivazione Account"])
 
-    # --- SCHEDA ACCESSO ---
+    # SCHEDA ACCESSO
     with auth_tab1:
         st.markdown("<div class='auth-container'>", unsafe_allow_html=True)
         st.markdown("<h3 style='color: #1E3A2B; text-align: center; margin-bottom: 10px;'>Accedi al tuo Account</h3>", unsafe_allow_html=True)
@@ -328,7 +399,7 @@ if st.session_state.logged_user_email is None:
                     st.error("❌ Nessun profilo registrato con questa email. Effettua prima la registrazione nel tab 'Registrati'.")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # --- SCHEDA REGISTRAZIONE ---
+    # SCHEDA REGISTRAZIONE
     with auth_tab2:
         st.markdown("<div class='auth-container'>", unsafe_allow_html=True)
         st.markdown("<h3 style='color: #1E3A2B; text-align: center; margin-bottom: 10px;'>Modulo di Registrazione Utente</h3>", unsafe_allow_html=True)
@@ -384,7 +455,6 @@ if st.session_state.logged_user_email is None:
                     st.info("👉 Passa alla scheda 'Attivazione Account' per attivare ed effettuare il tuo primo accesso.")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # --- SCHEDA ATTIVAZIONE ACCOUNT ---
     with auth_tab3:
         st.markdown("<div class='auth-container'>", unsafe_allow_html=True)
         st.markdown("<h3 style='color: #1E3A2B; text-align: center; margin-bottom: 10px;'>Attivazione & Conferma Registrazione</h3>", unsafe_allow_html=True)
@@ -597,7 +667,7 @@ elif st.session_state.sezione_attiva == "anagrafica":
         st.markdown(f"<h2 style='color: #1E3A2B;'>📋 Scheda Anagrafica - {pet_selected}</h2>", unsafe_allow_html=True)
         anagrafica_corrente = user_db["db_anagrafica"].get(pet_selected, {
             "tipo_animale": "Cane", "nome": pet_selected, "razza": "", "data_nascita": str(date.today()),
-            "microchip": "", "segni_particolari": "", "proprietario_nome": user_db.get("nome", ""),
+            "microchip": "", "microchip_foto": "", "segni_particolari": "", "proprietario_nome": user_db.get("nome", ""),
             "proprietario_indirizzo": "", "proprietario_telefono": user_db.get("numero_whatsapp", ""), "proprietario_citta": ""
         })
 
@@ -614,6 +684,9 @@ elif st.session_state.sezione_attiva == "anagrafica":
                     <p>• <strong>Segni Particolari:</strong> {anagrafica_corrente.get('segni_particolari') or 'Nessuno'}</p>
                 </div>
             """, unsafe_allow_html=True)
+            if anagrafica_corrente.get('microchip_foto'):
+                st.caption("📷 Etichetta Microchip Scansionata:")
+                st.image(anagrafica_corrente.get('microchip_foto'), use_container_width=True)
 
         with col_view2:
             st.markdown(f"""
@@ -626,7 +699,7 @@ elif st.session_state.sezione_attiva == "anagrafica":
                 </div>
             """, unsafe_allow_html=True)
 
-        with st.expander("✏️️ Modifica Anagrafica Pet e Proprietario", expanded=True):
+        with st.expander("✏ Modifica Anagrafica Pet e Proprietario", expanded=True):
             with st.form("form_edit_anagrafica"):
                 col_a1, col_a2 = st.columns(2)
                 with col_a1:
@@ -652,7 +725,8 @@ elif st.session_state.sezione_attiva == "anagrafica":
                         old_n = pet_selected; new_n = e_nome.strip()
                         nuovi_dati = {
                             "tipo_animale": e_tipo, "nome": new_n, "razza": e_razza, "data_nascita": str(e_data_nascita),
-                            "microchip": e_microchip, "segni_particolari": e_segni, "proprietario_nome": e_prop_nome,
+                            "microchip": e_microchip, "microchip_foto": anagrafica_corrente.get('microchip_foto', ''),
+                            "segni_particolari": e_segni, "proprietario_nome": e_prop_nome,
                             "proprietario_indirizzo": e_prop_indirizzo, "proprietario_telefono": e_prop_telefono, "proprietario_citta": e_prop_citta
                         }
                         if old_n != new_n:
@@ -664,14 +738,12 @@ elif st.session_state.sezione_attiva == "anagrafica":
                             user_db["pet_selezionato"] = new_n
                         user_db["db_anagrafica"][new_n] = nuovi_dati
                         salva_dati(); st.success(f"Anagrafica di {new_n} aggiornata!"); st.rerun()
-    else:
-        mostra_avviso_nessun_animale()
 
 elif st.session_state.sezione_attiva == "visite":
     if pet_selected:
         st.markdown(f"<h2 style='color: #1E3A2B;'>🏥 Visite e Clinica - {pet_selected}</h2>", unsafe_allow_html=True)
-        with st.expander("🔍 Scansiona Codice Medicinali / Fustella Vaccino"):
-            mostra_scansionatore_barre("📷 Lettore Codici a Barre e Fustelle")
+        with st.expander("🔍 Scansiona ed Isola Etichetta Vaccino / Microchip"):
+            mostra_scansionatore_barre("📷 Fotocamera & Isolamento Etichetta Vaccino")
 
         with st.expander("➕ Aggiungi Nuova Visita Medica", expanded=True):
             col1, col2 = st.columns(2)
@@ -681,7 +753,7 @@ elif st.session_state.sezione_attiva == "visite":
                 veterinario = st.text_input("Medico Veterinario / Clinica")
             with col2:
                 diagnosi = st.text_area("Diagnosi / Note Cliniche")
-                referto = st.file_uploader("Allega Referto (Opzionale)", type=["pdf", "png", "jpg"], key="v_ref")
+                referto = st.file_uploader("Allega Referto o Scansione Etichetta (Opzionale)", type=["pdf", "png", "jpg"], key="v_ref")
 
             nome_vaccino, lotto_vaccino, scadenza_vaccino = "", "", None
             if tipo_visita == "Vaccinazione":
@@ -725,7 +797,11 @@ elif st.session_state.sezione_attiva == "visite":
             with st.expander(f"🏥 {v['data']} - {v['tipo']} | {'✅ CERTIFICATA' if is_cert else '⏳ IN ATTESA DI FIRMA'}"):
                 st.write(f"**Veterinario:** Dr. {v.get('veterinario', 'N/D')}")
                 if is_cert: st.success(f"🛡️ **Codice Certificato:** `{v.get('codice_certificato')}` | ID Medico: `{v.get('vet_id_permanente')}`")
+                if v.get('nome_vaccino'):
+                    st.write(f"💉 **Vaccino:** {v.get('nome_vaccino')} | **Lotto:** {v.get('lotto_vaccino', 'N/D')}")
                 if v.get('diagnosi'): st.write(f"**Diagnosi:** {v['diagnosi']}")
+                if v.get('referto'):
+                    st.caption(f"📄 Allegato/Etichetta: {v['referto']}")
                 mostra_pulsanti_promemoria_visita(pet_selected, v['tipo'], v['data'], v.get('veterinario', ''), v.get('diagnosi', ''))
     else:
         mostra_avviso_nessun_animale()
@@ -733,7 +809,8 @@ elif st.session_state.sezione_attiva == "visite":
 elif st.session_state.sezione_attiva == "terapie":
     if pet_selected:
         st.markdown(f"<h2 style='color: #1E3A2B;'>💊 Terapie e Farmaci - {pet_selected}</h2>", unsafe_allow_html=True)
-        with st.expander("🔍 Scansiona Barcode Farmaco"): mostra_scansionatore_barre("📷 Lettore Codici Farmaci")
+        with st.expander("🔍 Scansiona Barcode Farmaco"):
+            mostra_scansionatore_barre("📷 Lettore Codici Farmaci")
 
         with st.expander("➕ Nuova Terapia o Prescrizione", expanded=True):
             col1, col2 = st.columns(2)
@@ -810,7 +887,8 @@ elif st.session_state.sezione_attiva == "passaporto":
                         <p><strong>Codice Certificato:</strong> <code>{v.get('codice_certificato')}</code></p>
                     </div>
                 """, unsafe_allow_html=True)
-        else: st.warning("Nessuna prestazione ufficialmente certificata dal veterinario per il passaporto.")
+        else:
+            st.warning("Nessuna prestazione ufficialmente certificata dal veterinario per il passaporto.")
     else:
         mostra_avviso_nessun_animale()
 
@@ -833,7 +911,8 @@ elif st.session_state.sezione_attiva == "angeli":
             user_db["db_fatture"][sel_ang] = dati_ang.get("fatture", [])
             user_db["pet_selezionato"] = sel_ang
             salva_dati(); st.success(f"{sel_ang} è stato ripristinato!"); st.rerun()
-    else: st.info("Nessun animale registrato nella sezione Angeli.")
+    else:
+        st.info("Nessun animale registrato nella sezione Angeli.")
 
 elif st.session_state.sezione_attiva == "nuovo_animale":
     st.markdown("<h2 style='color: #1E3A2B;'>🐾 Registra Nuovo Animale</h2>", unsafe_allow_html=True)
