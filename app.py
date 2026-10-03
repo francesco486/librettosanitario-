@@ -1,11 +1,24 @@
 import streamlit as st
 import json
 import os
+import io
+import base64
 import urllib.parse
 import hashlib
 import uuid
 from datetime import datetime, date
 import streamlit.components.v1 as components
+
+import numpy as np
+from PIL import Image, ImageFilter, ImageOps
+
+# Lettura automatica dei codici a barre (OPZIONALE).
+# Se la libreria "pyzbar" non è installata l'app funziona lo stesso:
+# l'immagine viene salvata e il numero si scrive a mano.
+try:
+    from pyzbar.pyzbar import decode as _zbar_decode
+except Exception:
+    _zbar_decode = None
 
 if "sidebar_state" not in st.session_state:
     st.session_state.sidebar_state = "expanded"
@@ -81,8 +94,190 @@ def cambia_sezione(nuova_sezione):
     st.session_state.trigger_close_sidebar = True
     st.rerun()
 
+# ---------------------------------------------------------------------------
+# SCANSIONE ETICHETTE (microchip e vaccini) CON RIMOZIONE AUTOMATICA DELLO SFONDO
+# ---------------------------------------------------------------------------
+
+def _soglia_otsu(a):
+    """Trova automaticamente la soglia che separa 'carta chiara' da 'sfondo scuro'."""
+    hist = np.bincount(a.ravel(), minlength=256).astype(np.float64)
+    totale = a.size
+    somma_tot = float(np.dot(np.arange(256), hist))
+    peso_b, somma_b, migliore, soglia = 0.0, 0.0, 0.0, 127
+    for t in range(256):
+        peso_b += hist[t]
+        if peso_b == 0:
+            continue
+        peso_f = totale - peso_b
+        if peso_f == 0:
+            break
+        somma_b += t * hist[t]
+        media_b = somma_b / peso_b
+        media_f = (somma_tot - somma_b) / peso_f
+        varianza = peso_b * peso_f * (media_b - media_f) ** 2
+        if varianza > migliore:
+            migliore, soglia = varianza, t
+    return soglia
+
+def _ritaglia_etichetta(img):
+    """Individua la zona chiara (l'etichetta) e ritaglia via il resto della foto."""
+    grigio = ImageOps.grayscale(img)
+    w, h = grigio.size
+    piccola = grigio.resize((max(1, w // 4), max(1, h // 4))).filter(ImageFilter.GaussianBlur(2))
+    a = np.asarray(piccola)
+    ph, pw = a.shape
+    chiaro = a > _soglia_otsu(a)
+
+    righe = np.where(chiaro.mean(axis=1) > 0.30)[0]
+    colonne = np.where(chiaro.mean(axis=0) > 0.30)[0]
+    if len(righe) == 0 or len(colonne) == 0:
+        return img
+
+    y0, y1 = righe[0], righe[-1] + 1
+    x0, x1 = colonne[0], colonne[-1] + 1
+    # Se la zona trovata è troppo piccola non ci fidiamo: lasciamo la foto intera
+    if (y1 - y0) * (x1 - x0) < 0.15 * ph * pw:
+        return img
+
+    margine_y, margine_x = int(0.02 * ph), int(0.02 * pw)
+    y0, y1 = max(0, y0 - margine_y), min(ph, y1 + margine_y)
+    x0, x1 = max(0, x0 - margine_x), min(pw, x1 + margine_x)
+
+    sx, sy = w / pw, h / ph
+    box = (int(x0 * sx), int(y0 * sy), min(w, int(x1 * sx)), min(h, int(y1 * sy)))
+    return img.crop(box)
+
+def _appiattisci_sfondo(grigio):
+    """Elimina ombre e sfondo: la carta diventa bianco puro, inchiostro e barre restano nitidi."""
+    w, h = grigio.size
+    f = 8
+    piccola = grigio.resize((max(1, w // f), max(1, h // f)))
+    k = int(max(3, min(15, min(piccola.size) // 2)))
+    if k % 2 == 0:
+        k += 1
+    sfondo = piccola.filter(ImageFilter.MaxFilter(k)).filter(ImageFilter.GaussianBlur(6))
+    sfondo = sfondo.resize((w, h), Image.BILINEAR)
+
+    g = np.asarray(grigio, dtype=np.float32)
+    s = np.maximum(np.asarray(sfondo, dtype=np.float32), 1.0)
+    norm = np.clip(g / s, 0, 1)
+
+    bianco = 0.90
+    nero = min(float(np.percentile(norm, 1)), bianco - 0.15)
+    x = np.clip((norm - nero) / (bianco - nero), 0, 1)
+    x = x ** 1.4
+    return Image.fromarray((x * 255).astype(np.uint8), "L")
+
+def _leggi_codici(immagine):
+    """Prova a leggere i codici a barre presenti nell'immagine (solo se pyzbar è disponibile)."""
+    if _zbar_decode is None:
+        return []
+    try:
+        trovati = _zbar_decode(immagine)
+        return [t.data.decode("utf-8", "ignore") for t in trovati if t.data]
+    except Exception:
+        return []
+
+@st.cache_data(show_spinner=False, max_entries=20)
+def elabora_etichetta(raw_bytes, rimuovi_sfondo=True):
+    """Riceve la foto, rimuove lo sfondo e restituisce (immagine in base64, codici letti)."""
+    img = Image.open(io.BytesIO(raw_bytes))
+    img = ImageOps.exif_transpose(img).convert("RGB")
+    img.thumbnail((1600, 1600))
+
+    if rimuovi_sfondo:
+        ritagliata = _ritaglia_etichetta(img)
+        risultato = _appiattisci_sfondo(ImageOps.grayscale(ritagliata))
+        codici = _leggi_codici(risultato) or _leggi_codici(ritagliata)
+    else:
+        risultato = img
+        codici = _leggi_codici(img)
+
+    risultato.thumbnail((1000, 1000))
+    buf = io.BytesIO()
+    if rimuovi_sfondo:
+        risultato.save(buf, format="PNG", optimize=True)
+    else:
+        risultato.save(buf, format="JPEG", quality=82)
+    return base64.b64encode(buf.getvalue()).decode("ascii"), codici
+
+def azzera_scansione(chiave):
+    """Svuota il riquadro di scansione (da chiamare dopo il salvataggio)."""
+    k = f"scan_cnt_{chiave}"
+    st.session_state[k] = st.session_state.get(k, 0) + 1
+
+def scansiona_etichetta(chiave, titolo, descrizione):
+    """Mostra fotocamera/caricamento, rimuove lo sfondo e restituisce (immagine_base64, codice_letto)."""
+    cnt_key = f"scan_cnt_{chiave}"
+    if cnt_key not in st.session_state:
+        st.session_state[cnt_key] = 0
+    n = st.session_state[cnt_key]
+
+    st.markdown(f"##### {titolo}")
+    st.caption(descrizione)
+    st.caption("💡 Su smartphone, per usare la fotocamera posteriore scegli «Carica una foto» e poi «Scatta foto».")
+
+    modo = st.radio(
+        "Come vuoi acquisire l'immagine?",
+        ["📷 Scatta con la fotocamera", "🖼️ Carica una foto"],
+        horizontal=True, key=f"scan_modo_{chiave}_{n}"
+    )
+    if modo.startswith("📷"):
+        foto = st.camera_input("Inquadra l'etichetta e scatta", key=f"scan_cam_{chiave}_{n}")
+    else:
+        foto = st.file_uploader("Scegli la foto dell'etichetta", type=["png", "jpg", "jpeg"], key=f"scan_up_{chiave}_{n}")
+
+    if foto is None:
+        return None, ""
+
+    scelta = st.radio(
+        "Versione da salvare",
+        ["✨ Etichetta pulita (sfondo rimosso)", "📄 Foto originale"],
+        horizontal=True, key=f"scan_ver_{chiave}_{n}"
+    )
+    rimuovi = scelta.startswith("✨")
+
+    try:
+        b64, codici = elabora_etichetta(foto.getvalue(), rimuovi)
+    except Exception as e:
+        st.error(f"Non è stato possibile elaborare l'immagine: {e}")
+        return None, ""
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.caption("Foto acquisita")
+        st.image(foto.getvalue())
+    with c2:
+        st.caption("Risultato che verrà salvato")
+        st.image(base64.b64decode(b64))
+
+    codice = codici[0] if codici else ""
+    if codice:
+        st.success(f"🔎 Codice a barre letto: `{codice}`")
+    st.info("✅ Immagine pronta: verrà salvata quando confermi con il pulsante di salvataggio.")
+    return b64, codice
+
+def mostra_immagine_salvata(b64_img, didascalia="", larghezza=None):
+    """Mostra un'immagine salvata (base64) nelle schede."""
+    if not b64_img:
+        return
+    try:
+        dati = base64.b64decode(b64_img)
+        if didascalia:
+            st.caption(didascalia)
+        if larghezza:
+            st.image(dati, width=larghezza)
+        else:
+            st.image(dati)
+    except Exception:
+        st.warning("Immagine salvata non leggibile.")
+
+def codice_microchip_valido(codice):
+    """Un microchip ISO valido ha 15 cifre."""
+    return bool(codice) and codice.isdigit() and len(codice) == 15
+
 def mostra_scansionatore_barre(titolo="📷 Scansiona Etichetta Vaccino o Microchip"):
-    """Mostra un lettore avanzato di etichette e microchip con rimozione automatica dello sfondo ed esaltazione testo."""
+    """Lettore live di barcode (usato per i farmaci nella sezione Terapie)."""
     st.markdown(f"##### {titolo}")
     st.caption("Inquadra l'etichetta del vaccino o del microchip nel riquadro verde. Clicca su 'Scatta ed Isola Etichetta' per rimuovere lo sfondo e pulire la scansione.")
     
@@ -671,6 +866,7 @@ if st.session_state.sezione_attiva == "dashboard":
                         if v.get('veterinario'): st.write(f"**Veterinario:** {v['veterinario']}")
                         if v.get('vet_id_permanente'): st.caption(f"🆔 ID Medico Permanente: `{v['vet_id_permanente']}`")
                         if v.get('nome_vaccino'): st.write(f"💉 **Vaccino:** {v.get('nome_vaccino')} | **Lotto:** {v.get('lotto_vaccino', 'N/D')}")
+                        mostra_immagine_salvata(v.get('etichetta_vaccino'), "🏷️ Etichetta del vaccino")
                         if v.get('diagnosi'): st.write(f"**Diagnosi:** {v['diagnosi']}")
                         mostra_pulsanti_promemoria_visita(pet_selected, v.get('prossimo_controllo_tipo', v['tipo']), v.get('prossimo_controllo_data', v['data']), v.get('veterinario', ''), v.get('diagnosi', ''))
                         if st.button("🗑️ Elimina Visita", key=f"del_vis_dash_{idx}"):
@@ -752,9 +948,7 @@ elif st.session_state.sezione_attiva == "anagrafica":
                     <p>• <strong>Segni Particolari:</strong> {anagrafica_corrente.get('segni_particolari') or 'Nessuno'}</p>
                 </div>
             """, unsafe_allow_html=True)
-            if anagrafica_corrente.get('microchip_foto'):
-                st.caption("📷 Etichetta Microchip Scansionata:")
-                st.image(anagrafica_corrente.get('microchip_foto'), use_container_width=True)
+            mostra_immagine_salvata(anagrafica_corrente.get('microchip_foto'), "📷 Codice a barre del microchip:")
 
         with col_view2:
             st.markdown(f"""
@@ -768,15 +962,47 @@ elif st.session_state.sezione_attiva == "anagrafica":
             """, unsafe_allow_html=True)
 
         with st.expander("✏ Modifica Anagrafica Pet e Proprietario", expanded=True):
+            # --- Scansione del codice a barre del microchip (fuori dal modulo di salvataggio) ---
+            chiave_mc = f"e_microchip_{pet_selected}"
+            chiave_scan_mc = f"chip_edit_{pet_selected}"
+            if chiave_mc not in st.session_state:
+                st.session_state[chiave_mc] = anagrafica_corrente.get('microchip', '')
+
+            foto_chip, codice_chip = scansiona_etichetta(
+                chiave_scan_mc,
+                "📷 Scansiona il codice a barre del microchip",
+                "Fotografa l'adesivo del microchip: lo sfondo viene rimosso e l'immagine verrà mostrata nella scheda anagrafica."
+            )
+            chiave_ultimo = f"ultimo_codice_{chiave_mc}"
+            if codice_microchip_valido(codice_chip) and st.session_state.get(chiave_ultimo) != codice_chip:
+                st.session_state[chiave_mc] = codice_chip
+                st.session_state[chiave_ultimo] = codice_chip
+
+            if anagrafica_corrente.get('microchip_foto'):
+                if st.button("🗑️ Rimuovi l'immagine del microchip salvata", key=f"rm_chip_img_{pet_selected}"):
+                    record = user_db["db_anagrafica"].setdefault(pet_selected, dict(anagrafica_corrente))
+                    record["microchip_foto"] = ""
+                    salva_dati(); st.rerun()
+
+            st.markdown("---")
+
+            specie_opzioni = ["Cane", "Gatto", "Coniglio", "Uccello", "Rettile", "Altro"]
+            tipo_attuale = anagrafica_corrente.get('tipo_animale', 'Cane')
+            idx_tipo = specie_opzioni.index(tipo_attuale) if tipo_attuale in specie_opzioni else 0
+            try:
+                data_nascita_attuale = date.fromisoformat(str(anagrafica_corrente.get('data_nascita')))
+            except Exception:
+                data_nascita_attuale = date.today()
+
             with st.form("form_edit_anagrafica"):
                 col_a1, col_a2 = st.columns(2)
                 with col_a1:
-                    e_tipo = st.selectbox("Tipo / Specie Animale*", ["Cane", "Gatto", "Coniglio", "Uccello", "Rettile", "Altro"])
+                    e_tipo = st.selectbox("Tipo / Specie Animale*", specie_opzioni, index=idx_tipo)
                     e_nome = st.text_input("Nome Animale*", value=anagrafica_corrente.get('nome', pet_selected))
                     e_razza = st.text_input("Razza", value=anagrafica_corrente.get('razza', ''))
                 with col_a2:
-                    e_data_nascita = st.date_input("Data di Nascita")
-                    e_microchip = st.text_input("Numero Microchip", value=anagrafica_corrente.get('microchip', ''))
+                    e_data_nascita = st.date_input("Data di Nascita", value=data_nascita_attuale, min_value=date(2000, 1, 1), max_value=date.today())
+                    e_microchip = st.text_input("Numero Microchip", key=chiave_mc)
                     e_segni = st.text_area("Segni Particolari", value=anagrafica_corrente.get('segni_particolari', ''))
 
                 st.markdown("---")
@@ -791,9 +1017,10 @@ elif st.session_state.sezione_attiva == "anagrafica":
                 if st.form_submit_button("💾 Salva Modifiche Anagrafica"):
                     if e_nome.strip():
                         old_n = pet_selected; new_n = e_nome.strip()
+                        microchip_foto_finale = foto_chip if foto_chip else anagrafica_corrente.get('microchip_foto', '')
                         nuovi_dati = {
                             "tipo_animale": e_tipo, "nome": new_n, "razza": e_razza, "data_nascita": str(e_data_nascita),
-                            "microchip": e_microchip, "microchip_foto": anagrafica_corrente.get('microchip_foto', ''),
+                            "microchip": e_microchip.strip(), "microchip_foto": microchip_foto_finale,
                             "segni_particolari": e_segni, "proprietario_nome": e_prop_nome,
                             "proprietario_indirizzo": e_prop_indirizzo, "proprietario_telefono": e_prop_telefono, "proprietario_citta": e_prop_citta
                         }
@@ -805,13 +1032,15 @@ elif st.session_state.sezione_attiva == "anagrafica":
                             user_db["db_anagrafica"].pop(old_n, None)
                             user_db["pet_selezionato"] = new_n
                         user_db["db_anagrafica"][new_n] = nuovi_dati
+                        if foto_chip:
+                            azzera_scansione(chiave_scan_mc)
                         salva_dati(); st.success(f"Anagrafica di {new_n} aggiornata!"); st.rerun()
+    else:
+        mostra_avviso_nessun_animale()
 
 elif st.session_state.sezione_attiva == "visite":
     if pet_selected:
         st.markdown(f"<h2 style='color: #1E3A2B;'>🏥 Visite e Clinica - {pet_selected}</h2>", unsafe_allow_html=True)
-        with st.expander("🔍 Scansiona ed Isola Etichetta Vaccino / Microchip"):
-            mostra_scansionatore_barre("📷 Fotocamera & Isolamento Etichetta Vaccino")
 
         with st.expander("➕ Aggiungi Nuova Visita Medica", expanded=True):
             col1, col2 = st.columns(2)
@@ -821,14 +1050,24 @@ elif st.session_state.sezione_attiva == "visite":
                 veterinario = st.text_input("Medico Veterinario / Clinica")
             with col2:
                 diagnosi = st.text_area("Diagnosi / Note Cliniche")
-                referto = st.file_uploader("Allega Referto o Scansione Etichetta (Opzionale)", type=["pdf", "png", "jpg"], key="v_ref")
+                referto = st.file_uploader("Allega Referto (Opzionale)", type=["pdf", "png", "jpg"], key="v_ref")
 
             nome_vaccino, lotto_vaccino, scadenza_vaccino = "", "", None
+            etichetta_vaccino_b64 = ""
             if tipo_visita == "Vaccinazione":
                 col_v1, col_v2, col_v3 = st.columns(3)
                 with col_v1: nome_vaccino = st.text_input("Nome Vaccino*")
                 with col_v2: lotto_vaccino = st.text_input("N° Lotto Vaccino*")
                 with col_v3: scadenza_vaccino = st.date_input("Scadenza Vaccino")
+
+                st.markdown("---")
+                foto_vaccino, _codice_vaccino = scansiona_etichetta(
+                    "vaccino",
+                    "🏷️ Scansiona l'etichetta del vaccino",
+                    "Fotografa l'adesivo del vaccino: lo sfondo viene rimosso e l'etichetta verrà salvata nella scheda di questa vaccinazione."
+                )
+                etichetta_vaccino_b64 = foto_vaccino or ""
+                st.markdown("---")
 
             chi_inserisce = st.radio("Chi inserisce la prestazione?", ["Utente (In attesa di firma)", "Veterinario (Certificazione Ufficiale Immediata)"], horizontal=True)
             certificato_valido, vet_id_perm, codice_cert, num_ordine_vet, provincia_vet = False, None, None, "", ""
@@ -851,10 +1090,12 @@ elif st.session_state.sezione_attiva == "visite":
                     "referto": referto.name if referto else None, "certificata": certificato_valido,
                     "num_ordine_vet": num_ordine_vet, "provincia_vet": provincia_vet, "vet_id_permanente": vet_id_perm,
                     "codice_certificato": codice_cert, "nome_vaccino": nome_vaccino, "lotto_vaccino": lotto_vaccino,
-                    "scadenza_vaccino": str(scadenza_vaccino) if scadenza_vaccino else ""
+                    "scadenza_vaccino": str(scadenza_vaccino) if scadenza_vaccino else "",
+                    "etichetta_vaccino": etichetta_vaccino_b64
                 }
                 if pet_selected not in user_db["db_visite"]: user_db["db_visite"][pet_selected] = []
                 user_db["db_visite"][pet_selected].append(nuova_visita)
+                azzera_scansione("vaccino")
                 salva_dati(); st.success("Visita registrata con successo!"); st.rerun()
 
         st.markdown("### 📋 Visite e Certificati Registrati")
@@ -867,9 +1108,10 @@ elif st.session_state.sezione_attiva == "visite":
                 if is_cert: st.success(f"🛡️ **Codice Certificato:** `{v.get('codice_certificato')}` | ID Medico: `{v.get('vet_id_permanente')}`")
                 if v.get('nome_vaccino'):
                     st.write(f"💉 **Vaccino:** {v.get('nome_vaccino')} | **Lotto:** {v.get('lotto_vaccino', 'N/D')}")
+                mostra_immagine_salvata(v.get('etichetta_vaccino'), "🏷️ Etichetta del vaccino")
                 if v.get('diagnosi'): st.write(f"**Diagnosi:** {v['diagnosi']}")
                 if v.get('referto'):
-                    st.caption(f"📄 Allegato/Etichetta: {v['referto']}")
+                    st.caption(f"📄 Allegato: {v['referto']}")
                 mostra_pulsanti_promemoria_visita(pet_selected, v['tipo'], v['data'], v.get('veterinario', ''), v.get('diagnosi', ''))
     else:
         mostra_avviso_nessun_animale()
@@ -955,6 +1197,7 @@ elif st.session_state.sezione_attiva == "passaporto":
                         <p><strong>Codice Certificato:</strong> <code>{v.get('codice_certificato')}</code></p>
                     </div>
                 """, unsafe_allow_html=True)
+                mostra_immagine_salvata(v.get('etichetta_vaccino'), "🏷️ Etichetta del vaccino", larghezza=320)
         else:
             st.warning("Nessuna prestazione ufficialmente certificata dal veterinario per il passaporto.")
     else:
@@ -977,6 +1220,8 @@ elif st.session_state.sezione_attiva == "angeli":
             user_db["db_visite"][sel_ang] = dati_ang.get("visite", [])
             user_db["db_terapie"][sel_ang] = dati_ang.get("terapie", [])
             user_db["db_fatture"][sel_ang] = dati_ang.get("fatture", [])
+            if dati_ang.get("anagrafica"):
+                user_db["db_anagrafica"][sel_ang] = dati_ang["anagrafica"]
             user_db["pet_selezionato"] = sel_ang
             salva_dati(); st.success(f"{sel_ang} è stato ripristinato!"); st.rerun()
     else:
@@ -986,8 +1231,15 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
     st.markdown("<h2 style='color: #1E3A2B;'>🐾 Registra Nuovo Animale</h2>", unsafe_allow_html=True)
     st.caption("Compila la scheda anagrafica sottostante per creare il nuovo libretto sanitario digitale.")
     
-    with st.expander("📷 Scansiona Codice Microchip da Libretto Cartaceo", expanded=False):
-        mostra_scansionatore_barre("📷 Scansiona Adesivo Microchip dell'Animale")
+    with st.expander("📷 Scansiona il Codice a Barre del Microchip", expanded=False):
+        foto_chip_n, codice_chip_n = scansiona_etichetta(
+            "chip_nuovo",
+            "📷 Scansiona l'adesivo del microchip",
+            "Fotografa l'adesivo del libretto cartaceo: lo sfondo viene rimosso e l'immagine verrà salvata nella scheda anagrafica."
+        )
+    if codice_microchip_valido(codice_chip_n) and st.session_state.get("ultimo_codice_chip_nuovo") != codice_chip_n:
+        st.session_state["n_microchip"] = codice_chip_n
+        st.session_state["ultimo_codice_chip_nuovo"] = codice_chip_n
 
     with st.form("form_nuovo_animale"):
         st.markdown("### 🐾 1. Dati Anagrafici dell'Animale")
@@ -997,8 +1249,8 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
             n_specie = st.selectbox("Specie / Tipo Animale*", ["Cane", "Gatto", "Coniglio", "Uccello", "Rettile", "Altro"])
             n_razza = st.text_input("Razza dell'Animale", placeholder="es. Meticcio, Labradoodle, Europeo...")
         with c2:
-            n_data = st.date_input("Data di Nascita Presunta / Effettiva")
-            n_microchip = st.text_input("Numero Microchip (15 Cifre)", placeholder="es. 380260000000000")
+            n_data = st.date_input("Data di Nascita Presunta / Effettiva", value=date.today(), min_value=date(2000, 1, 1), max_value=date.today())
+            n_microchip = st.text_input("Numero Microchip (15 Cifre)", key="n_microchip", placeholder="es. 380260000000000")
             n_segni = st.text_input("Segni Particolari o Note", placeholder="es. Macchia sul petto, macchia nera zampa destra...")
         
         st.markdown("---")
@@ -1026,6 +1278,7 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
                     "razza": n_razza,
                     "data_nascita": str(n_data),
                     "microchip": n_microchip.strip(),
+                    "microchip_foto": foto_chip_n or "",
                     "segni_particolari": n_segni,
                     "proprietario_nome": n_prop_nome.strip(),
                     "proprietario_telefono": n_prop_tel.strip(),
@@ -1034,6 +1287,8 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
                 }
                 user_db["pet_selezionato"] = pet_name
                 st.session_state.sezione_attiva = "anagrafica"
+                azzera_scansione("chip_nuovo")
+                st.session_state.pop("ultimo_codice_chip_nuovo", None)
                 salva_dati()
                 st.success(f"🎉 Scheda e libretto sanitario di {pet_name} creati con successo!")
                 st.rerun()
