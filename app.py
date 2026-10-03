@@ -201,33 +201,304 @@ def elabora_etichetta(raw_bytes, rimuovi_sfondo=True):
         risultato.save(buf, format="JPEG", quality=82)
     return base64.b64encode(buf.getvalue()).decode("ascii"), codici
 
+# ---------------------------------------------------------------------------
+# FOTOCAMERA GUIDATA: riquadro verde + ritaglio automatico.
+# Viene salvato SOLO ciò che sta dentro il riquadro (o, se il telefono lo supporta,
+# il solo codice a barre rilevato in automatico e riquadrato in giallo).
+# Il componente viene creato da solo in una cartella "componente_scanner".
+# ---------------------------------------------------------------------------
+SCANNER_HTML = r"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  #wrap { width: 100%; max-width: 640px; margin: 0 auto; padding: 2px; box-sizing: border-box; }
+  #stage { position: relative; width: 100%; aspect-ratio: 4 / 3; background: #000; border-radius: 14px; overflow: hidden; border: 2.5px solid #1E3A2B; box-sizing: border-box; }
+  #video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+  #frame { position: absolute; border: 3px solid #22c55e; border-radius: 10px; box-shadow: 0 0 0 2000px rgba(15,23,42,0.62); pointer-events: none; }
+  #detect { position: absolute; border: 3px solid #facc15; border-radius: 6px; display: none; pointer-events: none; }
+  #hint { position: absolute; left: 0; right: 0; bottom: 6px; text-align: center; color: #fff; font-size: 13px; font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,0.9); pointer-events: none; padding: 0 8px; }
+  .row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  button { flex: 1; min-width: 110px; border: none; border-radius: 10px; padding: 12px 14px; font-size: 15px; font-weight: 700; cursor: pointer; color: #fff; background: #16a34a; }
+  button.sec { background: #475569; }
+  button:active { transform: scale(0.98); }
+  #status { margin-top: 8px; font-size: 14px; color: #1E3A2B; text-align: center; min-height: 20px; }
+  #status.err { color: #b91c1c; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage">
+    <video id="video" autoplay playsinline muted></video>
+    <div id="frame"></div>
+    <div id="detect"></div>
+    <div id="hint"></div>
+  </div>
+  <div class="row">
+    <button id="btnScatta">📸 Scatta</button>
+    <button id="btnTorcia" class="sec" style="display:none">🔦 Torcia</button>
+    <button id="btnRiavvia" class="sec">🔄 Riavvia</button>
+  </div>
+  <div id="status"></div>
+</div>
+<script>
+(function () {
+  var video = document.getElementById("video");
+  var stage = document.getElementById("stage");
+  var frame = document.getElementById("frame");
+  var detectBox = document.getElementById("detect");
+  var hint = document.getElementById("hint");
+  var statusEl = document.getElementById("status");
+  var btnScatta = document.getElementById("btnScatta");
+  var btnTorcia = document.getElementById("btnTorcia");
+  var btnRiavvia = document.getElementById("btnRiavvia");
+
+  var args = { modo: "etichetta", frame_w: 0.85, frame_h: 0.6 };
+  var stream = null, track = null, torchOn = false, avviando = false;
+  var detector = null, ultimo = null;
+
+  try { if ("BarcodeDetector" in window) { detector = new BarcodeDetector(); } } catch (e) { detector = null; }
+
+  function send(type, data) {
+    var m = { isStreamlitMessage: true, type: type };
+    for (var k in data) { m[k] = data[k]; }
+    window.parent.postMessage(m, "*");
+  }
+  function setHeight() { send("streamlit:setFrameHeight", { height: document.documentElement.scrollHeight + 4 }); }
+  function setStatus(t, err) { statusEl.textContent = t || ""; statusEl.className = err ? "err" : ""; }
+
+  function applicaFrame() {
+    var fw = args.frame_w, fh = args.frame_h;
+    frame.style.width = (fw * 100) + "%";
+    frame.style.height = (fh * 100) + "%";
+    frame.style.left = ((1 - fw) / 2 * 100) + "%";
+    frame.style.top = ((1 - fh) / 2 * 100) + "%";
+    hint.textContent = (args.modo === "barcode")
+      ? "Inquadra il codice a barre dentro il riquadro verde"
+      : "Inquadra l'etichetta dentro il riquadro verde";
+  }
+
+  function geom() {
+    var vw = video.videoWidth, vh = video.videoHeight;
+    var cw = stage.clientWidth, ch = stage.clientHeight;
+    if (!vw || !vh || !cw || !ch) { return null; }
+    var s = Math.max(cw / vw, ch / vh);
+    return { vw: vw, vh: vh, cw: cw, ch: ch, s: s, ox: (vw * s - cw) / 2, oy: (vh * s - ch) / 2 };
+  }
+
+  async function avvia() {
+    if (stream || avviando) { return; }
+    avviando = true;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false
+      });
+      video.srcObject = stream;
+      track = stream.getVideoTracks()[0];
+      var caps = (track && track.getCapabilities) ? (track.getCapabilities() || {}) : {};
+      if (caps.focusMode && caps.focusMode.indexOf("continuous") >= 0) {
+        try { await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] }); } catch (e) {}
+      }
+      btnTorcia.style.display = caps.torch ? "block" : "none";
+      setStatus("");
+    } catch (err) {
+      stream = null; track = null;
+      setStatus("Fotocamera non disponibile: consenti l'accesso oppure usa «Carica una foto».", true);
+    }
+    avviando = false;
+    setHeight();
+  }
+
+  function ferma() {
+    if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); }
+    stream = null; track = null; torchOn = false;
+    video.srcObject = null;
+  }
+
+  function mostraBox() {
+    var g = geom();
+    if (!g || !ultimo || (Date.now() - ultimo.t) > 900) { detectBox.style.display = "none"; return; }
+    var b = ultimo.box;
+    detectBox.style.left = (b.x * g.s - g.ox) + "px";
+    detectBox.style.top = (b.y * g.s - g.oy) + "px";
+    detectBox.style.width = (b.width * g.s) + "px";
+    detectBox.style.height = (b.height * g.s) + "px";
+    detectBox.style.display = "block";
+  }
+
+  async function ciclo() {
+    if (detector && stream && video.videoWidth) {
+      try {
+        var res = await detector.detect(video);
+        if (res && res.length) {
+          var scelto = res[0];
+          for (var i = 0; i < res.length; i++) {
+            if (/^\d{15}$/.test(res[i].rawValue || "")) { scelto = res[i]; break; }
+          }
+          ultimo = { box: scelto.boundingBox, value: scelto.rawValue || "", t: Date.now() };
+        }
+      } catch (e) {}
+      mostraBox();
+    }
+    setTimeout(ciclo, 300);
+  }
+
+  function scatta() {
+    var g = geom();
+    if (!g || !stream) { setStatus("La fotocamera non è ancora pronta.", true); return; }
+    var fw = args.frame_w, fh = args.frame_h;
+    var sx = (g.cw * (1 - fw) / 2 + g.ox) / g.s;
+    var sy = (g.ch * (1 - fh) / 2 + g.oy) / g.s;
+    var sw = (g.cw * fw) / g.s;
+    var sh = (g.ch * fh) / g.s;
+
+    var recente = ultimo && ((Date.now() - ultimo.t) < 1500);
+    if (args.modo === "barcode" && recente) {
+      var b = ultimo.box;
+      sx = b.x - b.width * 0.15;
+      sy = b.y - b.height * 0.35;
+      sw = b.width * 1.30;
+      sh = b.height * 1.85;
+    }
+    sx = Math.max(0, sx); sy = Math.max(0, sy);
+    sw = Math.min(g.vw - sx, sw); sh = Math.min(g.vh - sy, sh);
+    if (sw < 10 || sh < 10) { setStatus("Inquadratura non valida, riprova.", true); return; }
+
+    var k = Math.min(1, 1600 / Math.max(sw, sh));
+    var canvas = document.createElement("canvas");
+    canvas.width = Math.round(sw * k);
+    canvas.height = Math.round(sh * k);
+    canvas.getContext("2d").drawImage(video, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+    var dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+
+    send("streamlit:setComponentValue", {
+      value: { img: dataUrl, codice: recente ? ultimo.value : "", n: Date.now() },
+      dataType: "json"
+    });
+    setStatus("✅ Foto acquisita: controlla il risultato qui sotto. Puoi scattare di nuovo se non va bene.");
+  }
+
+  btnScatta.addEventListener("click", scatta);
+  btnRiavvia.addEventListener("click", function () { ferma(); avvia(); });
+  btnTorcia.addEventListener("click", async function () {
+    if (!track) { return; }
+    try {
+      torchOn = !torchOn;
+      await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+    } catch (e) { torchOn = false; }
+  });
+
+  // La fotocamera si accende solo quando il riquadro è visibile (e si spegne quando non lo è)
+  if ("IntersectionObserver" in window) {
+    new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { if (e.isIntersecting) { avvia(); } else { ferma(); } });
+    }, { threshold: 0.05 }).observe(stage);
+  } else {
+    avvia();
+  }
+
+  window.addEventListener("message", function (ev) {
+    if (ev.data && ev.data.type === "streamlit:render") {
+      var a = ev.data.args || {};
+      if (a.modo) { args.modo = a.modo; }
+      if (a.frame_w) { args.frame_w = a.frame_w; }
+      if (a.frame_h) { args.frame_h = a.frame_h; }
+      applicaFrame();
+      setHeight();
+    }
+  });
+  window.addEventListener("resize", setHeight);
+  window.addEventListener("pagehide", ferma);
+
+  send("streamlit:componentReady", { apiVersion: 1 });
+  applicaFrame();
+  setHeight();
+  ciclo();
+})();
+</script>
+</body>
+</html>
+"""
+
+COMPONENT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "componente_scanner")
+
+def _prepara_componente_scanner():
+    """Crea (se serve) la cartella del componente fotocamera e lo registra in Streamlit."""
+    os.makedirs(COMPONENT_DIR, exist_ok=True)
+    percorso = os.path.join(COMPONENT_DIR, "index.html")
+    aggiorna = True
+    if os.path.exists(percorso):
+        with open(percorso, "r", encoding="utf-8") as f:
+            aggiorna = (f.read() != SCANNER_HTML)
+    if aggiorna:
+        with open(percorso, "w", encoding="utf-8") as f:
+            f.write(SCANNER_HTML)
+    return components.declare_component("pethealth_scanner", path=COMPONENT_DIR)
+
+try:
+    _scanner_cam = _prepara_componente_scanner()
+except Exception:
+    _scanner_cam = None  # in questo caso si usa la fotocamera standard di Streamlit
+
 def azzera_scansione(chiave):
     """Svuota il riquadro di scansione (da chiamare dopo il salvataggio)."""
     k = f"scan_cnt_{chiave}"
     st.session_state[k] = st.session_state.get(k, 0) + 1
 
-def scansiona_etichetta(chiave, titolo, descrizione):
-    """Mostra fotocamera/caricamento, rimuove lo sfondo e restituisce (immagine_base64, codice_letto)."""
+def scansiona_etichetta(chiave, titolo, descrizione, modo_guida="etichetta"):
+    """Fotocamera guidata (o caricamento foto), rimozione sfondo. Restituisce (immagine_base64, codice_letto).
+    modo_guida: "barcode" (microchip) oppure "etichetta" (vaccino)."""
     cnt_key = f"scan_cnt_{chiave}"
     if cnt_key not in st.session_state:
         st.session_state[cnt_key] = 0
     n = st.session_state[cnt_key]
 
+    if modo_guida == "barcode":
+        frame_w, frame_h = 0.88, 0.36
+    else:
+        frame_w, frame_h = 0.84, 0.66
+
     st.markdown(f"##### {titolo}")
     st.caption(descrizione)
-    st.caption("💡 Su smartphone, per usare la fotocamera posteriore scegli «Carica una foto» e poi «Scatta foto».")
 
     modo = st.radio(
         "Come vuoi acquisire l'immagine?",
-        ["📷 Scatta con la fotocamera", "🖼️ Carica una foto"],
+        ["📷 Fotocamera guidata", "🖼️ Carica una foto"],
         horizontal=True, key=f"scan_modo_{chiave}_{n}"
     )
-    if modo.startswith("📷"):
-        foto = st.camera_input("Inquadra l'etichetta e scatta", key=f"scan_cam_{chiave}_{n}")
-    else:
-        foto = st.file_uploader("Scegli la foto dell'etichetta", type=["png", "jpg", "jpeg"], key=f"scan_up_{chiave}_{n}")
 
-    if foto is None:
+    foto_bytes = None
+    codice_js = ""
+
+    if modo.startswith("📷"):
+        if _scanner_cam is not None:
+            st.caption("🎯 Posiziona il codice/etichetta dentro il **riquadro verde** e premi «Scatta»: verrà salvato solo ciò che è dentro il riquadro. "
+                       "Se il tuo telefono lo supporta, il codice a barre viene riconosciuto da solo e segnato in giallo.")
+            risultato_cam = _scanner_cam(
+                key=f"scan_cam_{chiave}_{n}", modo=modo_guida,
+                frame_w=frame_w, frame_h=frame_h, default=None
+            )
+            if risultato_cam and risultato_cam.get("img"):
+                try:
+                    foto_bytes = base64.b64decode(risultato_cam["img"].split(",", 1)[1])
+                    codice_js = (risultato_cam.get("codice") or "").strip()
+                except Exception:
+                    foto_bytes = None
+        else:
+            st.caption("💡 Inquadra bene l'etichetta, occupando gran parte della foto.")
+            foto = st.camera_input("Inquadra l'etichetta e scatta", key=f"scan_cam_{chiave}_{n}")
+            if foto is not None:
+                foto_bytes = foto.getvalue()
+    else:
+        st.caption("💡 Su smartphone scegli «Scatta foto» per usare la fotocamera posteriore. Avvicinati: l'etichetta deve riempire la foto.")
+        foto = st.file_uploader("Scegli la foto dell'etichetta", type=["png", "jpg", "jpeg"], key=f"scan_up_{chiave}_{n}")
+        if foto is not None:
+            foto_bytes = foto.getvalue()
+
+    if foto_bytes is None:
         return None, ""
 
     scelta = st.radio(
@@ -238,7 +509,7 @@ def scansiona_etichetta(chiave, titolo, descrizione):
     rimuovi = scelta.startswith("✨")
 
     try:
-        b64, codici = elabora_etichetta(foto.getvalue(), rimuovi)
+        b64, codici = elabora_etichetta(foto_bytes, rimuovi)
     except Exception as e:
         st.error(f"Non è stato possibile elaborare l'immagine: {e}")
         return None, ""
@@ -246,12 +517,12 @@ def scansiona_etichetta(chiave, titolo, descrizione):
     c1, c2 = st.columns(2)
     with c1:
         st.caption("Foto acquisita")
-        st.image(foto.getvalue())
+        st.image(foto_bytes)
     with c2:
         st.caption("Risultato che verrà salvato")
         st.image(base64.b64decode(b64))
 
-    codice = codici[0] if codici else ""
+    codice = codice_js or (codici[0] if codici else "")
     if codice:
         st.success(f"🔎 Codice a barre letto: `{codice}`")
     st.info("✅ Immagine pronta: verrà salvata quando confermi con il pulsante di salvataggio.")
@@ -971,7 +1242,8 @@ elif st.session_state.sezione_attiva == "anagrafica":
             foto_chip, codice_chip = scansiona_etichetta(
                 chiave_scan_mc,
                 "📷 Scansiona il codice a barre del microchip",
-                "Fotografa l'adesivo del microchip: lo sfondo viene rimosso e l'immagine verrà mostrata nella scheda anagrafica."
+                "Fotografa l'adesivo del microchip: lo sfondo viene rimosso e l'immagine verrà mostrata nella scheda anagrafica.",
+                modo_guida="barcode"
             )
             chiave_ultimo = f"ultimo_codice_{chiave_mc}"
             if codice_microchip_valido(codice_chip) and st.session_state.get(chiave_ultimo) != codice_chip:
@@ -1064,7 +1336,8 @@ elif st.session_state.sezione_attiva == "visite":
                 foto_vaccino, _codice_vaccino = scansiona_etichetta(
                     "vaccino",
                     "🏷️ Scansiona l'etichetta del vaccino",
-                    "Fotografa l'adesivo del vaccino: lo sfondo viene rimosso e l'etichetta verrà salvata nella scheda di questa vaccinazione."
+                    "Fotografa l'adesivo del vaccino: lo sfondo viene rimosso e l'etichetta verrà salvata nella scheda di questa vaccinazione.",
+                    modo_guida="etichetta"
                 )
                 etichetta_vaccino_b64 = foto_vaccino or ""
                 st.markdown("---")
@@ -1235,7 +1508,8 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
         foto_chip_n, codice_chip_n = scansiona_etichetta(
             "chip_nuovo",
             "📷 Scansiona l'adesivo del microchip",
-            "Fotografa l'adesivo del libretto cartaceo: lo sfondo viene rimosso e l'immagine verrà salvata nella scheda anagrafica."
+            "Fotografa l'adesivo del libretto cartaceo: lo sfondo viene rimosso e l'immagine verrà salvata nella scheda anagrafica.",
+            modo_guida="barcode"
         )
     if codice_microchip_valido(codice_chip_n) and st.session_state.get("ultimo_codice_chip_nuovo") != codice_chip_n:
         st.session_state["n_microchip"] = codice_chip_n
