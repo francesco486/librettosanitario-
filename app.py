@@ -1135,14 +1135,86 @@ st.markdown("""
     }
     #MainMenu, footer { visibility: hidden; }
     header[data-testid="stHeader"] { background-color: transparent !important; }
-    section[data-testid="stSidebar"] {
-        background-color: #1E3A2B !important; border-right: 1px solid #2D4A3E !important;
+    /* ===== MENU LATERALE AZZURRO CON SCRITTE BIANCHE (uguale su tutti i dispositivi) ===== */
+    [data-testid="stSidebar"],
+    [data-testid="stSidebar"] > div,
+    [data-testid="stSidebarContent"],
+    [data-testid="stSidebarHeader"],
+    [data-testid="stSidebarUserContent"] {
+        background-color: #0284C7 !important;
+        background-image: none !important;
     }
-    section[data-testid="stSidebar"] p, section[data-testid="stSidebar"] h1, 
-    section[data-testid="stSidebar"] h2, section[data-testid="stSidebar"] h3, 
-    section[data-testid="stSidebar"] span, section[data-testid="stSidebar"] label {
+    [data-testid="stSidebar"] { border-right: 1px solid #0369A1 !important; }
+
+    /* Tutte le scritte del menù in bianco */
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3,
+    [data-testid="stSidebar"] h4, [data-testid="stSidebar"] h5, [data-testid="stSidebar"] h6,
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] li, [data-testid="stSidebar"] small, [data-testid="stSidebar"] summary,
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] *,
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] *,
+    [data-testid="stSidebar"] [data-testid="stWidgetLabel"] * {
         color: #FFFFFF !important;
+        -webkit-text-fill-color: #FFFFFF !important;
     }
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] { opacity: 1 !important; }
+    [data-testid="stSidebar"] hr { border-color: rgba(255, 255, 255, 0.45) !important; }
+
+    /* Campi di testo e menù a tendina: sfondo bianco e testo scuro, per restare leggibili */
+    [data-testid="stSidebar"] input, [data-testid="stSidebar"] textarea {
+        color: #0F172A !important; -webkit-text-fill-color: #0F172A !important; background-color: #FFFFFF !important;
+    }
+    [data-testid="stSidebar"] input::placeholder, [data-testid="stSidebar"] textarea::placeholder {
+        color: #64748B !important; -webkit-text-fill-color: #64748B !important;
+    }
+    [data-testid="stSidebar"] [data-baseweb="input"], [data-testid="stSidebar"] [data-baseweb="base-input"],
+    [data-testid="stSidebar"] [data-baseweb="select"] > div {
+        background-color: #FFFFFF !important;
+    }
+    [data-testid="stSidebar"] [data-baseweb="select"] * {
+        color: #0F172A !important; -webkit-text-fill-color: #0F172A !important;
+    }
+    [data-testid="stSidebar"] [data-baseweb="select"] svg { fill: #0F172A !important; }
+
+    /* Pulsanti del menù */
+    [data-testid="stSidebar"] .stButton > button,
+    [data-testid="stSidebar"] [data-testid="stBaseButton-secondary"] {
+        background-color: #0369A1 !important; border: 1px solid rgba(255, 255, 255, 0.55) !important; box-shadow: none !important;
+    }
+    [data-testid="stSidebar"] .stButton > button:hover,
+    [data-testid="stSidebar"] [data-testid="stBaseButton-secondary"]:hover {
+        background-color: #075985 !important;
+    }
+
+    /* Riquadri a scomparsa e messaggi dentro il menù */
+    [data-testid="stSidebar"] [data-testid="stExpander"] details {
+        background-color: rgba(255, 255, 255, 0.14) !important;
+        border: 1px solid rgba(255, 255, 255, 0.45) !important; border-radius: 12px !important;
+    }
+    [data-testid="stSidebar"] summary svg { fill: #FFFFFF !important; color: #FFFFFF !important; }
+    [data-testid="stSidebar"] [data-testid="stAlert"] {
+        background-color: rgba(255, 255, 255, 0.18) !important; border: 1px solid rgba(255, 255, 255, 0.45) !important;
+    }
+
+    /* Freccia per chiudere il menù (dentro il menù) e per riaprirlo (sempre visibile, azzurra) */
+    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button,
+    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button:hover {
+        background-color: transparent !important; border: none !important; box-shadow: none !important;
+    }
+    [data-testid="stSidebarCollapseButton"] svg, [data-testid="stSidebarCollapseButton"] span,
+    [data-testid="stSidebarHeader"] svg {
+        color: #FFFFFF !important; fill: #FFFFFF !important;
+    }
+    [data-testid="stExpandSidebarButton"],
+    [data-testid="stSidebarCollapsedControl"] button,
+    [data-testid="collapsedControl"] button {
+        background-color: #0284C7 !important; border-radius: 10px !important;
+    }
+    [data-testid="stExpandSidebarButton"] svg, [data-testid="stSidebarCollapsedControl"] svg,
+    [data-testid="collapsedControl"] svg {
+        color: #FFFFFF !important; fill: #FFFFFF !important;
+    }
+
     .wellness-card {
         background-color: #FFFFFF !important; border-radius: 16px; padding: 20px;
         border: 1px solid #E2E8E4 !important; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02); margin-bottom: 16px;
@@ -1168,9 +1240,6 @@ st.markdown("""
     div[data-testid="stFormSubmitButton"] > button p, div[data-testid="stFormSubmitButton"] > button span,
     .stButton > button p, .stButton > button span {
         color: #FFFFFF !important; font-weight: 700 !important; font-size: 1rem !important;
-    }
-    section[data-testid="stSidebar"] .stButton > button {
-        background-color: #2D4A3E !important; border: 1px solid #3E6352 !important;
     }
     </style>
 """, unsafe_allow_html=True)
