@@ -7,6 +7,7 @@ import urllib.parse
 import hashlib
 import uuid
 from datetime import datetime, date
+from html import escape as html_escape
 import streamlit.components.v1 as components
 
 import numpy as np
@@ -771,6 +772,16 @@ def scansiona_etichetta(chiave, titolo, descrizione, modo_guida="etichetta"):
     codice = codice_js or (codici[0] if codici else "")
     if codice:
         st.success(f"🔎 Codice a barre letto: `{codice}`")
+    if modo_guida == "barcode":
+        if codice_microchip_valido(codice):
+            svg_prev = genera_barcode_svg(codice)
+            if svg_prev:
+                st.caption("🖨️ Versione digitale (vettoriale) del codice a barre, che verrà mostrata nell'anagrafica:")
+                st.markdown(svg_in_html(svg_prev), unsafe_allow_html=True)
+        elif codice:
+            st.warning("Il codice letto non sembra un numero di microchip (15 cifre): controllalo e scrivilo a mano nel campo «Numero Microchip».")
+        else:
+            st.caption("ℹ️ Il numero non è stato letto dalla foto: scrivilo nel campo «Numero Microchip» e l'app creerà il codice a barre digitale.")
     st.info("✅ Immagine pronta: verrà salvata quando confermi con il pulsante di salvataggio.")
     return b64, codice
 
@@ -788,6 +799,74 @@ def mostra_immagine_salvata(b64_img, didascalia="", larghezza=None):
             st.image(dati)
     except Exception:
         st.warning("Immagine salvata non leggibile.")
+
+# ---------------------------------------------------------------------------
+# CODICE A BARRE DIGITALE (vettoriale, SVG) - standard Code 128
+# Parte dal numero del microchip e disegna un codice nitido, senza sfondo né ombre.
+# ---------------------------------------------------------------------------
+_CODE128_PATTERNS = [
+    "212222", "222122", "222221", "121223", "121322", "131222", "122213", "122312", "132212", "221213",
+    "221312", "231212", "112232", "122132", "122231", "113222", "123122", "123221", "223211", "221132",
+    "221231", "213212", "223112", "312131", "311222", "321122", "321221", "312212", "322112", "322211",
+    "212123", "212321", "232121", "111323", "131123", "131321", "112313", "132113", "132311", "211313",
+    "231113", "231311", "112133", "112331", "132131", "113123", "113321", "133121", "313121", "211331",
+    "231131", "213113", "213311", "213131", "311123", "311321", "331121", "312113", "312311", "332111",
+    "314111", "221411", "431111", "111224", "111422", "121124", "121421", "141122", "141221", "112214",
+    "112412", "122114", "122411", "142112", "142211", "241211", "221114", "413111", "241112", "134111",
+    "111242", "121142", "121241", "114212", "124112", "124211", "411212", "421112", "421211", "212141",
+    "214121", "412121", "111143", "111341", "131141", "114113", "114311", "411113", "411311", "113141",
+    "114131", "311141", "411131", "211412", "211214", "211232", "2331112",
+]
+
+def _code128_valori(testo):
+    """Converte il testo nella sequenza di simboli Code 128 (con cifre in Set C quando possibile)."""
+    if testo.isdigit() and len(testo) >= 2:
+        valori = [105]                                  # Start C
+        pari = len(testo) - (len(testo) % 2)
+        for i in range(0, pari, 2):
+            valori.append(int(testo[i:i + 2]))
+        if len(testo) % 2:
+            valori.append(100)                          # passa al Set B per l'ultima cifra
+            valori.append(ord(testo[-1]) - 32)
+    else:
+        valori = [104] + [ord(c) - 32 for c in testo]   # Start B
+    controllo = valori[0] + sum(i * v for i, v in enumerate(valori[1:], 1))
+    valori.append(controllo % 103)
+    valori.append(106)                                  # Stop
+    return valori
+
+def genera_barcode_svg(testo, altezza=80, modulo=2, quiet=10):
+    """Restituisce il codice a barre Code 128 come immagine SVG (testo), oppure None se non è possibile."""
+    testo = "".join(str(testo or "").split())
+    if not testo or any(ord(c) < 32 or ord(c) > 126 for c in testo):
+        return None
+    elementi = "".join(_CODE128_PATTERNS[v] for v in _code128_valori(testo))
+    moduli_totali = sum(int(c) for c in elementi)
+    larghezza = (moduli_totali + 2 * quiet) * modulo
+    totale_h = altezza + 30
+    barre, x, e_barra = [], quiet * modulo, True
+    for c in elementi:
+        w = int(c) * modulo
+        if e_barra:
+            barre.append(f'<rect x="{x}" y="4" width="{w}" height="{altezza}"/>')
+        x += w
+        e_barra = not e_barra
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {larghezza} {totale_h}" width="{larghezza}" height="{totale_h}">'
+        f'<rect width="100%" height="100%" fill="#ffffff"/>'
+        f'<g fill="#000000" shape-rendering="crispEdges">{"".join(barre)}</g>'
+        f'<text x="{larghezza / 2}" y="{altezza + 24}" text-anchor="middle" font-family="monospace" '
+        f'font-size="18" letter-spacing="2" fill="#000000">{html_escape(testo)}</text>'
+        f'</svg>'
+    )
+
+def svg_in_html(svg, larghezza_max=360):
+    """Prepara l'SVG per essere mostrato dentro una scheda HTML."""
+    b64 = base64.b64encode(svg.encode("utf-8")).decode("ascii")
+    return (f'<div style="text-align:center;margin:6px 0 10px 0;">'
+            f'<img alt="Codice a barre del microchip" src="data:image/svg+xml;base64,{b64}" '
+            f'style="width:100%;max-width:{larghezza_max}px;border:1px solid #E2E8F0;border-radius:8px;"></div>')
+
 
 def codice_microchip_valido(codice):
     """Un microchip ISO valido ha 15 cifre."""
@@ -1452,6 +1531,10 @@ elif st.session_state.sezione_attiva == "anagrafica":
             "proprietario_indirizzo": "", "proprietario_telefono": user_db.get("numero_whatsapp", ""), "proprietario_citta": ""
         })
 
+        codice_mc = (anagrafica_corrente.get('microchip') or '').strip()
+        svg_mc = genera_barcode_svg(codice_mc) if codice_mc else None
+        blocco_barcode = svg_in_html(svg_mc) if svg_mc else ""
+
         col_view1, col_view2 = st.columns(2)
         with col_view1:
             st.markdown(f"""
@@ -1461,11 +1544,21 @@ elif st.session_state.sezione_attiva == "anagrafica":
                     <p>• <strong>Specie:</strong> {anagrafica_corrente.get('tipo_animale', 'N/D')}</p>
                     <p>• <strong>Razza:</strong> {anagrafica_corrente.get('razza') or 'Non specificata'}</p>
                     <p>• <strong>Data Nascita:</strong> {anagrafica_corrente.get('data_nascita', 'N/D')}</p>
-                    <p>• <strong>Microchip:</strong> <code>{anagrafica_corrente.get('microchip') or 'Non inserito'}</code></p>
+                    <p>• <strong>Microchip:</strong> <code>{anagrafica_corrente.get('microchip') or 'Non inserito'}</code></p>{blocco_barcode}
                     <p>• <strong>Segni Particolari:</strong> {anagrafica_corrente.get('segni_particolari') or 'Nessuno'}</p>
                 </div>
             """, unsafe_allow_html=True)
-            mostra_immagine_salvata(anagrafica_corrente.get('microchip_foto'), "📷 Codice a barre del microchip:")
+            if svg_mc:
+                st.download_button(
+                    "⬇️ Scarica il codice a barre (immagine vettoriale SVG)",
+                    data=svg_mc, file_name=f"microchip_{codice_mc}.svg", mime="image/svg+xml",
+                    key=f"dl_mc_{pet_selected}"
+                )
+            if anagrafica_corrente.get('microchip_foto'):
+                with st.expander("📷 Mostra la scansione originale dell'etichetta"):
+                    mostra_immagine_salvata(anagrafica_corrente.get('microchip_foto'))
+                if not svg_mc:
+                    st.info("Inserisci il numero del microchip nella modifica anagrafica per creare il codice a barre digitale.")
 
         with col_view2:
             st.markdown(f"""
@@ -1520,7 +1613,7 @@ elif st.session_state.sezione_attiva == "anagrafica":
                     e_razza = st.text_input("Razza", value=anagrafica_corrente.get('razza', ''))
                 with col_a2:
                     e_data_nascita = st.date_input("Data di Nascita", value=data_nascita_attuale, min_value=date(2000, 1, 1), max_value=date.today())
-                    e_microchip = st.text_input("Numero Microchip", key=chiave_mc)
+                    e_microchip = st.text_input("Numero Microchip", key=chiave_mc, help="Con questo numero l'app crea il codice a barre digitale nella scheda anagrafica.")
                     e_segni = st.text_area("Segni Particolari", value=anagrafica_corrente.get('segni_particolari', ''))
 
                 st.markdown("---")
@@ -1770,7 +1863,7 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
             n_razza = st.text_input("Razza dell'Animale", placeholder="es. Meticcio, Labradoodle, Europeo...")
         with c2:
             n_data = st.date_input("Data di Nascita Presunta / Effettiva", value=date.today(), min_value=date(2000, 1, 1), max_value=date.today())
-            n_microchip = st.text_input("Numero Microchip (15 Cifre)", key="n_microchip", placeholder="es. 380260000000000")
+            n_microchip = st.text_input("Numero Microchip (15 Cifre)", key="n_microchip", placeholder="es. 380260000000000", help="Con questo numero l'app crea il codice a barre digitale nella scheda anagrafica.")
             n_segni = st.text_input("Segni Particolari o Note", placeholder="es. Macchia sul petto, macchia nera zampa destra...")
         
         st.markdown("---")
