@@ -2294,7 +2294,7 @@ if st.session_state.sezione_attiva == "dashboard":
                 terapie_ordinate = sorted(enumerate(terapie_pet), key=lambda x: x[1].get('data_inizio', ''), reverse=True)
                 for idx, t in terapie_ordinate:
                     orario_txt = t.get('orario', 'Non specificato')
-                    with st.expander(f"💊 {t['farmaco']} ({t['periodo']}) - ⏰ {orario_txt}"):
+                    with st.expander(f"💊 {t['farmaco']} ({t['periodo']}) - ⏰ {orario_txt}", expanded=False):
                         st.write(f"**Dose / Quantità:** {t['dosaggio']}")
                         st.write(f"**Orario di Somministrazione:** {orario_txt}")
                         st.write(f"**Periodo:** {t['periodo']}")
@@ -2317,7 +2317,7 @@ if st.session_state.sezione_attiva == "dashboard":
             if visite_pet:
                 visite_ordinate = sorted(enumerate(visite_pet), key=lambda x: x[1].get('data', ''), reverse=True)
                 for idx, v in visite_ordinate:
-                    with st.expander(f"🏥 {v['tipo']} - {v['data']}"):
+                    with st.expander(f"🏥 {v['tipo']} - {v['data']}", expanded=False):
                         if v.get('veterinario'): st.write(f"**Veterinario:** {v['veterinario']}")
                         if v.get('vet_id_permanente'): st.caption(f"🆔 ID Medico Permanente: `{v['vet_id_permanente']}`")
                         if v.get('nome_vaccino'): st.write(f"💉 **Vaccino:** {v.get('nome_vaccino')} | **Lotto:** {v.get('lotto_vaccino', 'N/D')}")
@@ -2354,7 +2354,7 @@ if st.session_state.sezione_attiva == "dashboard":
                         else: st.error(f"❌ {msg}")
                     else: st.error("Compila tutti i campi obbligatori (*).")
 
-        with st.expander(f"⚠ Area Riservata Medico Veterinario (Registro Decesso - {pet_selected})"):
+        with st.expander(f"⚠ Area Riservata Medico Veterinario (Registro Decesso - {pet_selected})", expanded=False):
             date_decesso = st.date_input("Data del decesso")
             certificato = st.file_uploader("Allega Certificato di Morte", type=["pdf", "png", "jpg"], key="cert_morte")
             col_d1, col_d2, col_d3 = st.columns(3)
@@ -2417,7 +2417,7 @@ elif st.session_state.sezione_attiva == "anagrafica":
                     key=f"dl_mc_{pet_selected}"
                 )
             if anagrafica_corrente.get('microchip_foto'):
-                with st.expander("📷 Mostra la scansione originale dell'etichetta"):
+                with st.expander("📷 Mostra la scansione originale dell'etichetta", expanded=False):
                     mostra_immagine_salvata(anagrafica_corrente.get('microchip_foto'))
                 if not svg_mc:
                     st.info("Inserisci il numero del microchip nella modifica anagrafica per creare il codice a barre digitale.")
@@ -2433,7 +2433,7 @@ elif st.session_state.sezione_attiva == "anagrafica":
                 </div>
             """, unsafe_allow_html=True)
 
-        with st.expander("✏ Modifica Anagrafica Pet e Proprietario", expanded=True):
+        with st.expander("✏ Modifica Anagrafica Pet e Proprietario", expanded=False):
             # --- Scansione del codice a barre del microchip (fuori dal modulo di salvataggio) ---
             chiave_mc = f"e_microchip_{pet_selected}"
             chiave_scan_mc = f"chip_edit_{pet_selected}"
@@ -2520,7 +2520,7 @@ elif st.session_state.sezione_attiva == "visite":
     if pet_selected:
         st.markdown(f"<h2 style='color: #1E3A2B;'>🏥 Visite e Clinica - {pet_selected}</h2>", unsafe_allow_html=True)
 
-        with st.expander("➕ Aggiungi Nuova Visita Medica", expanded=True):
+        with st.expander("➕ Aggiungi Nuova Visita Medica", expanded=False):
             col1, col2 = st.columns(2)
             with col1:
                 data_visita = st.date_input("Data Visita")
@@ -2582,7 +2582,7 @@ elif st.session_state.sezione_attiva == "visite":
         visite_ordinate = sorted(enumerate(visite_list), key=lambda x: x[1].get('data', ''), reverse=True)
         for idx, v in visite_ordinate:
             is_cert = v.get("certificata", False)
-            with st.expander(f"🏥 {v['data']} - {v['tipo']} | {'✅ CERTIFICATA' if is_cert else '⏳ IN ATTESA DI FIRMA'}"):
+            with st.expander(f"🏥 {v['data']} - {v['tipo']} | {'✅ CERTIFICATA' if is_cert else '⏳ IN ATTESA DI FIRMA'}", expanded=False):
                 st.write(f"**Veterinario:** Dr. {v.get('veterinario', 'N/D')}")
                 if is_cert: st.success(f"🛡️ **Codice Certificato:** `{v.get('codice_certificato')}` | ID Medico: `{v.get('vet_id_permanente')}`")
                 if v.get('nome_vaccino'):
@@ -2598,10 +2598,10 @@ elif st.session_state.sezione_attiva == "visite":
 elif st.session_state.sezione_attiva == "terapie":
     if pet_selected:
         st.markdown(f"<h2 style='color: #1E3A2B;'>💊 Terapie e Farmaci - {pet_selected}</h2>", unsafe_allow_html=True)
-        with st.expander("🔍 Scansiona Barcode Farmaco"):
+        with st.expander("🔍 Scansiona Barcode Farmaco", expanded=False):
             mostra_scansionatore_barre("📷 Lettore Codici Farmaci")
 
-        with st.expander("➕ Nuova Terapia o Prescrizione", expanded=True):
+        with st.expander("➕ Nuova Terapia o Prescrizione", expanded=False):
             col1, col2 = st.columns(2)
             with col1:
                 nome_farmaco = st.text_input("Nome del Farmaco*")
@@ -2629,7 +2629,7 @@ elif st.session_state.sezione_attiva == "terapie":
         terapie_list = user_db["db_terapie"].get(pet_selected, [])
         terapie_ordinate = sorted(enumerate(terapie_list), key=lambda x: x[1].get('data_inizio', ''), reverse=True)
         for idx, t in terapie_ordinate:
-            with st.expander(f"💊 {t['farmaco']} - Dose: {t['dosaggio']} ({t['periodo']})"):
+            with st.expander(f"💊 {t['farmaco']} - Dose: {t['dosaggio']} ({t['periodo']})", expanded=False):
                 st.write(f"**Orario:** {t.get('orario')}")
                 if t.get('note'): st.write(f"**Istruzioni:** {t['note']}")
                 mostra_pulsanti_promemoria_terapia(pet_selected, t['farmaco'], t['dosaggio'], t.get('orario', ''), t.get('note', ''))
@@ -2645,7 +2645,7 @@ elif st.session_state.sezione_attiva == "peso":
         if st.session_state.get("peso_flash"):
             st.success(st.session_state.pop("peso_flash"))
 
-        with st.expander("➕ Registra una nuova pesata", expanded=True):
+        with st.expander("➕ Registra una nuova pesata", expanded=False):
             st.caption("Facoltativo: registra il peso quando vuoi, ad esempio dopo una visita. Dalla prima pesata comparirà il grafico dell'andamento.")
             col_p1, col_p2 = st.columns(2)
             with col_p1:
@@ -2700,7 +2700,7 @@ elif st.session_state.sezione_attiva == "peso":
         if voci:
             st.markdown("### 📋 Storico pesate")
             for idx, p in sorted(enumerate(voci), key=lambda x: str(x[1].get("data", "")), reverse=True):
-                with st.expander(f"⚖️ {_data_it(p.get('data'))} - {fmt_peso(p.get('peso_kg'))}"):
+                with st.expander(f"⚖️ {_data_it(p.get('data'))} - {fmt_peso(p.get('peso_kg'))}", expanded=False):
                     st.write(f"**Peso:** {fmt_peso(p.get('peso_kg'))}")
                     if p.get("note"):
                         st.write(f"**Note:** {p['note']}")
@@ -2733,7 +2733,7 @@ elif st.session_state.sezione_attiva == "calore":
                 st.info(f"🌸 Calore in corso dal {inizio_c.strftime('%d/%m/%Y')} (giorno {durata_giorni(stat_c['in_corso'])}). "
                         "Quando finisce, segnalalo qui sotto nello storico dei calori.")
 
-            with st.expander("➕ Registra un calore", expanded=True):
+            with st.expander("➕ Registra un calore", expanded=False):
                 st.caption("Segna sul calendario il periodo di calore. Se è appena iniziato lascia attiva la casella «ancora in corso» e chiudilo più avanti.")
                 col_c1, col_c2 = st.columns(2)
                 with col_c1:
@@ -2790,7 +2790,7 @@ elif st.session_state.sezione_attiva == "calore":
                 st.markdown("### 📋 Storico dei calori")
                 for pc in sorted(stat_c["periodi"], key=lambda x: x["inizio"], reverse=True):
                     fine_txt = pc["fine"].strftime("%d/%m/%Y") if pc["fine"] else "in corso"
-                    with st.expander(f"🌸 {pc['inizio'].strftime('%d/%m/%Y')} → {fine_txt} ({durata_giorni(pc)} giorni)"):
+                    with st.expander(f"🌸 {pc['inizio'].strftime('%d/%m/%Y')} → {fine_txt} ({durata_giorni(pc)} giorni)", expanded=False):
                         st.write(f"**Durata:** {durata_giorni(pc)} giorni" + (" (finora)" if pc["in_corso"] else ""))
                         if pc["note"]:
                             st.write(f"**Note:** {pc['note']}")
@@ -2810,7 +2810,7 @@ elif st.session_state.sezione_attiva == "calore":
 elif st.session_state.sezione_attiva == "fatture":
     if pet_selected:
         st.markdown(f"<h2 style='color: #1E3A2B;'>📄 Fatture e Spese - {pet_selected}</h2>", unsafe_allow_html=True)
-        with st.expander("➕ Carica Nuova Fattura", expanded=True):
+        with st.expander("➕ Carica Nuova Fattura", expanded=False):
             col1, col2 = st.columns(2)
             with col1:
                 data_spesa = st.date_input("Data Documento")
@@ -2828,7 +2828,7 @@ elif st.session_state.sezione_attiva == "fatture":
 
         st.markdown("### 📋 Fatture Registrate")
         for idx, f in enumerate(user_db["db_fatture"].get(pet_selected, [])):
-            with st.expander(f"📄 €{f['importo']:.2f} - {f['categoria']} ({f['data']})"):
+            with st.expander(f"📄 €{f['importo']:.2f} - {f['categoria']} ({f['data']})", expanded=False):
                 st.write(f"**Fornitore:** {f['fornitore']}")
     else:
         mostra_avviso_nessun_animale()
