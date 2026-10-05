@@ -8,6 +8,7 @@ import hashlib
 import uuid
 import re
 import math
+import calendar
 from datetime import datetime, date, timedelta
 from html import escape as html_escape
 import streamlit.components.v1 as components
@@ -1065,6 +1066,101 @@ def grafico_in_html(svg, larghezza_max=720):
 
 
 # ---------------------------------------------------------------------------
+# CALORE: registrazione dei periodi, statistiche e calendario annuale (solo per le femmine)
+# ---------------------------------------------------------------------------
+SESSI = ["Non specificato", "Maschio", "Femmina"]
+MESI_IT = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+           "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"]
+GIORNI_IT = ["L", "M", "M", "G", "V", "S", "D"]
+
+def _data_o_none(valore):
+    try:
+        return date.fromisoformat(str(valore)[:10])
+    except Exception:
+        return None
+
+def periodi_calore(voci, oggi=None):
+    """Elenco ordinato dei calori registrati, con data di fine effettiva (se è ancora in corso vale 'oggi')."""
+    oggi = oggi or date.today()
+    elenco = []
+    for idx, c in enumerate(voci or []):
+        ini = _data_o_none(c.get("inizio"))
+        if not ini:
+            continue
+        fin = _data_o_none(c.get("fine")) if c.get("fine") else None
+        fin_eff = fin if fin else max(ini, oggi)
+        if fin_eff < ini:
+            fin_eff = ini
+        elenco.append({"inizio": ini, "fine": fin, "fine_eff": fin_eff, "in_corso": fin is None,
+                       "note": c.get("note", ""), "idx": idx})
+    elenco.sort(key=lambda p: p["inizio"])
+    return elenco
+
+def durata_giorni(p):
+    return (p["fine_eff"] - p["inizio"]).days + 1
+
+def statistiche_calori(voci, oggi=None):
+    """Numero di calori, durata e intervallo medi, stima (indicativa) del prossimo calore."""
+    oggi = oggi or date.today()
+    per = periodi_calore(voci, oggi)
+    if not per:
+        return None
+    durate = [durata_giorni(p) for p in per if not p["in_corso"]]
+    intervalli = [(per[i]["inizio"] - per[i - 1]["inizio"]).days for i in range(1, len(per))]
+    media_int = round(sum(intervalli) / len(intervalli)) if intervalli else None
+    media_dur = round(sum(durate) / len(durate)) if durate else None
+    prossimo = per[-1]["inizio"] + timedelta(days=media_int) if media_int else None
+    in_corso = next((p for p in reversed(per) if p["in_corso"] and p["inizio"] <= oggi), None)
+    return {"n": len(per), "periodi": per, "durata_media": media_dur, "intervallo_medio": media_int,
+            "prossimo": prossimo, "in_corso": in_corso}
+
+def giorni_di_calore(periodi, limite=120):
+    giorni = set()
+    for p in periodi:
+        d = p["inizio"]
+        while d <= p["fine_eff"] and (d - p["inizio"]).days <= limite:
+            giorni.add(d)
+            d += timedelta(days=1)
+    return giorni
+
+def genera_calendario_calori_html(anno, stat, oggi=None):
+    """Calendario dei 12 mesi dell'anno con i giorni di calore evidenziati (HTML senza righe vuote)."""
+    oggi = oggi or date.today()
+    periodi = stat["periodi"] if stat else []
+    giorni = giorni_di_calore(periodi)
+    stima = set()
+    if stat and stat.get("prossimo"):
+        for k in range(stat["durata_media"] or 1):
+            stima.add(stat["prossimo"] + timedelta(days=k))
+    cal = calendar.Calendar(firstweekday=0)
+    mesi = []
+    for mese in range(1, 13):
+        righe = ["<tr>" + "".join(f"<th>{g}</th>" for g in GIORNI_IT) + "</tr>"]
+        for settimana in cal.monthdayscalendar(anno, mese):
+            celle = []
+            for giorno in settimana:
+                if giorno == 0:
+                    celle.append("<td></td>")
+                    continue
+                d = date(anno, mese, giorno)
+                classi = []
+                if d in giorni:
+                    classi.append("cal-calore")
+                elif d in stima:
+                    classi.append("cal-stima")
+                if d == oggi:
+                    classi.append("cal-oggi")
+                celle.append(f'<td class="{" ".join(classi)}">{giorno}</td>')
+            righe.append("<tr>" + "".join(celle) + "</tr>")
+        mesi.append(f'<div class="cal-mese"><div class="cal-titolo">{MESI_IT[mese - 1]} {anno}</div>'
+                    f'<table class="cal-tab">{"".join(righe)}</table></div>')
+    legenda = ('<div class="cal-legenda"><span><i class="cal-box cal-box-calore"></i> Giorni di calore</span>'
+               + ('<span><i class="cal-box cal-box-stima"></i> Stima indicativa del prossimo calore</span>' if stima else "")
+               + '<span><i class="cal-box cal-box-oggi"></i> Oggi</span></div>')
+    return f'<div class="cal-griglia">{"".join(mesi)}</div>{legenda}'
+
+
+# ---------------------------------------------------------------------------
 # LIBRETTO SANITARIO IN PDF (anagrafica + microchip vettoriale, visite con etichette, terapie, fatture)
 # ---------------------------------------------------------------------------
 PDF_VERDE = "#1E3A2B"
@@ -1302,9 +1398,12 @@ def genera_pdf_libretto(pet, user_db, includi_fatture=True):
 
     storia = []
 
+    numero_sezione = [0]
+
     def apri_sezione(titolo, spazio=5 * cm):
+        numero_sezione[0] += 1
         storia.append(CondPageBreak(spazio))   # se resta poco spazio, passa alla pagina successiva
-        storia.append(banda(titolo))
+        storia.append(banda(f"{numero_sezione[0]}. {titolo}"))
 
     def sottotitolo(titolo):
         storia.append(CondPageBreak(3.5 * cm))
@@ -1321,12 +1420,13 @@ def genera_pdf_libretto(pet, user_db, includi_fatture=True):
     storia.append(Spacer(1, 12))
 
     # --------------------------------------------------------------- anagrafica
-    apri_sezione("1. Anagrafica dell'animale")
+    apri_sezione("Anagrafica dell'animale")
     storia.append(Spacer(1, 6))
     codice_mc = (ana.get("microchip") or "").strip()
     righe_ana = [
         ("Nome", _pdf_txt(ana.get("nome") or pet)),
         ("Specie", _pdf_txt(ana.get("tipo_animale"))),
+        ("Sesso", _pdf_txt(ana.get("sesso"), "Non specificato")),
         ("Razza", _pdf_txt(ana.get("razza"))),
         ("Data di nascita", _data_it(ana.get("data_nascita")) if ana.get("data_nascita") else "—"),
         ("Numero microchip", _pdf_txt(codice_mc, "Non inserito")),
@@ -1357,7 +1457,7 @@ def genera_pdf_libretto(pet, user_db, includi_fatture=True):
     storia.append(Spacer(1, 14))
 
     # --------------------------------------------------------------- visite
-    apri_sezione("2. Visite mediche e vaccinazioni")
+    apri_sezione("Visite mediche e vaccinazioni")
     storia.append(Spacer(1, 6))
 
     vaccini = [v for v in visite if v.get("nome_vaccino") or v.get("tipo") == "Vaccinazione"]
@@ -1411,7 +1511,7 @@ def genera_pdf_libretto(pet, user_db, includi_fatture=True):
     storia.append(Spacer(1, 10))
 
     # --------------------------------------------------------------- terapie
-    apri_sezione("3. Terapie e farmaci")
+    apri_sezione("Terapie e farmaci")
     storia.append(Spacer(1, 6))
     if terapie:
         righe_t = []
@@ -1428,7 +1528,7 @@ def genera_pdf_libretto(pet, user_db, includi_fatture=True):
     storia.append(Spacer(1, 14))
 
     # --------------------------------------------------------------- peso
-    apri_sezione("4. Peso e andamento", spazio=9.5 * cm)
+    apri_sezione("Peso e andamento", spazio=9.5 * cm)
     storia.append(Spacer(1, 6))
     grafico = _prepara_grafico_peso(pesi)
     if grafico:
@@ -1452,9 +1552,35 @@ def genera_pdf_libretto(pet, user_db, includi_fatture=True):
         storia.append(P("Nessuna pesata registrata.", "vuoto"))
     storia.append(Spacer(1, 14))
 
+    # --------------------------------------------------------------- calore (solo femmine o se ci sono dati)
+    calori_pdf = periodi_calore(user_db.get("db_calori", {}).get(pet, []))
+    if ana.get("sesso") == "Femmina" or calori_pdf:
+        apri_sezione("Calore (calendario dei calori)")
+        storia.append(Spacer(1, 6))
+        if calori_pdf:
+            righe_c = []
+            for pc in calori_pdf:
+                righe_c.append([P(_data_it(str(pc["inizio"]))),
+                                P(_data_it(str(pc["fine"])) if pc["fine"] else "In corso"),
+                                P(f"{durata_giorni(pc)} giorni" + (" (finora)" if pc["in_corso"] else "")),
+                                P(_pdf_txt(pc["note"], "—"))])
+            storia.append(tabella_elenco(["Inizio", "Fine", "Durata", "Note"], righe_c,
+                                         [3 * cm, 3 * cm, 3.4 * cm, W - 9.4 * cm]))
+            stat_c = statistiche_calori(user_db.get("db_calori", {}).get(pet, []))
+            parti = [f"Calori registrati: {stat_c['n']}"]
+            if stat_c["durata_media"]:
+                parti.append(f"durata media: {stat_c['durata_media']} giorni")
+            if stat_c["intervallo_medio"]:
+                parti.append(f"intervallo medio tra un calore e l'altro: {stat_c['intervallo_medio']} giorni")
+            storia.append(Spacer(1, 4))
+            storia.append(P(" &nbsp;|&nbsp; ".join(parti), "sotto"))
+        else:
+            storia.append(P("Nessun calore registrato.", "vuoto"))
+        storia.append(Spacer(1, 14))
+
     # --------------------------------------------------------------- fatture
     if includi_fatture:
-        apri_sezione("5. Fatture e spese")
+        apri_sezione("Fatture e spese")
         storia.append(Spacer(1, 6))
         if fatture:
             righe_f, totale = [], 0.0
@@ -1771,6 +1897,22 @@ st.markdown("""
         color: #FFFFFF !important; font-weight: 700 !important; font-size: 1rem !important;
     }
 
+    /* ===== CALENDARIO DEL CALORE ===== */
+
+.cal-griglia { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 12px; margin: 8px 0 12px 0; }
+.cal-mese { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 10px 10px 8px 10px; }
+.cal-titolo { font-weight: 700; color: #1E3A2B; margin-bottom: 6px; font-size: 0.95rem; }
+.cal-tab { width: 100%; border-collapse: separate !important; border-spacing: 2px !important; table-layout: fixed; margin: 0 !important; }
+.cal-tab tr { background: transparent !important; }
+.cal-tab th { border: none !important; background: transparent !important; font-size: 0.68rem; color: #64748B; font-weight: 600; text-align: center; padding: 2px 0 !important; }
+.cal-tab td { border: none !important; background: transparent; height: 26px; text-align: center; font-size: 0.78rem; color: #1E293B; border-radius: 7px; padding: 0 !important; }
+.cal-tab td.cal-calore { background: #F43F5E !important; color: #FFFFFF !important; font-weight: 700; }
+.cal-tab td.cal-stima { box-shadow: inset 0 0 0 1.5px #F43F5E; color: #BE123C; }
+.cal-tab td.cal-oggi { outline: 2px solid #0284C7; outline-offset: -1px; font-weight: 700; }
+.cal-legenda { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.82rem; color: #475569; margin-bottom: 10px; }
+.cal-box { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 4px; }
+.cal-box-calore { background: #F43F5E; } .cal-box-stima { box-shadow: inset 0 0 0 1.5px #F43F5E; } .cal-box-oggi { outline: 2px solid #0284C7; outline-offset: -1px; }
+
     /* ===== MENU LATERALE AZZURRO CON SCRITTE BIANCHE (uguale su tutti i dispositivi) ===== */
     [data-testid="stSidebar"],
     [data-testid="stSidebar"] > div,
@@ -1886,45 +2028,48 @@ st.markdown("""
 # Streamlit disegna il pulsante con un po' di ritardo.
 # L'utente può sempre riaprire il menù con la freccia in alto a sinistra.
 # ---------------------------------------------------------------------------
+# Script che chiude il menù. Contiene un codice casuale (__NONCE__) che cambia a ogni clic:
+# così Streamlit lo ricarica sempre e il menù si chiude ogni volta, non solo la prima.
+SCRIPT_CHIUDI_SIDEBAR = """
+<script>
+/* __NONCE__ */
+(function () {
+    var doc = window.parent.document;
+    var tentativi = 0, clicks = 0, ultimoClick = 0;
+
+    function sidebarAperta(sb) {
+        var aria = sb.getAttribute('aria-expanded');
+        if (aria !== null) { return aria === 'true'; }
+        return sb.getBoundingClientRect().width > 60;
+    }
+    function trovaPulsante() {
+        return doc.querySelector('[data-testid="stSidebarCollapseButton"] button') ||
+               doc.querySelector('button[data-testid="stSidebarCollapseButton"]') ||
+               doc.querySelector('[data-testid="stSidebarHeader"] button') ||
+               doc.querySelector('button[aria-label="Close sidebar"]') ||
+               doc.querySelector('button[aria-label="Collapse sidebar"]');
+    }
+    // Restituisce true quando il menù risulta chiuso
+    function passo() {
+        var sb = doc.querySelector('[data-testid="stSidebar"]');
+        if (!sb) { return false; }
+        if (!sidebarAperta(sb)) { return true; }
+        if (Date.now() - ultimoClick < 700) { return false; }   // aspetto che finisca l'animazione
+        var btn = trovaPulsante();
+        if (btn && clicks < 4) { btn.click(); clicks++; ultimoClick = Date.now(); }
+        return false;
+    }
+    var timer = setInterval(function () {
+        tentativi++;
+        if (passo() || tentativi > 60) { clearInterval(timer); }
+    }, 100);
+})();
+</script>
+"""
+
 if st.session_state.get("trigger_close_sidebar", False):
     st.session_state.trigger_close_sidebar = False
-    components.html("""
-        <script>
-            (function() {
-                var doc = window.parent.document;
-                var tentativi = 0;
-
-                function chiudiSidebar() {
-                    var sidebar = doc.querySelector('section[data-testid="stSidebar"]');
-                    if (!sidebar) return false;
-
-                    // Se è già chiusa non fare nulla
-                    if (sidebar.getAttribute('aria-expanded') === 'false') return true;
-
-                    var btn =
-                        doc.querySelector('[data-testid="stSidebarCollapseButton"] button') ||
-                        doc.querySelector('button[data-testid="stSidebarCollapseButton"]') ||
-                        doc.querySelector('[data-testid="stSidebarHeader"] button') ||
-                        doc.querySelector('button[aria-label="Close sidebar"]') ||
-                        doc.querySelector('button[aria-label="Collapse sidebar"]');
-
-                    if (btn) {
-                        btn.click();
-                        return true;
-                    }
-                    return false;
-                }
-
-                // Riprova ogni 100 ms (max ~2 secondi) finché il pulsante è disponibile
-                var timer = setInterval(function() {
-                    tentativi++;
-                    if (chiudiSidebar() || tentativi >= 20) {
-                        clearInterval(timer);
-                    }
-                }, 100);
-            })();
-        </script>
-    """, height=0, width=0)
+    components.html(SCRIPT_CHIUDI_SIDEBAR.replace("__NONCE__", uuid.uuid4().hex), height=0, width=0)
 
 if st.session_state.logged_user_email is None:
     st.markdown("<h1 style='text-align: center; color: #1E3A2B; margin-top: 15px;'>🐾 PetHealth Platform</h1>", unsafe_allow_html=True)
@@ -2011,6 +2156,7 @@ if st.session_state.logged_user_email is None:
                         "db_terapie": {},
                         "db_fatture": {},
                         "db_peso": {},
+                        "db_calori": {},
                         "db_anagrafica": {},
                         "angeli_archiviati": {}
                     }
@@ -2067,6 +2213,7 @@ if "db_visite" not in user_db: user_db["db_visite"] = {}
 if "db_terapie" not in user_db: user_db["db_terapie"] = {}
 if "db_fatture" not in user_db: user_db["db_fatture"] = {}
 if "db_peso" not in user_db: user_db["db_peso"] = {}
+if "db_calori" not in user_db: user_db["db_calori"] = {}
 if "db_anagrafica" not in user_db: user_db["db_anagrafica"] = {}
 if "angeli_archiviati" not in user_db: user_db["angeli_archiviati"] = {}
 
@@ -2117,6 +2264,9 @@ with st.sidebar:
     if st.button("🏥 Visite e Clinica"): cambia_sezione("visite")
     if st.button("💊 Terapie e Farmaci"): cambia_sezione("terapie")
     if st.button("⚖️ Peso e Andamento"): cambia_sezione("peso")
+    sesso_selezionato = (user_db["db_anagrafica"].get(pet_selected, {}) or {}).get("sesso") if pet_selected else None
+    if sesso_selezionato == "Femmina":
+        if st.button("🌸 Calore e Calendario"): cambia_sezione("calore")
     if st.button("📄 Fatture e Spese"): cambia_sezione("fatture")
     if st.button("✈️ Passaporto & Viaggi"): cambia_sezione("passaporto")
     if st.button("📘 Libretto PDF (scarica)"): cambia_sezione("pdf_libretto")
@@ -2224,6 +2374,7 @@ if st.session_state.sezione_attiva == "dashboard":
                             "terapie": user_db["db_terapie"].pop(pet_selected, []),
                             "fatture": user_db["db_fatture"].pop(pet_selected, []),
                             "peso": user_db["db_peso"].pop(pet_selected, []),
+                            "calori": user_db["db_calori"].pop(pet_selected, []),
                             "anagrafica": user_db["db_anagrafica"].pop(pet_selected, {})
                         }
                         user_db["lista_animali"].remove(pet_selected)
@@ -2252,6 +2403,7 @@ elif st.session_state.sezione_attiva == "anagrafica":
                     <span class="card-badge badge-purple">🐾 DATI ANAGRAFICI PET</span>
                     <h3 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 12px;">{anagrafica_corrente.get('nome', pet_selected)}</h3>
                     <p>• <strong>Specie:</strong> {anagrafica_corrente.get('tipo_animale', 'N/D')}</p>
+                    <p>• <strong>Sesso:</strong> {anagrafica_corrente.get('sesso') or 'Non specificato'}</p>
                     <p>• <strong>Razza:</strong> {anagrafica_corrente.get('razza') or 'Non specificata'}</p>
                     <p>• <strong>Data Nascita:</strong> {anagrafica_corrente.get('data_nascita', 'N/D')}</p>
                     <p>• <strong>Microchip:</strong> <code>{anagrafica_corrente.get('microchip') or 'Non inserito'}</code></p>{blocco_barcode}
@@ -2310,6 +2462,8 @@ elif st.session_state.sezione_attiva == "anagrafica":
             specie_opzioni = ["Cane", "Gatto", "Coniglio", "Uccello", "Rettile", "Altro"]
             tipo_attuale = anagrafica_corrente.get('tipo_animale', 'Cane')
             idx_tipo = specie_opzioni.index(tipo_attuale) if tipo_attuale in specie_opzioni else 0
+            sesso_attuale = anagrafica_corrente.get('sesso', 'Non specificato')
+            idx_sesso = SESSI.index(sesso_attuale) if sesso_attuale in SESSI else 0
             try:
                 data_nascita_attuale = date.fromisoformat(str(anagrafica_corrente.get('data_nascita')))
             except Exception:
@@ -2319,6 +2473,7 @@ elif st.session_state.sezione_attiva == "anagrafica":
                 col_a1, col_a2 = st.columns(2)
                 with col_a1:
                     e_tipo = st.selectbox("Tipo / Specie Animale*", specie_opzioni, index=idx_tipo)
+                    e_sesso = st.selectbox("Sesso", SESSI, index=idx_sesso)
                     e_nome = st.text_input("Nome Animale*", value=anagrafica_corrente.get('nome', pet_selected))
                     e_razza = st.text_input("Razza", value=anagrafica_corrente.get('razza', ''))
                 with col_a2:
@@ -2340,7 +2495,7 @@ elif st.session_state.sezione_attiva == "anagrafica":
                         old_n = pet_selected; new_n = e_nome.strip()
                         microchip_foto_finale = foto_chip if foto_chip else anagrafica_corrente.get('microchip_foto', '')
                         nuovi_dati = {
-                            "tipo_animale": e_tipo, "nome": new_n, "razza": e_razza, "data_nascita": str(e_data_nascita),
+                            "tipo_animale": e_tipo, "sesso": e_sesso, "nome": new_n, "razza": e_razza, "data_nascita": str(e_data_nascita),
                             "microchip": e_microchip.strip(), "microchip_foto": microchip_foto_finale,
                             "segni_particolari": e_segni, "proprietario_nome": e_prop_nome,
                             "proprietario_indirizzo": e_prop_indirizzo, "proprietario_telefono": e_prop_telefono, "proprietario_citta": e_prop_citta
@@ -2351,6 +2506,7 @@ elif st.session_state.sezione_attiva == "anagrafica":
                             user_db["db_terapie"][new_n] = user_db["db_terapie"].pop(old_n, [])
                             user_db["db_fatture"][new_n] = user_db["db_fatture"].pop(old_n, [])
                             user_db["db_peso"][new_n] = user_db["db_peso"].pop(old_n, [])
+                            user_db["db_calori"][new_n] = user_db["db_calori"].pop(old_n, [])
                             user_db["db_anagrafica"].pop(old_n, None)
                             user_db["pet_selezionato"] = new_n
                         user_db["db_anagrafica"][new_n] = nuovi_dati
@@ -2555,6 +2711,102 @@ elif st.session_state.sezione_attiva == "peso":
     else:
         mostra_avviso_nessun_animale()
 
+elif st.session_state.sezione_attiva == "calore":
+    if pet_selected:
+        st.markdown(f"<h2 style='color: #1E3A2B;'>🌸 Calore e Calendario - {html_escape(pet_selected)}</h2>", unsafe_allow_html=True)
+        sesso_pet = (user_db["db_anagrafica"].get(pet_selected, {}) or {}).get("sesso")
+        if sesso_pet != "Femmina":
+            st.info("Questa sezione è dedicata alle femmine. Se è un errore, imposta il sesso dell'animale nella scheda Anagrafica.")
+            if st.button("📋 Vai all'Anagrafica"):
+                cambia_sezione("anagrafica")
+        else:
+            voci_c = user_db["db_calori"].setdefault(pet_selected, [])
+            oggi_c = date.today()
+            n_c = st.session_state.get("calore_cnt", 0)
+
+            if st.session_state.get("calore_flash"):
+                st.success(st.session_state.pop("calore_flash"))
+
+            stat_c = statistiche_calori(voci_c, oggi_c)
+            if stat_c and stat_c["in_corso"]:
+                inizio_c = stat_c["in_corso"]["inizio"]
+                st.info(f"🌸 Calore in corso dal {inizio_c.strftime('%d/%m/%Y')} (giorno {durata_giorni(stat_c['in_corso'])}). "
+                        "Quando finisce, segnalalo qui sotto nello storico dei calori.")
+
+            with st.expander("➕ Registra un calore", expanded=True):
+                st.caption("Segna sul calendario il periodo di calore. Se è appena iniziato lascia attiva la casella «ancora in corso» e chiudilo più avanti.")
+                col_c1, col_c2 = st.columns(2)
+                with col_c1:
+                    inizio_nuovo = st.date_input("Data di inizio", value=oggi_c, min_value=date(2000, 1, 1),
+                                                 max_value=oggi_c, key=f"cal_ini_{n_c}")
+                    in_corso_nuovo = st.checkbox("Il calore è ancora in corso", value=True, key=f"cal_corso_{n_c}")
+                with col_c2:
+                    if in_corso_nuovo:
+                        fine_nuovo = None
+                    else:
+                        fine_nuovo = st.date_input("Data di fine", value=inizio_nuovo, min_value=inizio_nuovo,
+                                                   max_value=oggi_c, key=f"cal_fine_{n_c}_{inizio_nuovo.isoformat()}")
+                    note_nuove = st.text_area("Note (facoltative)", placeholder="es. perdite, comportamento, accoppiamento evitato...",
+                                              key=f"cal_note_{n_c}")
+
+                if st.button("💾 Salva calore"):
+                    fine_eff_nuova = fine_nuovo if fine_nuovo else max(inizio_nuovo, oggi_c)
+                    sovrapposto = any(not (fine_eff_nuova < pc["inizio"] or inizio_nuovo > pc["fine_eff"])
+                                      for pc in periodi_calore(voci_c, oggi_c))
+                    if sovrapposto:
+                        st.error("Queste date si sovrappongono a un calore già registrato. Controlla lo storico qui sotto.")
+                    else:
+                        voci_c.append({"inizio": str(inizio_nuovo), "fine": str(fine_nuovo) if fine_nuovo else "",
+                                       "note": note_nuove.strip()})
+                        st.session_state["calore_cnt"] = n_c + 1
+                        st.session_state["calore_flash"] = f"Calore registrato dal {inizio_nuovo.strftime('%d/%m/%Y')}."
+                        salva_dati()
+                        st.rerun()
+
+            if stat_c:
+                k1, k2, k3 = st.columns(3)
+                k1.metric("Calori registrati", stat_c["n"])
+                k2.metric("Intervallo medio", f"{stat_c['intervallo_medio']} giorni" if stat_c["intervallo_medio"] else "—")
+                k3.metric("Durata media", f"{stat_c['durata_media']} giorni" if stat_c["durata_media"] else "—")
+                if stat_c["prossimo"]:
+                    st.info(f"🗓️ Prossimo calore stimato intorno al {stat_c['prossimo'].strftime('%d/%m/%Y')}. "
+                            "È solo una stima basata sui dati inseriti: ogni animale è diverso, confrontati con il veterinario.")
+                else:
+                    st.caption("Con almeno due calori registrati comparirà l'intervallo medio e una stima indicativa del prossimo.")
+            else:
+                st.info(f"Nessun calore registrato per {pet_selected}: usa il riquadro qui sopra per segnare il primo.")
+
+            anni_c = {oggi_c.year}
+            if stat_c:
+                anni_c |= {pc["inizio"].year for pc in stat_c["periodi"]} | {pc["fine_eff"].year for pc in stat_c["periodi"]}
+                if stat_c["prossimo"]:
+                    anni_c.add(stat_c["prossimo"].year)
+            anni_opz = sorted(anni_c)
+            st.markdown("### 📅 Calendario")
+            anno_sel = st.selectbox("Anno da visualizzare", anni_opz, index=anni_opz.index(oggi_c.year), key="cal_anno")
+            st.markdown(genera_calendario_calori_html(anno_sel, stat_c, oggi_c), unsafe_allow_html=True)
+
+            if stat_c:
+                st.markdown("### 📋 Storico dei calori")
+                for pc in sorted(stat_c["periodi"], key=lambda x: x["inizio"], reverse=True):
+                    fine_txt = pc["fine"].strftime("%d/%m/%Y") if pc["fine"] else "in corso"
+                    with st.expander(f"🌸 {pc['inizio'].strftime('%d/%m/%Y')} → {fine_txt} ({durata_giorni(pc)} giorni)"):
+                        st.write(f"**Durata:** {durata_giorni(pc)} giorni" + (" (finora)" if pc["in_corso"] else ""))
+                        if pc["note"]:
+                            st.write(f"**Note:** {pc['note']}")
+                        if pc["in_corso"] and pc["inizio"] <= oggi_c:
+                            if st.button("✅ Segna come terminato oggi", key=f"cal_fine_btn_{pc['idx']}"):
+                                voci_c[pc["idx"]]["fine"] = str(oggi_c)
+                                st.session_state["calore_flash"] = "Calore segnato come terminato oggi."
+                                salva_dati()
+                                st.rerun()
+                        if st.button("🗑️ Elimina questo calore", key=f"cal_del_{pc['idx']}"):
+                            voci_c.pop(pc["idx"])
+                            salva_dati()
+                            st.rerun()
+    else:
+        mostra_avviso_nessun_animale()
+
 elif st.session_state.sezione_attiva == "fatture":
     if pet_selected:
         st.markdown(f"<h2 style='color: #1E3A2B;'>📄 Fatture e Spese - {pet_selected}</h2>", unsafe_allow_html=True)
@@ -2619,6 +2871,7 @@ elif st.session_state.sezione_attiva == "angeli":
             user_db["db_terapie"][sel_ang] = dati_ang.get("terapie", [])
             user_db["db_fatture"][sel_ang] = dati_ang.get("fatture", [])
             user_db["db_peso"][sel_ang] = dati_ang.get("peso", [])
+            user_db["db_calori"][sel_ang] = dati_ang.get("calori", [])
             if dati_ang.get("anagrafica"):
                 user_db["db_anagrafica"][sel_ang] = dati_ang["anagrafica"]
             user_db["pet_selezionato"] = sel_ang
@@ -2638,6 +2891,8 @@ elif st.session_state.sezione_attiva == "pdf_libretto":
         n_fatture = len(user_db["db_fatture"].get(pet_selected, []))
         ana_pdf = user_db["db_anagrafica"].get(pet_selected, {})
         ha_microchip = bool((ana_pdf.get("microchip") or "").strip())
+        n_calori = len(user_db["db_calori"].get(pet_selected, []))
+        riga_calori = (f"<p>• <strong>{n_calori}</strong> calori registrati nel calendario</p>" if ana_pdf.get("sesso") == "Femmina" else "")
 
         st.markdown(f"""
             <div class="wellness-card" style="border-left: 5px solid #1E3A2B !important;">
@@ -2646,7 +2901,7 @@ elif st.session_state.sezione_attiva == "pdf_libretto":
                 <p>• <strong>Anagrafica</strong> dell'animale e del proprietario, con il <strong>codice a barre digitale del microchip</strong></p>
                 <p>• <strong>{n_visite}</strong> visite mediche (di cui <strong>{n_vaccini}</strong> vaccinazioni, con <strong>{n_etichette}</strong> etichette dei vaccini)</p>
                 <p>• <strong>{n_terapie}</strong> terapie e farmaci</p>
-                <p>• <strong>{n_pesate}</strong> pesate, con il <strong>grafico dell'andamento del peso</strong></p>
+                <p>• <strong>{n_pesate}</strong> pesate, con il <strong>grafico dell'andamento del peso</strong></p>{riga_calori}
                 <p>• <strong>{n_fatture}</strong> fatture e spese (facoltative)</p>
             </div>
         """, unsafe_allow_html=True)
@@ -2707,6 +2962,7 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
         with c1:
             n_nome = st.text_input("Nome dell'Animale*", placeholder="es. Luna, Max, Baffo...")
             n_specie = st.selectbox("Specie / Tipo Animale*", ["Cane", "Gatto", "Coniglio", "Uccello", "Rettile", "Altro"])
+            n_sesso = st.selectbox("Sesso*", SESSI)
             n_razza = st.text_input("Razza dell'Animale", placeholder="es. Meticcio, Labradoodle, Europeo...")
         with c2:
             n_data = st.date_input("Data di Nascita Presunta / Effettiva", value=date.today(), min_value=date(2000, 1, 1), max_value=date.today())
@@ -2733,8 +2989,10 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
                     user_db["db_terapie"][pet_name] = []
                     user_db["db_fatture"][pet_name] = []
                     user_db["db_peso"][pet_name] = []
+                    user_db["db_calori"][pet_name] = []
                 user_db["db_anagrafica"][pet_name] = {
                     "tipo_animale": n_specie,
+                    "sesso": n_sesso,
                     "nome": pet_name,
                     "razza": n_razza,
                     "data_nascita": str(n_data),
