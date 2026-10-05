@@ -6,7 +6,9 @@ import base64
 import urllib.parse
 import hashlib
 import uuid
-from datetime import datetime, date
+import re
+import math
+from datetime import datetime, date, timedelta
 from html import escape as html_escape
 import streamlit.components.v1 as components
 
@@ -20,6 +22,19 @@ try:
     from pyzbar.pyzbar import decode as _zbar_decode
 except Exception:
     _zbar_decode = None
+
+# Creazione del PDF del libretto (OPZIONALE: serve la libreria "reportlab" nel file requirements.txt).
+try:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm, mm
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
+                                    KeepTogether, Flowable, CondPageBreak)
+    from reportlab.platypus import Image as RLImage
+    REPORTLAB_OK = True
+except Exception:
+    REPORTLAB_OK = False
 
 if "sidebar_state" not in st.session_state:
     st.session_state.sidebar_state = "expanded"
@@ -868,6 +883,618 @@ def svg_in_html(svg, larghezza_max=360):
             f'style="width:100%;max-width:{larghezza_max}px;border:1px solid #E2E8F0;border-radius:8px;"></div>')
 
 
+# ---------------------------------------------------------------------------
+# PESO: formattazione, dati del grafico e grafico dell'andamento (immagine SVG nitida)
+# ---------------------------------------------------------------------------
+def _num_it(valore, decimali):
+    """12.4 -> '12,4' (virgola decimale all'italiana)."""
+    return f"{valore:.{decimali}f}".replace(".", ",")
+
+def fmt_peso(kg):
+    """0.35 -> '350 g'  |  12.4 -> '12,4 kg'"""
+    try:
+        kg = float(kg)
+    except Exception:
+        return "—"
+    if kg < 1:
+        return f"{round(kg * 1000)} g"
+    return f"{kg:.2f}".rstrip("0").rstrip(".").replace(".", ",") + " kg"
+
+def fmt_variazione(delta_kg):
+    """+0,8 kg  /  -120 g"""
+    segno = "+" if delta_kg > 0 else ("-" if delta_kg < 0 else "")
+    return segno + fmt_peso(abs(delta_kg))
+
+def _tick_gradevoli(lo, hi, n=5):
+    """Scala 'a numeri tondi' per l'asse verticale. Restituisce (valori, passo)."""
+    if hi <= lo:
+        hi = lo + 1.0
+    grezzo = (hi - lo) / max(1, n - 1)
+    mag = 10 ** math.floor(math.log10(grezzo))
+    passo = mag * 10
+    for m in (1, 2, 2.5, 5, 10):
+        if m * mag >= grezzo:
+            passo = m * mag
+            break
+    primo = math.ceil(lo / passo - 1e-9) * passo
+    valori, k = [], 0
+    while k <= 12:
+        t = round(primo + k * passo, 6)
+        if t > hi + 1e-9:
+            break
+        valori.append(t)
+        k += 1
+    if len(valori) < 2:
+        valori = [round(lo, 6), round(hi, 6)]
+    return valori, passo
+
+def _prepara_grafico_peso(voci, max_tick_x=5):
+    """Trasforma l'elenco delle pesate nei dati pronti per disegnare il grafico (usato da app e PDF)."""
+    punti = []
+    for v in voci or []:
+        try:
+            d = date.fromisoformat(str(v.get("data"))[:10])
+            kg = float(v.get("peso_kg"))
+        except Exception:
+            continue
+        if kg > 0:
+            punti.append((d, kg))
+    if not punti:
+        return None
+    punti.sort(key=lambda p: p[0])
+
+    in_grammi = max(p[1] for p in punti) < 1.0          # animali molto piccoli: si mostrano i grammi
+    f = 1000.0 if in_grammi else 1.0
+    valori = [p[1] * f for p in punti]
+    vmin, vmax = min(valori), max(valori)
+    margine = (vmax - vmin) * 0.25 if vmax > vmin else max(vmax * 0.1, 1.0)
+    lo, hi = max(0.0, vmin - margine), vmax + margine
+    ticks, passo = _tick_gradevoli(lo, hi, 5)
+    if abs(passo - round(passo)) < 1e-9:
+        dec = 0
+    elif abs(passo * 10 - round(passo * 10)) < 1e-9:
+        dec = 1
+    else:
+        dec = 2
+
+    d0, d1 = punti[0][0], punti[-1][0]
+    span = (d1 - d0).days
+    def frazione(d):
+        return 0.5 if span == 0 else (d - d0).days / span
+
+    tutti_interi = all(abs(v - round(v)) < 0.05 for v in valori)
+    def etichetta(v):
+        if in_grammi:
+            return str(round(v)) if tutti_interi else _num_it(v, 1)
+        return _num_it(v, 2).rstrip("0").rstrip(",")
+
+    # date da scrivere sotto l'asse (senza sovrapposizioni)
+    if len(punti) <= max_tick_x or span == 0:
+        candidate = sorted({p[0] for p in punti})
+    else:
+        candidate = [d0 + timedelta(days=round(span * i / (max_tick_x - 1))) for i in range(max_tick_x)]
+    xticks, ultimo_fx = [], -1.0
+    for d in candidate:
+        fx = frazione(d)
+        if ultimo_fx < 0 or fx - ultimo_fx >= 0.16:
+            xticks.append((fx, d.strftime("%d/%m/%y")))
+            ultimo_fx = fx
+
+    return {
+        "unita": "g" if in_grammi else "kg",
+        "punti": [{"fx": frazione(d), "v": v, "txt": etichetta(v), "data": d} for (d, _), v in zip(punti, valori)],
+        "ticks": [(t, _num_it(t, dec)) for t in ticks],
+        "ylo": lo, "yhi": hi,
+        "xticks": xticks,
+    }
+
+def _indici_con_etichetta(g):
+    """Quali punti portano il valore scritto: se sono tanti solo primo/ultimo/minimo/massimo, e mai due etichette sovrapposte."""
+    n = len(g["punti"])
+    if n <= 10:
+        candidati = list(range(n))
+    else:
+        valori = [p["v"] for p in g["punti"]]
+        candidati = sorted({0, n - 1, valori.index(min(valori)), valori.index(max(valori))})
+    intervallo = (g["yhi"] - g["ylo"]) or 1.0
+    scelti = []
+    for i in candidati:
+        p = g["punti"][i]
+        if scelti:
+            q = g["punti"][scelti[-1]]
+            vicino = abs(p["fx"] - q["fx"]) < 0.075 and abs(p["v"] - q["v"]) / intervallo < 0.14
+            if vicino:
+                if i == n - 1:          # l'ultima pesata ha la precedenza
+                    scelti.pop()
+                else:
+                    continue
+        scelti.append(i)
+    return set(scelti)
+
+def genera_grafico_peso_svg(voci):
+    """Grafico dell'andamento del peso come immagine SVG (testo), oppure None se non ci sono pesate valide."""
+    g = _prepara_grafico_peso(voci)
+    if not g:
+        return None
+    W, H = 560, 330
+    sx, dx, top, bas = 70, 22, 48, 60
+    area_w, area_h = W - sx - dx, H - top - bas
+    pad = 20
+    base_y = top + area_h
+
+    def X(fx):
+        return sx + pad + fx * (area_w - 2 * pad)
+
+    def Y(v):
+        return top + (1 - (v - g["ylo"]) / (g["yhi"] - g["ylo"])) * area_h
+
+    s = [f'<rect width="{W}" height="{H}" rx="14" fill="#ffffff"/>',
+         f'<text x="{sx}" y="28" font-size="18" font-weight="700" fill="#1E3A2B">Andamento del peso ({g["unita"]})</text>']
+    for val, txt in g["ticks"]:
+        y = Y(val)
+        s.append(f'<line x1="{sx}" y1="{y:.1f}" x2="{W - dx}" y2="{y:.1f}" stroke="#E2E8F0" stroke-width="1"/>')
+        s.append(f'<text x="{sx - 8}" y="{y + 5:.1f}" text-anchor="end" font-size="16" fill="#475569">{txt}</text>')
+    s.append(f'<line x1="{sx}" y1="{base_y}" x2="{W - dx}" y2="{base_y}" stroke="#94A3B8" stroke-width="1.5"/>')
+    for fx, txt in g["xticks"]:
+        x = X(fx)
+        s.append(f'<line x1="{x:.1f}" y1="{base_y}" x2="{x:.1f}" y2="{base_y + 6}" stroke="#94A3B8" stroke-width="1.5"/>')
+        s.append(f'<text x="{x:.1f}" y="{base_y + 26}" text-anchor="middle" font-size="15" fill="#475569">{txt}</text>')
+
+    xy = [(X(p["fx"]), Y(p["v"])) for p in g["punti"]]
+    if len(xy) > 1:
+        area = f"{xy[0][0]:.1f},{base_y} " + " ".join(f"{x:.1f},{y:.1f}" for x, y in xy) + f" {xy[-1][0]:.1f},{base_y}"
+        s.append(f'<polygon points="{area}" fill="#0284C7" fill-opacity="0.12"/>')
+        linea = " ".join(f"{x:.1f},{y:.1f}" for x, y in xy)
+        s.append(f'<polyline points="{linea}" fill="none" stroke="#0284C7" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>')
+    for x, y in xy:
+        s.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="5.5" fill="#ffffff" stroke="#0284C7" stroke-width="3"/>')
+    for i in sorted(_indici_con_etichetta(g)):          # le etichette sopra tutti i punti
+        x, y = xy[i]
+        ty = y - 13 if y - 13 > top - 4 else y + 25
+        ancora = "start" if x < sx + 24 else ("end" if x > W - dx - 24 else "middle")
+        s.append(f'<text x="{x:.1f}" y="{ty:.1f}" text-anchor="{ancora}" font-size="16" font-weight="700" fill="#0F172A" '
+                 f'stroke="#ffffff" stroke-width="4" paint-order="stroke">{g["punti"][i]["txt"]}</text>')
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" '
+            f'font-family="Arial, Helvetica, sans-serif">{"".join(s)}</svg>')
+
+def grafico_in_html(svg, larghezza_max=720):
+    """Prepara il grafico SVG per essere mostrato nella pagina."""
+    b64 = base64.b64encode(svg.encode("utf-8")).decode("ascii")
+    return (f'<div style="margin:6px 0 14px 0;"><img alt="Grafico dell\'andamento del peso" src="data:image/svg+xml;base64,{b64}" '
+            f'style="width:100%;max-width:{larghezza_max}px;border:1px solid #E2E8F0;border-radius:14px;"></div>')
+
+
+# ---------------------------------------------------------------------------
+# LIBRETTO SANITARIO IN PDF (anagrafica + microchip vettoriale, visite con etichette, terapie, fatture)
+# ---------------------------------------------------------------------------
+PDF_VERDE = "#1E3A2B"
+PDF_AZZURRO = "#0284C7"
+PDF_GRIGIO_CHIARO = "#F1F5F9"
+PDF_BORDO = "#CBD5E1"
+
+def _pdf_txt(valore, vuoto="—"):
+    """Prepara un testo per il PDF: toglie le emoji (i font del PDF non le hanno) e protegge i simboli speciali."""
+    s = "" if valore is None else str(valore)
+    s = s.encode("cp1252", "ignore").decode("cp1252").strip()
+    if not s:
+        return vuoto
+    return html_escape(s, quote=False).replace("\n", "<br/>")
+
+def _data_it(valore):
+    """2024-03-05 -> 05/03/2024"""
+    try:
+        return date.fromisoformat(str(valore)[:10]).strftime("%d/%m/%Y")
+    except Exception:
+        return _pdf_txt(valore)
+
+def _importo_it(valore):
+    """1234.5 -> 1.234,50"""
+    try:
+        return f"{float(valore):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except Exception:
+        return "0,00"
+
+def _pdf_immagine(b64_img, larghezza_max, altezza_max):
+    """Crea l'immagine per il PDF mantenendo le proporzioni. Restituisce None se non valida."""
+    if not b64_img:
+        return None
+    try:
+        dati = base64.b64decode(b64_img)
+        with Image.open(io.BytesIO(dati)) as im:
+            w, h = im.size
+        if w < 1 or h < 1:
+            return None
+        fattore = min(larghezza_max / w, altezza_max / h)
+        return RLImage(io.BytesIO(dati), width=w * fattore, height=h * fattore)
+    except Exception:
+        return None
+
+if REPORTLAB_OK:
+    class CodiceBarreCode128(Flowable):
+        """Codice a barre Code 128 disegnato come vero VETTORIALE dentro il PDF."""
+        def __init__(self, testo, altezza=1.7 * cm, modulo=0.45 * mm):
+            Flowable.__init__(self)
+            self.testo = "".join(str(testo).split())
+            self.elementi = "".join(_CODE128_PATTERNS[v] for v in _code128_valori(self.testo))
+            self.modulo = modulo
+            self.altezza = altezza
+            self.quiet = 10 * modulo
+            self.larghezza = sum(int(c) for c in self.elementi) * modulo + 2 * self.quiet
+            self.hAlign = "LEFT"
+
+        def wrap(self, larghezza_disp, altezza_disp):
+            return self.larghezza, self.altezza + 0.6 * cm
+
+        def draw(self):
+            c = self.canv
+            c.setFillColor(colors.white)
+            c.rect(0, 0, self.larghezza, self.altezza + 0.6 * cm, stroke=0, fill=1)
+            c.setFillColor(colors.black)
+            x, e_barra = self.quiet, True
+            for ch in self.elementi:
+                w = int(ch) * self.modulo
+                if e_barra:
+                    c.rect(x, 0.5 * cm, w, self.altezza, stroke=0, fill=1)
+                x += w
+                e_barra = not e_barra
+            c.setFont("Helvetica", 9)
+            c.drawCentredString(self.larghezza / 2, 0.12 * cm, self.testo)
+
+    class GraficoPesoPDF(Flowable):
+        """Grafico dell'andamento del peso, disegnato in vettoriale dentro il PDF."""
+        def __init__(self, g, larghezza, altezza=7.2 * cm):
+            Flowable.__init__(self)
+            self.g = g
+            self.larghezza = larghezza
+            self.altezza = altezza
+            self.hAlign = "LEFT"
+
+        def wrap(self, larghezza_disp, altezza_disp):
+            return self.larghezza, self.altezza
+
+        def draw(self):
+            c, g = self.canv, self.g
+            azzurro = colors.HexColor("#0284C7")
+            grigio = colors.HexColor("#475569")
+            sx, dx, top, bas = 1.7 * cm, 0.7 * cm, 1.3 * cm, 1.2 * cm
+            area_w = self.larghezza - sx - dx
+            area_h = self.altezza - top - bas
+            pad = 0.5 * cm
+
+            def X(fx):
+                return sx + pad + fx * (area_w - 2 * pad)
+
+            def Y(v):
+                return bas + (v - g["ylo"]) / (g["yhi"] - g["ylo"]) * area_h
+
+            c.setStrokeColor(colors.HexColor("#CBD5E1"))
+            c.setFillColor(colors.white)
+            c.setLineWidth(0.6)
+            c.roundRect(0, 0, self.larghezza, self.altezza, 6, stroke=1, fill=1)
+            c.setFont("Helvetica-Bold", 10)
+            c.setFillColor(colors.HexColor("#1E3A2B"))
+            c.drawString(sx, self.altezza - 0.75 * cm, f"Andamento del peso ({g['unita']})")
+
+            c.setFont("Helvetica", 8)
+            for val, txt in g["ticks"]:
+                y = Y(val)
+                c.setStrokeColor(colors.HexColor("#E2E8F0"))
+                c.setLineWidth(0.5)
+                c.line(sx, y, self.larghezza - dx, y)
+                c.setFillColor(grigio)
+                c.drawRightString(sx - 0.2 * cm, y - 2.5, txt)
+
+            c.setStrokeColor(colors.HexColor("#94A3B8"))
+            c.setLineWidth(0.8)
+            c.line(sx, bas, self.larghezza - dx, bas)
+            for fx, txt in g["xticks"]:
+                x = X(fx)
+                c.line(x, bas, x, bas - 3)
+                c.setFillColor(grigio)
+                c.drawCentredString(x, bas - 0.5 * cm, txt)
+
+            xy = [(X(p["fx"]), Y(p["v"])) for p in g["punti"]]
+            if len(xy) > 1:
+                tracciato = c.beginPath()
+                tracciato.moveTo(xy[0][0], bas)
+                for x, y in xy:
+                    tracciato.lineTo(x, y)
+                tracciato.lineTo(xy[-1][0], bas)
+                tracciato.close()
+                c.setFillColor(colors.HexColor("#E0F2FE"))
+                c.drawPath(tracciato, stroke=0, fill=1)
+                c.setStrokeColor(azzurro)
+                c.setLineWidth(1.8)
+                for (x1, y1), (x2, y2) in zip(xy, xy[1:]):
+                    c.line(x1, y1, x2, y2)
+            c.setLineWidth(1.6)
+            c.setStrokeColor(azzurro)
+            c.setFillColor(colors.white)
+            for x, y in xy:
+                c.circle(x, y, 2.6, stroke=1, fill=1)
+            c.setFont("Helvetica-Bold", 8.5)
+            c.setFillColor(colors.HexColor("#0F172A"))
+            for i in sorted(_indici_con_etichetta(g)):
+                x, y = xy[i]
+                c.drawCentredString(x, y + 5, g["punti"][i]["txt"])
+
+def genera_pdf_libretto(pet, user_db, includi_fatture=True):
+    """Crea il PDF del libretto sanitario dell'animale e restituisce i byte del file."""
+    if not REPORTLAB_OK:
+        raise RuntimeError("Libreria reportlab non installata")
+
+    verde = colors.HexColor(PDF_VERDE)
+    azzurro = colors.HexColor(PDF_AZZURRO)
+    grigio_chiaro = colors.HexColor(PDF_GRIGIO_CHIARO)
+    bordo = colors.HexColor(PDF_BORDO)
+    testo_grigio = colors.HexColor("#475569")
+
+    oggi_txt = date.today().strftime("%d/%m/%Y")
+    pet_pulito = pet.encode("cp1252", "ignore").decode("cp1252") or "animale"
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4, leftMargin=1.8 * cm, rightMargin=1.8 * cm, topMargin=2.3 * cm, bottomMargin=1.8 * cm,
+        title=f"Libretto sanitario - {pet_pulito}", author="PetHealth"
+    )
+    W = doc.width - 12  # il riquadro di pagina ha 6 pt di margine interno per lato
+
+    stile = {
+        "titolo": ParagraphStyle("titolo", fontName="Helvetica-Bold", fontSize=24, leading=28, textColor=verde),
+        "nome": ParagraphStyle("nome", fontName="Helvetica-Bold", fontSize=18, leading=22, textColor=azzurro),
+        "sotto": ParagraphStyle("sotto", fontName="Helvetica", fontSize=10, leading=14, textColor=testo_grigio),
+        "banda": ParagraphStyle("banda", fontName="Helvetica-Bold", fontSize=12.5, leading=16, textColor=colors.white),
+        "sezione2": ParagraphStyle("sezione2", fontName="Helvetica-Bold", fontSize=10.5, leading=14, textColor=verde, spaceBefore=6, spaceAfter=3),
+        "cella": ParagraphStyle("cella", fontName="Helvetica", fontSize=9.5, leading=12.5, textColor=colors.HexColor("#1E293B")),
+        "etichetta": ParagraphStyle("etichetta", fontName="Helvetica-Bold", fontSize=9, leading=12, textColor=testo_grigio),
+        "testata": ParagraphStyle("testata", fontName="Helvetica-Bold", fontSize=10, leading=13, textColor=verde),
+        "testata_dx": ParagraphStyle("testata_dx", fontName="Helvetica-Bold", fontSize=9, leading=13, alignment=2),
+        "th": ParagraphStyle("th", fontName="Helvetica-Bold", fontSize=9, leading=12, textColor=colors.white),
+        "vuoto": ParagraphStyle("vuoto", fontName="Helvetica-Oblique", fontSize=9.5, leading=13, textColor=testo_grigio),
+        "piccolo": ParagraphStyle("piccolo", fontName="Helvetica", fontSize=8, leading=11, textColor=testo_grigio),
+    }
+
+    def P(testo, nome="cella"):
+        return Paragraph(testo, stile[nome])
+
+    def banda(titolo):
+        t = Table([[P(_pdf_txt(titolo), "banda")]], colWidths=[W])
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), azzurro),
+            ("LEFTPADDING", (0, 0), (-1, -1), 10), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ]))
+        return t
+
+    def tabella_chiave_valore(righe, larghezza_chiave=4.2 * cm):
+        dati = [[P(_pdf_txt(k), "etichetta"), v if not isinstance(v, str) else P(v)] for k, v in righe]
+        t = Table(dati, colWidths=[larghezza_chiave, W - larghezza_chiave])
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (0, -1), grigio_chiaro),
+            ("BOX", (0, 0), (-1, -1), 0.6, bordo), ("INNERGRID", (0, 0), (-1, -1), 0.3, bordo),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        return t
+
+    def tabella_elenco(intestazioni, righe, larghezze, allinea_dx=()):
+        dati = [[P(_pdf_txt(h), "th") for h in intestazioni]] + righe
+        t = Table(dati, colWidths=larghezze, repeatRows=1)
+        stile_t = [
+            ("BACKGROUND", (0, 0), (-1, 0), verde),
+            ("BOX", (0, 0), (-1, -1), 0.6, bordo), ("INNERGRID", (0, 0), (-1, -1), 0.3, bordo),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5), ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, grigio_chiaro]),
+        ]
+        for col in allinea_dx:
+            stile_t.append(("ALIGN", (col, 0), (col, -1), "RIGHT"))
+        t.setStyle(TableStyle(stile_t))
+        return t
+
+    # --------------------------------------------------------------- dati
+    ana = user_db.get("db_anagrafica", {}).get(pet, {}) or {}
+    visite = sorted(user_db.get("db_visite", {}).get(pet, []), key=lambda v: str(v.get("data", "")))
+    terapie = sorted(user_db.get("db_terapie", {}).get(pet, []), key=lambda t: str(t.get("data_inizio", "")))
+    pesi = sorted(user_db.get("db_peso", {}).get(pet, []), key=lambda p: str(p.get("data", "")))
+    fatture = sorted(user_db.get("db_fatture", {}).get(pet, []), key=lambda f: str(f.get("data", "")))
+
+    storia = []
+
+    def apri_sezione(titolo, spazio=5 * cm):
+        storia.append(CondPageBreak(spazio))   # se resta poco spazio, passa alla pagina successiva
+        storia.append(banda(titolo))
+
+    def sottotitolo(titolo):
+        storia.append(CondPageBreak(3.5 * cm))
+        storia.append(P(titolo, "sezione2"))
+
+    # --------------------------------------------------------------- intestazione
+    storia.append(P("Libretto Sanitario Digitale", "titolo"))
+    storia.append(Spacer(1, 4))
+    storia.append(P(_pdf_txt(ana.get("nome") or pet), "nome"))
+    sotto = " · ".join([x for x in [ana.get("tipo_animale"), ana.get("razza")] if x])
+    if sotto:
+        storia.append(P(_pdf_txt(sotto), "sotto"))
+    storia.append(P(f"Documento generato il {oggi_txt}", "sotto"))
+    storia.append(Spacer(1, 12))
+
+    # --------------------------------------------------------------- anagrafica
+    apri_sezione("1. Anagrafica dell'animale")
+    storia.append(Spacer(1, 6))
+    codice_mc = (ana.get("microchip") or "").strip()
+    righe_ana = [
+        ("Nome", _pdf_txt(ana.get("nome") or pet)),
+        ("Specie", _pdf_txt(ana.get("tipo_animale"))),
+        ("Razza", _pdf_txt(ana.get("razza"))),
+        ("Data di nascita", _data_it(ana.get("data_nascita")) if ana.get("data_nascita") else "—"),
+        ("Numero microchip", _pdf_txt(codice_mc, "Non inserito")),
+        ("Segni particolari", _pdf_txt(ana.get("segni_particolari"), "Nessuno")),
+    ]
+    storia.append(tabella_chiave_valore(righe_ana))
+
+    if codice_mc and genera_barcode_svg(codice_mc):
+        storia.append(Spacer(1, 8))
+        storia.append(KeepTogether([
+            P("Codice a barre del microchip (versione digitale vettoriale)", "sezione2"),
+            CodiceBarreCode128(codice_mc),
+        ]))
+    img_mc = _pdf_immagine(ana.get("microchip_foto"), 8 * cm, 4 * cm)
+    if img_mc:
+        img_mc.hAlign = "LEFT"
+        storia.append(Spacer(1, 6))
+        storia.append(KeepTogether([P("Scansione originale dell'etichetta del microchip", "sezione2"), img_mc]))
+
+    storia.append(Spacer(1, 10))
+    sottotitolo("Proprietario")
+    storia.append(tabella_chiave_valore([
+        ("Nome e cognome", _pdf_txt(ana.get("proprietario_nome") or user_db.get("nome"))),
+        ("Indirizzo", _pdf_txt(ana.get("proprietario_indirizzo"))),
+        ("Città", _pdf_txt(ana.get("proprietario_citta"))),
+        ("Telefono", _pdf_txt(ana.get("proprietario_telefono") or user_db.get("numero_whatsapp"))),
+    ]))
+    storia.append(Spacer(1, 14))
+
+    # --------------------------------------------------------------- visite
+    apri_sezione("2. Visite mediche e vaccinazioni")
+    storia.append(Spacer(1, 6))
+
+    vaccini = [v for v in visite if v.get("nome_vaccino") or v.get("tipo") == "Vaccinazione"]
+    if vaccini:
+        sottotitolo("Riepilogo vaccinazioni")
+        righe_vac = []
+        for v in vaccini:
+            righe_vac.append([
+                P(_data_it(v.get("data"))), P(_pdf_txt(v.get("nome_vaccino"))), P(_pdf_txt(v.get("lotto_vaccino"))),
+                P(_data_it(v.get("scadenza_vaccino")) if v.get("scadenza_vaccino") else "—"),
+                P("Certificata" if v.get("certificata") else "In attesa di firma"),
+            ])
+        storia.append(tabella_elenco(["Data", "Vaccino", "Lotto", "Scadenza", "Stato"], righe_vac,
+                                     [2.6 * cm, W - 2.6 * cm - 3.2 * cm - 2.6 * cm - 3.4 * cm, 3.2 * cm, 2.6 * cm, 3.4 * cm]))
+        storia.append(Spacer(1, 10))
+
+    if visite:
+        sottotitolo("Dettaglio delle visite")
+        for v in visite:
+            cert = bool(v.get("certificata"))
+            stato = '<font color="#15803D"><b>CERTIFICATA</b></font>' if cert else '<font color="#B45309"><b>In attesa di firma</b></font>'
+            testata = Table([[P(f"{_data_it(v.get('data'))} &nbsp;-&nbsp; {_pdf_txt(v.get('tipo'))}", "testata"), P(stato, "testata_dx")]],
+                            colWidths=[W * 0.62, W * 0.38])
+            testata.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#E0F2FE")),
+                ("BOX", (0, 0), (-1, -1), 0.6, bordo), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]))
+            righe_v = [("Veterinario / clinica", _pdf_txt(v.get("veterinario")))]
+            if cert:
+                righe_v.append(("Codice certificato", _pdf_txt(v.get("codice_certificato"))))
+                righe_v.append(("ID medico permanente", _pdf_txt(v.get("vet_id_permanente"))))
+                if v.get("num_ordine_vet"):
+                    righe_v.append(("Iscrizione ordine (FNOVI)", _pdf_txt(f"N. {v.get('num_ordine_vet')} - {str(v.get('provincia_vet', '')).upper()}")))
+            if v.get("nome_vaccino") or v.get("tipo") == "Vaccinazione":
+                righe_v.append(("Vaccino", _pdf_txt(v.get("nome_vaccino"))))
+                righe_v.append(("Lotto", _pdf_txt(v.get("lotto_vaccino"))))
+                if v.get("scadenza_vaccino"):
+                    righe_v.append(("Scadenza vaccino", _data_it(v.get("scadenza_vaccino"))))
+            righe_v.append(("Diagnosi / note cliniche", _pdf_txt(v.get("diagnosi"))))
+            if v.get("referto"):
+                righe_v.append(("Referto allegato", _pdf_txt(v.get("referto"))))
+            img_et = _pdf_immagine(v.get("etichetta_vaccino"), 8 * cm, 5.5 * cm)
+            if img_et:
+                img_et.hAlign = "LEFT"
+                righe_v.append(("Etichetta del vaccino", img_et))
+            storia.append(KeepTogether([testata, tabella_chiave_valore(righe_v), Spacer(1, 9)]))
+    else:
+        storia.append(P("Nessuna visita medica registrata.", "vuoto"))
+    storia.append(Spacer(1, 10))
+
+    # --------------------------------------------------------------- terapie
+    apri_sezione("3. Terapie e farmaci")
+    storia.append(Spacer(1, 6))
+    if terapie:
+        righe_t = []
+        for t in terapie:
+            note = _pdf_txt(t.get("note"), "")
+            if t.get("ricetta"):
+                note = (note + "<br/>" if note else "") + f"Ricetta: {_pdf_txt(t.get('ricetta'))}"
+            righe_t.append([P(_pdf_txt(t.get("farmaco"))), P(_pdf_txt(t.get("dosaggio"))), P(_pdf_txt(t.get("orario"))),
+                            P(_pdf_txt(t.get("periodo"))), P(note or "—")])
+        storia.append(tabella_elenco(["Farmaco", "Dose", "Orario", "Periodo", "Istruzioni / note"], righe_t,
+                                     [3.6 * cm, 2.8 * cm, 1.8 * cm, 4.2 * cm, W - 3.6 * cm - 2.8 * cm - 1.8 * cm - 4.2 * cm]))
+    else:
+        storia.append(P("Nessuna terapia registrata.", "vuoto"))
+    storia.append(Spacer(1, 14))
+
+    # --------------------------------------------------------------- peso
+    apri_sezione("4. Peso e andamento", spazio=9.5 * cm)
+    storia.append(Spacer(1, 6))
+    grafico = _prepara_grafico_peso(pesi)
+    if grafico:
+        storia.append(GraficoPesoPDF(grafico, W))
+        storia.append(Spacer(1, 8))
+        validi = []
+        for pz in pesi:
+            try:
+                validi.append((pz, float(pz.get("peso_kg"))))
+            except Exception:
+                continue
+        righe_p = [[P(_data_it(pz.get("data"))), P(_pdf_txt(fmt_peso(kg))), P(_pdf_txt(pz.get("note"), "—"))] for pz, kg in validi]
+        storia.append(tabella_elenco(["Data", "Peso", "Note"], righe_p, [3 * cm, 3.4 * cm, W - 6.4 * cm]))
+        if len(validi) >= 2:
+            (p0, k0), (p1, k1) = validi[0], validi[-1]
+            storia.append(Spacer(1, 4))
+            storia.append(P(f"Prima pesata: {_data_it(p0.get('data'))} ({_pdf_txt(fmt_peso(k0))}) &nbsp;|&nbsp; "
+                            f"Ultima pesata: {_data_it(p1.get('data'))} ({_pdf_txt(fmt_peso(k1))}) &nbsp;|&nbsp; "
+                            f"Variazione: {_pdf_txt(fmt_variazione(k1 - k0))}", "sotto"))
+    else:
+        storia.append(P("Nessuna pesata registrata.", "vuoto"))
+    storia.append(Spacer(1, 14))
+
+    # --------------------------------------------------------------- fatture
+    if includi_fatture:
+        apri_sezione("5. Fatture e spese")
+        storia.append(Spacer(1, 6))
+        if fatture:
+            righe_f, totale = [], 0.0
+            for f in fatture:
+                try:
+                    totale += float(f.get("importo", 0) or 0)
+                except Exception:
+                    pass
+                righe_f.append([P(_data_it(f.get("data"))), P(_pdf_txt(f.get("categoria"))), P(_pdf_txt(f.get("fornitore"))),
+                                P(f"€ {_importo_it(f.get('importo'))}")])
+            righe_f.append([P(""), P(""), P("<b>Totale</b>"), P(f"<b>€ {_importo_it(totale)}</b>")])
+            tab_f = tabella_elenco(["Data", "Categoria", "Clinica / farmacia", "Importo"], righe_f,
+                                   [2.6 * cm, 4.6 * cm, W - 2.6 * cm - 4.6 * cm - 3.2 * cm, 3.2 * cm], allinea_dx=(3,))
+            storia.append(tab_f)
+        else:
+            storia.append(P("Nessuna fattura registrata.", "vuoto"))
+        storia.append(Spacer(1, 14))
+
+    storia.append(P("Le prestazioni indicate come «Certificata» sono state convalidate dal medico veterinario tramite PIN nell'app PetHealth. "
+                    "Documento generato automaticamente da PetHealth.", "piccolo"))
+
+    def decora_pagina(canvas, documento):
+        canvas.saveState()
+        larghezza_pagina, altezza_pagina = A4
+        canvas.setStrokeColor(azzurro)
+        canvas.setLineWidth(1.8)
+        canvas.line(documento.leftMargin, altezza_pagina - 1.55 * cm, larghezza_pagina - documento.rightMargin, altezza_pagina - 1.55 * cm)
+        canvas.setFont("Helvetica-Bold", 9)
+        canvas.setFillColor(verde)
+        canvas.drawString(documento.leftMargin, altezza_pagina - 1.3 * cm, "PetHealth")
+        canvas.setFont("Helvetica", 8)
+        canvas.setFillColor(testo_grigio)
+        canvas.drawRightString(larghezza_pagina - documento.rightMargin, altezza_pagina - 1.3 * cm, f"Libretto sanitario di {pet_pulito}")
+        canvas.drawCentredString(larghezza_pagina / 2, 1.0 * cm, f"Pagina {documento.page}")
+        canvas.restoreState()
+
+    doc.build(storia, onFirstPage=decora_pagina, onLaterPages=decora_pagina)
+    return buf.getvalue()
+
+
 def codice_microchip_valido(codice):
     """Un microchip ISO valido ha 15 cifre."""
     return bool(codice) and codice.isdigit() and len(codice) == 15
@@ -1135,6 +1762,15 @@ st.markdown("""
     }
     #MainMenu, footer { visibility: hidden; }
     header[data-testid="stHeader"] { background-color: transparent !important; }
+    div[data-testid="stDownloadButton"] > button {
+        background-color: #1E3A2B !important; border: 1px solid #1E3A2B !important;
+        border-radius: 12px !important; padding: 0.75rem 1.5rem !important; width: 100% !important;
+        box-shadow: 0 4px 12px rgba(30, 58, 43, 0.15) !important;
+    }
+    div[data-testid="stDownloadButton"] > button p, div[data-testid="stDownloadButton"] > button span {
+        color: #FFFFFF !important; font-weight: 700 !important; font-size: 1rem !important;
+    }
+
     /* ===== MENU LATERALE AZZURRO CON SCRITTE BIANCHE (uguale su tutti i dispositivi) ===== */
     [data-testid="stSidebar"],
     [data-testid="stSidebar"] > div,
@@ -1374,6 +2010,7 @@ if st.session_state.logged_user_email is None:
                         "db_visite": {},
                         "db_terapie": {},
                         "db_fatture": {},
+                        "db_peso": {},
                         "db_anagrafica": {},
                         "angeli_archiviati": {}
                     }
@@ -1429,6 +2066,7 @@ if "lista_animali" not in user_db: user_db["lista_animali"] = []
 if "db_visite" not in user_db: user_db["db_visite"] = {}
 if "db_terapie" not in user_db: user_db["db_terapie"] = {}
 if "db_fatture" not in user_db: user_db["db_fatture"] = {}
+if "db_peso" not in user_db: user_db["db_peso"] = {}
 if "db_anagrafica" not in user_db: user_db["db_anagrafica"] = {}
 if "angeli_archiviati" not in user_db: user_db["angeli_archiviati"] = {}
 
@@ -1478,8 +2116,10 @@ with st.sidebar:
     if st.button("📋 Anagrafica Pet & Proprietario"): cambia_sezione("anagrafica")
     if st.button("🏥 Visite e Clinica"): cambia_sezione("visite")
     if st.button("💊 Terapie e Farmaci"): cambia_sezione("terapie")
+    if st.button("⚖️ Peso e Andamento"): cambia_sezione("peso")
     if st.button("📄 Fatture e Spese"): cambia_sezione("fatture")
     if st.button("✈️ Passaporto & Viaggi"): cambia_sezione("passaporto")
+    if st.button("📘 Libretto PDF (scarica)"): cambia_sezione("pdf_libretto")
     if st.button("🚨 Urgenze & Cliniche 24H"): cambia_sezione("urgenze")
     if st.button("🌈 I nostri angeli a 4 zampe"): cambia_sezione("angeli")
     
@@ -1583,6 +2223,7 @@ if st.session_state.sezione_attiva == "dashboard":
                             "visite": user_db["db_visite"].pop(pet_selected, []),
                             "terapie": user_db["db_terapie"].pop(pet_selected, []),
                             "fatture": user_db["db_fatture"].pop(pet_selected, []),
+                            "peso": user_db["db_peso"].pop(pet_selected, []),
                             "anagrafica": user_db["db_anagrafica"].pop(pet_selected, {})
                         }
                         user_db["lista_animali"].remove(pet_selected)
@@ -1709,6 +2350,7 @@ elif st.session_state.sezione_attiva == "anagrafica":
                             user_db["db_visite"][new_n] = user_db["db_visite"].pop(old_n, [])
                             user_db["db_terapie"][new_n] = user_db["db_terapie"].pop(old_n, [])
                             user_db["db_fatture"][new_n] = user_db["db_fatture"].pop(old_n, [])
+                            user_db["db_peso"][new_n] = user_db["db_peso"].pop(old_n, [])
                             user_db["db_anagrafica"].pop(old_n, None)
                             user_db["pet_selezionato"] = new_n
                         user_db["db_anagrafica"][new_n] = nuovi_dati
@@ -1838,6 +2480,81 @@ elif st.session_state.sezione_attiva == "terapie":
     else:
         mostra_avviso_nessun_animale()
 
+elif st.session_state.sezione_attiva == "peso":
+    if pet_selected:
+        st.markdown(f"<h2 style='color: #1E3A2B;'>⚖️ Peso e Andamento - {html_escape(pet_selected)}</h2>", unsafe_allow_html=True)
+        voci = user_db["db_peso"].setdefault(pet_selected, [])
+        n_p = st.session_state.get("peso_cnt", 0)
+
+        if st.session_state.get("peso_flash"):
+            st.success(st.session_state.pop("peso_flash"))
+
+        with st.expander("➕ Registra una nuova pesata", expanded=True):
+            st.caption("Facoltativo: registra il peso quando vuoi, ad esempio dopo una visita. Dalla prima pesata comparirà il grafico dell'andamento.")
+            col_p1, col_p2 = st.columns(2)
+            with col_p1:
+                data_peso = st.date_input("Data della pesata", value=date.today(), min_value=date(2000, 1, 1),
+                                          max_value=date.today(), key=f"peso_data_{n_p}")
+                unita_peso = st.radio("Unità di misura", ["kg", "g"], horizontal=True, key=f"peso_unita_{n_p}")
+            with col_p2:
+                if unita_peso == "kg":
+                    valore_peso = st.number_input("Peso (kg)", min_value=0.0, max_value=250.0, value=0.0, step=0.1,
+                                                  format="%.2f", key=f"peso_kg_{n_p}")
+                else:
+                    valore_peso = st.number_input("Peso (g)", min_value=0.0, max_value=250000.0, value=0.0, step=5.0,
+                                                  format="%.0f", key=f"peso_g_{n_p}")
+                nota_peso = st.text_input("Note (facoltative)", placeholder="es. dopo la visita, a digiuno...", key=f"peso_nota_{n_p}")
+
+            if st.button("💾 Salva pesata"):
+                if valore_peso <= 0:
+                    st.error("Inserisci un peso maggiore di zero.")
+                else:
+                    peso_kg = round(valore_peso / 1000.0, 4) if unita_peso == "g" else round(valore_peso, 3)
+                    esistente = next((p for p in voci if p.get("data") == str(data_peso)), None)
+                    if esistente:
+                        esistente["peso_kg"] = peso_kg
+                        esistente["note"] = nota_peso.strip()
+                        messaggio = f"Pesata del {data_peso.strftime('%d/%m/%Y')} aggiornata: {fmt_peso(peso_kg)}."
+                    else:
+                        voci.append({"data": str(data_peso), "peso_kg": peso_kg, "note": nota_peso.strip()})
+                        messaggio = f"Pesata salvata: {fmt_peso(peso_kg)} il {data_peso.strftime('%d/%m/%Y')}."
+                    st.session_state["peso_cnt"] = n_p + 1
+                    st.session_state["peso_flash"] = messaggio
+                    salva_dati()
+                    st.rerun()
+
+        validi = [p for p in sorted(voci, key=lambda p: str(p.get("data", "")))
+                  if isinstance(p.get("peso_kg"), (int, float)) and p["peso_kg"] > 0]
+        if validi:
+            ultimo, primo = validi[-1], validi[0]
+            precedente = validi[-2] if len(validi) >= 2 else None
+            m1, m2, m3 = st.columns(3)
+            m1.metric(f"Ultimo peso ({_data_it(ultimo.get('data'))})", fmt_peso(ultimo["peso_kg"]),
+                      delta=fmt_variazione(ultimo["peso_kg"] - precedente["peso_kg"]) if precedente else None, delta_color="off")
+            if precedente:
+                m2.metric(f"Variazione dal {_data_it(primo.get('data'))}", fmt_variazione(ultimo["peso_kg"] - primo["peso_kg"]))
+            m3.metric("Pesate registrate", len(validi))
+
+            st.markdown(grafico_in_html(genera_grafico_peso_svg(validi)), unsafe_allow_html=True)
+            if not precedente:
+                st.caption("Registra almeno un'altra pesata per vedere l'andamento nel tempo.")
+        else:
+            st.info(f"Nessuna pesata registrata per {pet_selected}: inserisci il primo peso qui sopra e comparirà il grafico dell'andamento.")
+
+        if voci:
+            st.markdown("### 📋 Storico pesate")
+            for idx, p in sorted(enumerate(voci), key=lambda x: str(x[1].get("data", "")), reverse=True):
+                with st.expander(f"⚖️ {_data_it(p.get('data'))} - {fmt_peso(p.get('peso_kg'))}"):
+                    st.write(f"**Peso:** {fmt_peso(p.get('peso_kg'))}")
+                    if p.get("note"):
+                        st.write(f"**Note:** {p['note']}")
+                    if st.button("🗑️ Elimina pesata", key=f"del_peso_{idx}"):
+                        voci.pop(idx)
+                        salva_dati()
+                        st.rerun()
+    else:
+        mostra_avviso_nessun_animale()
+
 elif st.session_state.sezione_attiva == "fatture":
     if pet_selected:
         st.markdown(f"<h2 style='color: #1E3A2B;'>📄 Fatture e Spese - {pet_selected}</h2>", unsafe_allow_html=True)
@@ -1901,12 +2618,73 @@ elif st.session_state.sezione_attiva == "angeli":
             user_db["db_visite"][sel_ang] = dati_ang.get("visite", [])
             user_db["db_terapie"][sel_ang] = dati_ang.get("terapie", [])
             user_db["db_fatture"][sel_ang] = dati_ang.get("fatture", [])
+            user_db["db_peso"][sel_ang] = dati_ang.get("peso", [])
             if dati_ang.get("anagrafica"):
                 user_db["db_anagrafica"][sel_ang] = dati_ang["anagrafica"]
             user_db["pet_selezionato"] = sel_ang
             salva_dati(); st.success(f"{sel_ang} è stato ripristinato!"); st.rerun()
     else:
         st.info("Nessun animale registrato nella sezione Angeli.")
+
+elif st.session_state.sezione_attiva == "pdf_libretto":
+    st.markdown("<h2 style='color: #1E3A2B;'>📘 Libretto Sanitario in PDF</h2>", unsafe_allow_html=True)
+    if pet_selected:
+        visite_pdf = user_db["db_visite"].get(pet_selected, [])
+        n_visite = len(visite_pdf)
+        n_vaccini = sum(1 for v in visite_pdf if v.get("nome_vaccino") or v.get("tipo") == "Vaccinazione")
+        n_etichette = sum(1 for v in visite_pdf if v.get("etichetta_vaccino"))
+        n_terapie = len(user_db["db_terapie"].get(pet_selected, []))
+        n_pesate = len(user_db["db_peso"].get(pet_selected, []))
+        n_fatture = len(user_db["db_fatture"].get(pet_selected, []))
+        ana_pdf = user_db["db_anagrafica"].get(pet_selected, {})
+        ha_microchip = bool((ana_pdf.get("microchip") or "").strip())
+
+        st.markdown(f"""
+            <div class="wellness-card" style="border-left: 5px solid #1E3A2B !important;">
+                <span class="card-badge badge-green">LIBRETTO DI {html_escape(pet_selected)}</span>
+                <h3 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 10px;">Cosa conterrà il PDF</h3>
+                <p>• <strong>Anagrafica</strong> dell'animale e del proprietario, con il <strong>codice a barre digitale del microchip</strong></p>
+                <p>• <strong>{n_visite}</strong> visite mediche (di cui <strong>{n_vaccini}</strong> vaccinazioni, con <strong>{n_etichette}</strong> etichette dei vaccini)</p>
+                <p>• <strong>{n_terapie}</strong> terapie e farmaci</p>
+                <p>• <strong>{n_pesate}</strong> pesate, con il <strong>grafico dell'andamento del peso</strong></p>
+                <p>• <strong>{n_fatture}</strong> fatture e spese (facoltative)</p>
+            </div>
+        """, unsafe_allow_html=True)
+
+        if not ha_microchip:
+            st.info("Non hai ancora inserito il numero del microchip: nel PDF non comparirà il codice a barre. Puoi aggiungerlo dalla sezione Anagrafica.")
+
+        includi_fatture = st.checkbox("Includi anche fatture e spese", value=True, key="pdf_includi_fatture")
+
+        if not REPORTLAB_OK:
+            st.error("Per creare il PDF serve la libreria «reportlab». Su GitHub apri il file requirements.txt, aggiungi una riga con scritto "
+                     "reportlab, salva con «Commit changes» e attendi che l'app si riavvii.")
+        else:
+            if st.button("📄 Genera il PDF del libretto"):
+                try:
+                    with st.spinner("Sto creando il PDF..."):
+                        dati_pdf = genera_pdf_libretto(pet_selected, user_db, includi_fatture)
+                    st.session_state["pdf_libretto"] = {
+                        "pet": pet_selected, "utente": user_email, "bytes": dati_pdf,
+                        "ora": datetime.now().strftime("%H:%M")
+                    }
+                except Exception as e:
+                    st.session_state.pop("pdf_libretto", None)
+                    st.error(f"Non è stato possibile creare il PDF: {e}")
+
+            pdf_pronto = st.session_state.get("pdf_libretto")
+            if pdf_pronto and pdf_pronto.get("pet") == pet_selected and pdf_pronto.get("utente") == user_email:
+                nome_pulito = re.sub(r"[^A-Za-z0-9_-]+", "_", pet_selected).strip("_") or "animale"
+                st.success(f"✅ PDF pronto (creato alle {pdf_pronto['ora']}, {len(pdf_pronto['bytes']) // 1024} KB). Se modifichi dei dati, genera di nuovo il PDF.")
+                st.download_button(
+                    "⬇️ Scarica il PDF del libretto",
+                    data=pdf_pronto["bytes"],
+                    file_name=f"Libretto_{nome_pulito}_{date.today().isoformat()}.pdf",
+                    mime="application/pdf",
+                    key="dl_pdf_libretto"
+                )
+    else:
+        mostra_avviso_nessun_animale()
 
 elif st.session_state.sezione_attiva == "nuovo_animale":
     st.markdown("<h2 style='color: #1E3A2B;'>🐾 Registra Nuovo Animale</h2>", unsafe_allow_html=True)
@@ -1954,6 +2732,7 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
                     user_db["db_visite"][pet_name] = []
                     user_db["db_terapie"][pet_name] = []
                     user_db["db_fatture"][pet_name] = []
+                    user_db["db_peso"][pet_name] = []
                 user_db["db_anagrafica"][pet_name] = {
                     "tipo_animale": n_specie,
                     "nome": pet_name,
