@@ -2023,6 +2023,166 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
+# GRAFICA RAFFINATA
+# Tutti questi stili valgono SOLO per l'area principale: il menù laterale azzurro resta identico.
+# Palette: verde profondo (#1E3A2B), avorio (#F8F6F0), oro champagne (#B8975A), azzurro del menù (#0284C7).
+# ---------------------------------------------------------------------------
+_PREFISSI_AREA_PRINCIPALE = [
+    'section.main',
+    '[data-testid="stMain"]',
+    '[data-testid="stAppViewContainer"] > section:not([data-testid="stSidebar"])',
+]
+
+def _css_area_principale(regole):
+    """Applica ogni regola solo all'area principale della pagina (mai al menù laterale)."""
+    blocchi = []
+    for selettori, dichiarazioni in regole:
+        elenco = []
+        for s in selettori.split("|"):
+            s = s.strip()
+            for pref in _PREFISSI_AREA_PRINCIPALE:
+                elenco.append(f"{pref} {s}")
+        blocchi.append(",\n".join(elenco) + " {" + dichiarazioni + "}")
+    return "\n".join(blocchi)
+
+_FONT_TITOLI = "'Playfair Display', Georgia, 'Times New Roman', serif"
+
+_REGOLE_GRAFICA = [
+    # --- impaginazione ---
+    ('[data-testid="stMainBlockContainer"] | .block-container',
+     'padding-top: 2.4rem !important; max-width: 1240px !important; margin-left: auto !important; margin-right: auto !important;'),
+
+    # --- titoli ---
+    ('h1 | h2 | h3',
+     "font-family: " + _FONT_TITOLI + " !important; font-weight: 600 !important; letter-spacing: -0.01em !important;"),
+    ('h1', 'font-size: 2.3rem !important; line-height: 1.15 !important;'),
+    ('h2', 'font-size: 1.7rem !important; line-height: 1.25 !important;'),
+    ('h3', 'font-size: 1.28rem !important; line-height: 1.3 !important;'),
+    ('h2::after',
+     'content: ""; display: block; width: 58px; height: 2px; margin-top: 10px; '
+     'background: linear-gradient(90deg, #B8975A, rgba(184, 151, 90, 0));'),
+    ('.wellness-card h2::after', 'display: none;'),
+    ('p | li', 'line-height: 1.6;'),
+    ('code',
+     'background: #F3EFE3 !important; color: #5E4B1F !important; border-radius: 6px !important; '
+     'padding: 0.12rem 0.45rem !important; font-size: 0.88em !important;'),
+    ('hr',
+     'border: none !important; height: 1px !important; margin: 1.6rem 0 !important; '
+     'background: linear-gradient(90deg, rgba(184,151,90,0), #CDB98A, rgba(184,151,90,0)) !important;'),
+    ('[data-testid="stCaptionContainer"]', 'color: #6B7A72 !important;'),
+
+    # --- schede ---
+    ('.wellness-card',
+     'background: #FFFFFF !important; border: 1px solid #ECE6D6 !important; border-radius: 20px !important; '
+     'padding: 22px 26px !important; margin-bottom: 18px !important; '
+     'box-shadow: 0 1px 2px rgba(30, 58, 43, 0.04), 0 18px 40px -24px rgba(30, 58, 43, 0.24) !important; '
+     'transition: box-shadow 0.25s ease, transform 0.25s ease;'),
+    ('.wellness-card:hover',
+     'box-shadow: 0 1px 2px rgba(30, 58, 43, 0.05), 0 24px 46px -24px rgba(30, 58, 43, 0.32) !important; transform: translateY(-1px);'),
+    ('.wellness-card p', 'margin: 0.3rem 0 !important; color: #2B3A33;'),
+    ('.auth-container',
+     'border: 1px solid #ECE6D6 !important; border-top: 3px solid #B8975A !important; border-radius: 24px !important; '
+     'box-shadow: 0 1px 2px rgba(30, 58, 43, 0.04), 0 28px 60px -30px rgba(30, 58, 43, 0.30) !important;'),
+
+    # --- etichette (badge) ---
+    ('.card-badge',
+     'background: #F4EEDD !important; color: #7A5F2A !important; border: 1px solid #E6DAB9; '
+     'font-size: 0.68rem !important; font-weight: 700 !important; letter-spacing: 0.12em !important; padding: 4px 13px !important;'),
+    ('.badge-purple', 'background: #E8F0EA !important; color: #1E3A2B !important; border-color: #CFE0D4 !important;'),
+    ('.badge-blue', 'background: #E3F1F9 !important; color: #0B5F8A !important; border-color: #C5E1F1 !important;'),
+    ('.badge-green', 'background: #E4F2E7 !important; color: #1E6B3A !important; border-color: #C6E3CC !important;'),
+
+    # --- pulsanti ---
+    ('.stButton > button | [data-testid="stBaseButton-secondary"] | [data-testid="stBaseButton-primary"] | '
+     '[data-testid="stFormSubmitButton"] > button | [data-testid="stDownloadButton"] > button',
+     'background: linear-gradient(135deg, #2A5240 0%, #1E3A2B 100%) !important; border: 1px solid #1E3A2B !important; '
+     'border-radius: 14px !important; padding: 0.7rem 1.4rem !important; '
+     'box-shadow: 0 8px 18px -8px rgba(30, 58, 43, 0.5) !important; '
+     'transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease !important;'),
+    ('.stButton > button:hover | [data-testid="stBaseButton-secondary"]:hover | [data-testid="stBaseButton-primary"]:hover | '
+     '[data-testid="stFormSubmitButton"] > button:hover | [data-testid="stDownloadButton"] > button:hover',
+     'transform: translateY(-1px); filter: brightness(1.08); box-shadow: 0 14px 24px -10px rgba(30, 58, 43, 0.55) !important;'),
+    ('.stButton > button:active | [data-testid="stFormSubmitButton"] > button:active | [data-testid="stDownloadButton"] > button:active',
+     'transform: translateY(0); filter: brightness(0.98);'),
+    ('.stButton > button:focus-visible | [data-testid="stFormSubmitButton"] > button:focus-visible | [data-testid="stDownloadButton"] > button:focus-visible',
+     'outline: 2px solid #B8975A !important; outline-offset: 2px !important;'),
+    ('.stButton > button p | .stButton > button span | [data-testid="stFormSubmitButton"] > button p | '
+     '[data-testid="stDownloadButton"] > button p',
+     'font-size: 0.95rem !important; font-weight: 600 !important; letter-spacing: 0.012em !important;'),
+    ('[data-testid^="stBaseLinkButton"]',
+     'border: 1.5px solid #1E3A2B !important; border-radius: 14px !important; background: #FFFFFF !important; '
+     'box-shadow: 0 6px 14px -8px rgba(30, 58, 43, 0.35) !important; transition: transform 0.18s ease, background 0.18s ease !important;'),
+    ('[data-testid^="stBaseLinkButton"]:hover', 'background: #F4EEDD !important; transform: translateY(-1px);'),
+    ('[data-testid^="stBaseLinkButton"] p', 'color: #1E3A2B !important; font-weight: 600 !important;'),
+
+    # --- campi di inserimento ---
+    ('[data-baseweb="input"] | [data-baseweb="textarea"] | [data-baseweb="select"] > div',
+     'background-color: #FFFFFF !important; border: 1px solid #DCD5C2 !important; border-radius: 12px !important; '
+     'box-shadow: none !important; transition: border-color 0.18s ease, box-shadow 0.18s ease;'),
+    ('[data-baseweb="input"]:focus-within | [data-baseweb="textarea"]:focus-within | [data-baseweb="select"] > div:focus-within',
+     'border-color: #0284C7 !important; box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.14) !important;'),
+    ('[data-baseweb="base-input"]', 'background-color: transparent !important; border-radius: 12px !important;'),
+    ('[data-testid="stWidgetLabel"] p | [data-testid="stWidgetLabel"] label',
+     'font-size: 0.84rem !important; font-weight: 600 !important; color: #3C4B43 !important; letter-spacing: 0.01em;'),
+    ('[data-testid="stFileUploaderDropzone"]',
+     'border: 1.5px dashed #CDB98A !important; background: #FBF9F3 !important; border-radius: 16px !important;'),
+    ('[data-testid="stForm"]',
+     'border: 1px solid #ECE6D6 !important; border-radius: 20px !important; background: #FFFFFF; padding: 1.3rem 1.5rem !important; '
+     'box-shadow: 0 18px 40px -28px rgba(30, 58, 43, 0.22);'),
+
+    # --- tendine ---
+    ('[data-testid="stExpander"] details',
+     'background: #FFFFFF !important; border: 1px solid #E9E3D3 !important; border-radius: 16px !important; '
+     'box-shadow: 0 1px 2px rgba(30, 58, 43, 0.04); transition: box-shadow 0.22s ease, border-color 0.22s ease;'),
+    ('[data-testid="stExpander"] details:hover',
+     'border-color: #D6CAA8 !important; box-shadow: 0 14px 28px -20px rgba(30, 58, 43, 0.30);'),
+    ('[data-testid="stExpander"] summary', 'padding: 0.8rem 1.1rem !important; border-radius: 16px;'),
+    ('[data-testid="stExpander"] summary p', 'font-weight: 600 !important; color: #1E3A2B !important;'),
+
+    # --- schede di accesso (tab) ---
+    ('button[data-baseweb="tab"]', 'font-weight: 600 !important; color: #5A6B62;'),
+    ('button[data-baseweb="tab"][aria-selected="true"]', 'color: #1E3A2B !important;'),
+    ('[data-baseweb="tab-highlight"]', 'background-color: #B8975A !important; height: 3px !important; border-radius: 3px;'),
+    ('[data-baseweb="tab-border"]', 'background-color: #E9E3D3 !important;'),
+
+    # --- numeri (metriche) e messaggi ---
+    ('[data-testid="stMetric"]',
+     'background: #FFFFFF; border: 1px solid #ECE6D6; border-radius: 18px; padding: 14px 18px; '
+     'box-shadow: 0 1px 2px rgba(30, 58, 43, 0.04), 0 14px 30px -22px rgba(30, 58, 43, 0.25);'),
+    ('[data-testid="stMetricLabel"] p',
+     'font-size: 0.72rem !important; text-transform: uppercase; letter-spacing: 0.09em !important; font-weight: 700 !important; color: #6B7A72 !important;'),
+    ('[data-testid="stMetricValue"]', "font-family: " + _FONT_TITOLI + " !important; color: #1E3A2B !important; font-weight: 600 !important;"),
+    ('[data-testid="stAlert"]', 'border-radius: 14px !important; border: 1px solid rgba(30, 58, 43, 0.12) !important;'),
+
+    # --- immagini e fotocamera ---
+    ('[data-testid="stImage"] img', 'border-radius: 12px; border: 1px solid #ECE6D6;'),
+    ('[data-testid="stCameraInput"] > div', 'border-radius: 16px;'),
+
+    # --- calendario del calore ---
+    ('.cal-mese',
+     'border: 1px solid #ECE6D6 !important; border-radius: 18px !important; padding: 12px 12px 10px 12px !important; '
+     'box-shadow: 0 1px 2px rgba(30, 58, 43, 0.04), 0 14px 30px -22px rgba(30, 58, 43, 0.26);'),
+    ('.cal-titolo',
+     "font-family: " + _FONT_TITOLI + "; font-size: 1.02rem !important; letter-spacing: 0.01em; "
+     "border-bottom: 1px solid #F0EADB; padding-bottom: 6px; margin-bottom: 8px !important;"),
+    ('.cal-tab th', 'color: #9A8A62 !important; letter-spacing: 0.06em;'),
+    ('.cal-tab td.cal-calore',
+     'background: linear-gradient(135deg, #E8667F, #D6455F) !important; box-shadow: 0 3px 8px -3px rgba(214, 69, 95, 0.65);'),
+    ('.cal-tab td.cal-stima', 'box-shadow: inset 0 0 0 1.5px #D6455F;'),
+]
+
+st.markdown(
+    "<style>\n"
+    "@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&display=swap');\n"
+    ".stApp { background-image: radial-gradient(1100px 520px at 88% -8%, rgba(184, 151, 90, 0.11), rgba(184, 151, 90, 0) 62%); }\n"
+    + _css_area_principale([('::selection', 'background: rgba(184, 151, 90, 0.35);')])
+    + "\n" + _css_area_principale(_REGOLE_GRAFICA) +
+    "\n</style>",
+    unsafe_allow_html=True
+)
+
+
+# ---------------------------------------------------------------------------
 # CHIUSURA AUTOMATICA DELLA SIDEBAR (dopo la scelta di una sezione)
 # Lo script riprova più volte e prova più selettori, così funziona anche se
 # Streamlit disegna il pulsante con un po' di ritardo.
