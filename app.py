@@ -1667,8 +1667,9 @@ def anteprima_foto_ritaglio(raw_bytes):
 
 def html_foto_animale(b64_img, specie, nome, dimensione=116):
     """Foto tonda con cornice dorata; se manca la foto mostra un segnaposto con l'emoji della specie."""
-    stile = (f"width:{dimensione}px;height:{dimensione}px;border-radius:50%;flex:none;"
-             "box-shadow:0 0 0 3px #FFFFFF, 0 0 0 5px #B8975A, 0 14px 26px -12px rgba(30,58,43,0.5);")
+    stile = (f"width:{dimensione}px;height:{dimensione}px;min-width:{dimensione}px;max-width:{dimensione}px;"
+             "aspect-ratio:1/1;border-radius:50%;flex:none;display:block;overflow:hidden;")
+    stile += ("box-shadow:0 0 0 3px #FFFFFF, 0 0 0 5px #B8975A, 0 14px 26px -12px rgba(30,58,43,0.5);")
     if b64_img:
         return (f'<img alt="Foto di {html_escape(str(nome), quote=True)}" '
                 f'src="data:image/jpeg;base64,{b64_img}" style="{stile}object-fit:cover;">')
@@ -2667,7 +2668,7 @@ elif st.session_state.sezione_attiva == "anagrafica":
         with col_view1:
             st.markdown(f"""
                 <div class="wellness-card" style="border-left: 5px solid #1E3A2B !important;">
-                    <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:8px;">{blocco_foto}<div><span class="card-badge badge-purple">🐾 DATI ANAGRAFICI PET</span><h3 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 4px;">{anagrafica_corrente.get('nome', pet_selected)}</h3></div></div>
+                    <div style="text-align:center;margin-bottom:12px;"><div style="display:flex;justify-content:center;margin:2px 0 16px 0;">{blocco_foto}</div><span class="card-badge badge-purple">🐾 DATI ANAGRAFICI PET</span><h3 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 4px;">{anagrafica_corrente.get('nome', pet_selected)}</h3></div>
                     <p>• <strong>Specie:</strong> {anagrafica_corrente.get('tipo_animale', 'N/D')}</p>
                     <p>• <strong>Sesso:</strong> {anagrafica_corrente.get('sesso') or 'Non specificato'}</p>
                     <p>• <strong>Razza:</strong> {anagrafica_corrente.get('razza') or 'Non specificata'}</p>
