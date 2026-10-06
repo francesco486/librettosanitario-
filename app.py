@@ -1410,13 +1410,26 @@ def genera_pdf_libretto(pet, user_db, includi_fatture=True):
         storia.append(P(titolo, "sezione2"))
 
     # --------------------------------------------------------------- intestazione
-    storia.append(P("Libretto Sanitario Digitale", "titolo"))
-    storia.append(Spacer(1, 4))
-    storia.append(P(_pdf_txt(ana.get("nome") or pet), "nome"))
+    blocco_titolo = [P("Libretto Sanitario Digitale", "titolo"), Spacer(1, 4), P(_pdf_txt(ana.get("nome") or pet), "nome")]
     sotto = " · ".join([x for x in [ana.get("tipo_animale"), ana.get("razza")] if x])
     if sotto:
-        storia.append(P(_pdf_txt(sotto), "sotto"))
-    storia.append(P(f"Documento generato il {oggi_txt}", "sotto"))
+        blocco_titolo.append(P(_pdf_txt(sotto), "sotto"))
+    blocco_titolo.append(P(f"Documento generato il {oggi_txt}", "sotto"))
+    img_pet = _pdf_immagine(ana.get("foto_animale"), 3.6 * cm, 4.2 * cm)
+    if img_pet:
+        img_pet.hAlign = "CENTER"
+        intestazione = Table([[blocco_titolo, img_pet]], colWidths=[W - 4.4 * cm, 4.4 * cm])
+        intestazione.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (0, 0), "TOP"), ("VALIGN", (1, 0), (1, 0), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (0, 0), 0), ("RIGHTPADDING", (0, 0), (0, 0), 0),
+            ("TOPPADDING", (0, 0), (0, 0), 0), ("BOTTOMPADDING", (0, 0), (0, 0), 0),
+            ("BOX", (1, 0), (1, 0), 1.2, colors.HexColor("#B8975A")),
+            ("LEFTPADDING", (1, 0), (1, 0), 5), ("RIGHTPADDING", (1, 0), (1, 0), 5),
+            ("TOPPADDING", (1, 0), (1, 0), 5), ("BOTTOMPADDING", (1, 0), (1, 0), 5),
+        ]))
+        storia.append(intestazione)
+    else:
+        storia.extend(blocco_titolo)
     storia.append(Spacer(1, 12))
 
     # --------------------------------------------------------------- anagrafica
@@ -1619,6 +1632,95 @@ def genera_pdf_libretto(pet, user_db, includi_fatture=True):
 
     doc.build(storia, onFirstPage=decora_pagina, onLaterPages=decora_pagina)
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# FOTO DELL'ANIMALE: scelta (galleria o scatto), ritaglio facoltativo, ridimensionamento e visualizzazione
+# ---------------------------------------------------------------------------
+EMOJI_SPECIE = {"Cane": "🐶", "Gatto": "🐱", "Coniglio": "🐰", "Uccello": "🐦", "Rettile": "🦎"}
+
+def elabora_foto_animale(raw_bytes):
+    """Prepara la foto per essere salvata: orientamento corretto, sfondo bianco se trasparente, max 900 px, JPEG leggero."""
+    img = Image.open(io.BytesIO(raw_bytes))
+    img = ImageOps.exif_transpose(img)
+    if img.mode in ("RGBA", "LA", "P"):
+        img = img.convert("RGBA")
+        sfondo = Image.new("RGB", img.size, (255, 255, 255))
+        sfondo.paste(img, mask=img.split()[-1])
+        img = sfondo
+    else:
+        img = img.convert("RGB")
+    img.thumbnail((900, 900))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=85, optimize=True)
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+@st.cache_data(show_spinner=False, max_entries=10)
+def anteprima_foto_ritaglio(raw_bytes):
+    """Anteprima leggera della foto per lo strumento di ritaglio."""
+    img = Image.open(io.BytesIO(raw_bytes))
+    img = ImageOps.exif_transpose(img).convert("RGB")
+    img.thumbnail((900, 900))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=80)
+    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+def html_foto_animale(b64_img, specie, nome, dimensione=116):
+    """Foto tonda con cornice dorata; se manca la foto mostra un segnaposto con l'emoji della specie."""
+    stile = (f"width:{dimensione}px;height:{dimensione}px;border-radius:50%;flex:none;"
+             "box-shadow:0 0 0 3px #FFFFFF, 0 0 0 5px #B8975A, 0 14px 26px -12px rgba(30,58,43,0.5);")
+    if b64_img:
+        return (f'<img alt="Foto di {html_escape(str(nome), quote=True)}" '
+                f'src="data:image/jpeg;base64,{b64_img}" style="{stile}object-fit:cover;">')
+    emoji = EMOJI_SPECIE.get(specie, "🐾")
+    return (f'<div style="{stile}display:flex;align-items:center;justify-content:center;font-size:{int(dimensione * 0.5)}px;'
+            f'background:linear-gradient(135deg,#F4EEDD,#E8F0EA);">{emoji}</div>')
+
+def scegli_foto_animale(chiave):
+    """Interfaccia per scegliere la foto dell'animale. Restituisce la foto pronta (base64) oppure None."""
+    n = st.session_state.get(f"scan_cnt_{chiave}", 0)
+    modo = st.radio("Come vuoi inserire la foto?", ["🖼️ Carica una foto", "📷 Scatta ora"],
+                    horizontal=True, key=f"fa_modo_{chiave}_{n}")
+    if modo.startswith("📷"):
+        file_foto = st.camera_input("Scatta una foto al tuo animale", key=f"fa_cam_{chiave}_{n}")
+    else:
+        st.caption("💡 Su smartphone puoi scegliere una foto dalla galleria oppure scattarla al momento.")
+        file_foto = st.file_uploader("Scegli la foto (JPG, PNG o WEBP)", type=["jpg", "jpeg", "png", "webp"],
+                                     key=f"fa_up_{chiave}_{n}")
+    if file_foto is None:
+        return None
+
+    grezza = file_foto.getvalue()
+    foto_lavoro = grezza
+    if st.checkbox("✂️ Ritaglia la foto", key=f"fa_crop_{chiave}_{n}"):
+        try:
+            box_iniziale = [0.04, 0.04, 0.96, 0.96]
+            box_scelto = box_iniziale
+            if _cropper is not None:
+                st.caption("Trascina gli angoli e i bordi del riquadro verde per scegliere la parte da tenere.")
+                chiave_foto = hashlib.md5(grezza).hexdigest()[:10]
+                sel = _cropper(key=f"fa_cropper_{chiave}_{n}_{chiave_foto}", src=anteprima_foto_ritaglio(grezza),
+                               box=box_iniziale, default=None)
+                if sel and sel.get("box") and len(sel["box"]) == 4:
+                    box_scelto = sel["box"]
+            else:
+                sx = st.slider("Ritaglio orizzontale (%)", 0, 100, (4, 96), key=f"fa_sx_{chiave}_{n}")
+                sy = st.slider("Ritaglio verticale (%)", 0, 100, (4, 96), key=f"fa_sy_{chiave}_{n}")
+                if sx[1] - sx[0] >= 3 and sy[1] - sy[0] >= 3:
+                    box_scelto = [sx[0] / 100, sy[0] / 100, sx[1] / 100, sy[1] / 100]
+            foto_lavoro = ritaglia_bytes(grezza, box_scelto)
+        except Exception as e:
+            st.warning(f"Ritaglio non disponibile per questa foto: {e}")
+            foto_lavoro = grezza
+
+    try:
+        pronta = elabora_foto_animale(foto_lavoro)
+    except Exception:
+        st.error("Non riesco a leggere questa immagine. Prova con una foto in formato JPG o PNG.")
+        return None
+    st.caption("Anteprima della foto che verrà salvata:")
+    st.image(base64.b64decode(pronta), width=240)
+    return pronta
 
 
 def codice_microchip_valido(codice):
@@ -2546,12 +2648,17 @@ if st.session_state.sezione_attiva == "dashboard":
 elif st.session_state.sezione_attiva == "anagrafica":
     if pet_selected:
         st.markdown(f"<h2 style='color: #1E3A2B;'>📋 Scheda Anagrafica - {pet_selected}</h2>", unsafe_allow_html=True)
+        if st.session_state.get("foto_flash"):
+            st.success(st.session_state.pop("foto_flash"))
         anagrafica_corrente = user_db["db_anagrafica"].get(pet_selected, {
             "tipo_animale": "Cane", "nome": pet_selected, "razza": "", "data_nascita": str(date.today()),
             "microchip": "", "microchip_foto": "", "segni_particolari": "", "proprietario_nome": user_db.get("nome", ""),
             "proprietario_indirizzo": "", "proprietario_telefono": user_db.get("numero_whatsapp", ""), "proprietario_citta": ""
         })
 
+        foto_attuale = anagrafica_corrente.get("foto_animale") or ""
+        blocco_foto = html_foto_animale(foto_attuale, anagrafica_corrente.get("tipo_animale"),
+                                        anagrafica_corrente.get("nome") or pet_selected)
         codice_mc = (anagrafica_corrente.get('microchip') or '').strip()
         svg_mc = genera_barcode_svg(codice_mc) if codice_mc else None
         blocco_barcode = svg_in_html(svg_mc) if svg_mc else ""
@@ -2560,8 +2667,7 @@ elif st.session_state.sezione_attiva == "anagrafica":
         with col_view1:
             st.markdown(f"""
                 <div class="wellness-card" style="border-left: 5px solid #1E3A2B !important;">
-                    <span class="card-badge badge-purple">🐾 DATI ANAGRAFICI PET</span>
-                    <h3 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 12px;">{anagrafica_corrente.get('nome', pet_selected)}</h3>
+                    <div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:8px;">{blocco_foto}<div><span class="card-badge badge-purple">🐾 DATI ANAGRAFICI PET</span><h3 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 4px;">{anagrafica_corrente.get('nome', pet_selected)}</h3></div></div>
                     <p>• <strong>Specie:</strong> {anagrafica_corrente.get('tipo_animale', 'N/D')}</p>
                     <p>• <strong>Sesso:</strong> {anagrafica_corrente.get('sesso') or 'Non specificato'}</p>
                     <p>• <strong>Razza:</strong> {anagrafica_corrente.get('razza') or 'Non specificata'}</p>
@@ -2592,6 +2698,27 @@ elif st.session_state.sezione_attiva == "anagrafica":
                     <p>• <strong>Città:</strong> {anagrafica_corrente.get('proprietario_citta') or 'Non specificata'}</p>
                 </div>
             """, unsafe_allow_html=True)
+
+        etichetta_foto = ("🔄 Cambia" if foto_attuale else "📸 Aggiungi") + f" la foto di {pet_selected}"
+        with st.expander(etichetta_foto, expanded=False):
+            st.caption("La foto resterà sempre visibile nella scheda anagrafica di questo animale.")
+            chiave_foto_pet = f"foto_{pet_selected}"
+            nuova_foto = scegli_foto_animale(chiave_foto_pet)
+            if nuova_foto:
+                if st.button(f"💾 Salva la foto di {pet_selected}", key=f"salva_foto_{pet_selected}"):
+                    record_foto = user_db["db_anagrafica"].setdefault(pet_selected, dict(anagrafica_corrente))
+                    record_foto["foto_animale"] = nuova_foto
+                    azzera_scansione(chiave_foto_pet)
+                    st.session_state["foto_flash"] = f"Foto di {pet_selected} salvata."
+                    salva_dati()
+                    st.rerun()
+            if foto_attuale:
+                if st.button("🗑️ Rimuovi la foto attuale", key=f"rimuovi_foto_{pet_selected}"):
+                    record_foto = user_db["db_anagrafica"].setdefault(pet_selected, dict(anagrafica_corrente))
+                    record_foto["foto_animale"] = ""
+                    st.session_state["foto_flash"] = f"Foto di {pet_selected} rimossa."
+                    salva_dati()
+                    st.rerun()
 
         with st.expander("✏ Modifica Anagrafica Pet e Proprietario", expanded=False):
             # --- Scansione del codice a barre del microchip (fuori dal modulo di salvataggio) ---
@@ -2657,6 +2784,7 @@ elif st.session_state.sezione_attiva == "anagrafica":
                         nuovi_dati = {
                             "tipo_animale": e_tipo, "sesso": e_sesso, "nome": new_n, "razza": e_razza, "data_nascita": str(e_data_nascita),
                             "microchip": e_microchip.strip(), "microchip_foto": microchip_foto_finale,
+                            "foto_animale": anagrafica_corrente.get("foto_animale", ""),
                             "segni_particolari": e_segni, "proprietario_nome": e_prop_nome,
                             "proprietario_indirizzo": e_prop_indirizzo, "proprietario_telefono": e_prop_telefono, "proprietario_citta": e_prop_citta
                         }
@@ -3058,7 +3186,7 @@ elif st.session_state.sezione_attiva == "pdf_libretto":
             <div class="wellness-card" style="border-left: 5px solid #1E3A2B !important;">
                 <span class="card-badge badge-green">LIBRETTO DI {html_escape(pet_selected)}</span>
                 <h3 style="color: #1E3A2B; margin-top: 5px; margin-bottom: 10px;">Cosa conterrà il PDF</h3>
-                <p>• <strong>Anagrafica</strong> dell'animale e del proprietario, con il <strong>codice a barre digitale del microchip</strong></p>
+                <p>• <strong>Anagrafica</strong> dell'animale e del proprietario, con la <strong>foto</strong> e il <strong>codice a barre digitale del microchip</strong></p>
                 <p>• <strong>{n_visite}</strong> visite mediche (di cui <strong>{n_vaccini}</strong> vaccinazioni, con <strong>{n_etichette}</strong> etichette dei vaccini)</p>
                 <p>• <strong>{n_terapie}</strong> terapie e farmaci</p>
                 <p>• <strong>{n_pesate}</strong> pesate, con il <strong>grafico dell'andamento del peso</strong></p>{riga_calori}
@@ -3116,6 +3244,10 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
         st.session_state["n_microchip"] = codice_chip_n
         st.session_state["ultimo_codice_chip_nuovo"] = codice_chip_n
 
+    foto_nuova_b64 = None
+    with st.expander("📸 Foto dell'animale (facoltativa)", expanded=False):
+        foto_nuova_b64 = scegli_foto_animale("foto_nuovo")
+
     with st.form("form_nuovo_animale"):
         st.markdown("### 🐾 1. Dati Anagrafici dell'Animale")
         c1, c2 = st.columns(2)
@@ -3158,6 +3290,7 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
                     "data_nascita": str(n_data),
                     "microchip": n_microchip.strip(),
                     "microchip_foto": foto_chip_n or "",
+                    "foto_animale": foto_nuova_b64 or user_db["db_anagrafica"].get(pet_name, {}).get("foto_animale", ""),
                     "segni_particolari": n_segni,
                     "proprietario_nome": n_prop_nome.strip(),
                     "proprietario_telefono": n_prop_tel.strip(),
@@ -3167,6 +3300,7 @@ elif st.session_state.sezione_attiva == "nuovo_animale":
                 user_db["pet_selezionato"] = pet_name
                 st.session_state.sezione_attiva = "anagrafica"
                 azzera_scansione("chip_nuovo")
+                azzera_scansione("foto_nuovo")
                 st.session_state.pop("ultimo_codice_chip_nuovo", None)
                 salva_dati()
                 st.success(f"🎉 Scheda e libretto sanitario di {pet_name} creati con successo!")
