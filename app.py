@@ -678,6 +678,145 @@ try:
 except Exception:
     _cropper = None  # in questo caso il ritaglio si fa con i cursori
 
+# ---------------------------------------------------------------------------
+# I TUOI ANIMALI: cerchietti con le foto, cliccabili per cambiare il libretto attivo
+# ---------------------------------------------------------------------------
+AVATAR_HTML = r"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap');
+  html, body { margin: 0; padding: 0; background: transparent; font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  #wrap { padding: 4px 4px 10px 4px; box-sizing: border-box; }
+  #card { background: #FFFFFF; border: 1px solid #ECE6D6; border-radius: 20px; padding: 14px 18px 12px 18px; box-sizing: border-box;
+          box-shadow: 0 1px 2px rgba(30,58,43,0.04), 0 14px 30px -22px rgba(30,58,43,0.25); }
+  .pill { display: inline-block; background: #F4EEDD; color: #7A5F2A; border: 1px solid #E6DAB9; border-radius: 999px;
+          font-size: 11px; font-weight: 700; letter-spacing: 0.12em; padding: 4px 13px; text-transform: uppercase; }
+  #lista { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 14px 0 6px 0; }
+  .av { background: none; border: none; padding: 4px; margin: 0; width: 76px; display: flex; flex-direction: column; align-items: center;
+        cursor: pointer; font-family: inherit; border-radius: 14px; transition: transform 0.18s ease; }
+  .av:hover { transform: translateY(-2px); }
+  .av:focus-visible { outline: 2px solid #B8975A; outline-offset: 2px; }
+  .cerchio { width: 56px; height: 56px; min-width: 56px; border-radius: 50%; overflow: hidden; display: flex; align-items: center; justify-content: center;
+             box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 3.5px #E3D9BE; opacity: 0.88; transition: box-shadow 0.18s ease, opacity 0.18s ease; }
+  .cerchio img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .cerchio.vuoto { background: linear-gradient(135deg, #F4EEDD, #E8F0EA); font-size: 28px; }
+  .av:hover .cerchio { opacity: 1; }
+  .av.attivo .cerchio { opacity: 1; box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 4.5px #B8975A, 0 8px 16px -8px rgba(30,58,43,0.55); }
+  .nome { margin-top: 8px; max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: #5A6B62; font-weight: 600; }
+  .av.attivo .nome { color: #1E3A2B; font-weight: 700; }
+  #nota { font-size: 12px; color: #6B7A72; margin-top: 2px; }
+</style>
+</head>
+<body>
+<div id="wrap"><div id="card">
+  <span class="pill">🐾 I tuoi animali</span>
+  <div id="lista"></div>
+  <div id="nota">Tocca una foto per aprire il libretto di quell'animale.</div>
+</div></div>
+<script>
+(function () {
+  var wrap = document.getElementById("wrap");
+  var lista = document.getElementById("lista");
+  var dati = { animali: [], attivo: "" };
+  var ultimaAltezza = 0;
+
+  function send(type, data) {
+    var m = { isStreamlitMessage: true, type: type };
+    for (var k in data) { m[k] = data[k]; }
+    window.parent.postMessage(m, "*");
+  }
+  function setHeight() {
+    var h = Math.ceil(wrap.getBoundingClientRect().height) + 4;
+    if (Math.abs(h - ultimaAltezza) < 2) { return; }
+    ultimaAltezza = h;
+    send("streamlit:setFrameHeight", { height: h });
+  }
+
+  function disegna() {
+    lista.innerHTML = "";
+    dati.animali.forEach(function (a) {
+      var attivo = (a.nome === dati.attivo);
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "av" + (attivo ? " attivo" : "");
+      b.title = a.nome;
+      b.setAttribute("aria-label", "Apri il libretto di " + a.nome);
+      b.setAttribute("aria-pressed", attivo ? "true" : "false");
+      var c = document.createElement("span");
+      c.className = "cerchio";
+      if (a.foto) {
+        var im = document.createElement("img");
+        im.src = a.foto; im.alt = "";
+        c.appendChild(im);
+      } else {
+        c.className += " vuoto";
+        c.textContent = a.emoji || "🐾";
+      }
+      var n = document.createElement("span");
+      n.className = "nome";
+      n.textContent = a.nome;
+      b.appendChild(c); b.appendChild(n);
+      b.addEventListener("click", function () {
+        if (a.nome === dati.attivo) { return; }
+        dati.attivo = a.nome;
+        disegna();
+        send("streamlit:setComponentValue", { value: { pet: a.nome, n: Date.now() }, dataType: "json" });
+      });
+      lista.appendChild(b);
+    });
+    setHeight();
+  }
+
+  window.addEventListener("message", function (ev) {
+    if (ev.data && ev.data.type === "streamlit:render") {
+      var a = ev.data.args || {};
+      dati.animali = a.animali || [];
+      dati.attivo = a.attivo || "";
+      disegna();
+    }
+  });
+  window.addEventListener("resize", setHeight);
+  if ("ResizeObserver" in window) { new ResizeObserver(setHeight).observe(wrap); }
+  send("streamlit:componentReady", { apiVersion: 1 });
+  setHeight();
+})();
+</script>
+</body>
+</html>
+"""
+
+try:
+    _avatar = _registra_componente("pethealth_avatar", "componente_avatar", AVATAR_HTML)
+except Exception:
+    _avatar = None  # in questo caso si usano i pulsanti con il nome dell'animale
+
+@st.cache_data(show_spinner=False, max_entries=50)
+def miniatura_foto_animale(b64_img):
+    """Miniatura quadrata leggera (120 px) della foto, per i cerchietti. Restituisce '' se la foto non è leggibile."""
+    try:
+        img = Image.open(io.BytesIO(base64.b64decode(b64_img))).convert("RGB")
+        w, h = img.size
+        lato = min(w, h)
+        sx, sy = (w - lato) // 2, (h - lato) // 2
+        img = img.crop((sx, sy, sx + lato, sy + lato)).resize((120, 120), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=80)
+        return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+    except Exception:
+        return ""
+
+def seleziona_animale(nome):
+    """Cambia il libretto attivo, come se l'utente lo avesse scelto dalla barra laterale."""
+    utente_corrente = st.session_state.db_users[st.session_state.logged_user_email]
+    utente_corrente["pet_selezionato"] = nome
+    st.session_state["pet_select_forza"] = nome      # la barra laterale lo applica al prossimo ciclo
+    salva_dati()
+    st.rerun()
+
+
 def azzera_scansione(chiave):
     """Svuota il riquadro di scansione (da chiamare dopo il salvataggio)."""
     k = f"scan_cnt_{chiave}"
@@ -2511,6 +2650,9 @@ with st.sidebar:
         if pet_selezionato in lista_animali:
             index_selezionato = lista_animali.index(pet_selezionato)
         
+        scelta_forzata = st.session_state.pop("pet_select_forza", None)
+        if scelta_forzata in lista_animali:
+            st.session_state["pet_select"] = scelta_forzata
         pet_selected = st.selectbox("", lista_animali, index=index_selezionato, key="pet_select")
         if pet_selected != pet_selezionato:
             user_db["pet_selezionato"] = pet_selected
@@ -2699,6 +2841,28 @@ elif st.session_state.sezione_attiva == "anagrafica":
                     <p>• <strong>Città:</strong> {anagrafica_corrente.get('proprietario_citta') or 'Non specificata'}</p>
                 </div>
             """, unsafe_allow_html=True)
+
+            animali_av = []
+            for nome_av in lista_animali:
+                ana_av = user_db["db_anagrafica"].get(nome_av, {}) or {}
+                animali_av.append({
+                    "nome": nome_av,
+                    "foto": miniatura_foto_animale(ana_av["foto_animale"]) if ana_av.get("foto_animale") else "",
+                    "emoji": EMOJI_SPECIE.get(ana_av.get("tipo_animale"), "🐾"),
+                })
+            if _avatar is not None:
+                scelta_av = _avatar(key="avatar_animali", animali=animali_av, attivo=pet_selected, default=None)
+                if scelta_av and scelta_av.get("n") != st.session_state.get("avatar_ultimo_click"):
+                    st.session_state["avatar_ultimo_click"] = scelta_av.get("n")
+                    if scelta_av.get("pet") in lista_animali and scelta_av.get("pet") != pet_selected:
+                        seleziona_animale(scelta_av["pet"])
+            else:
+                st.caption("🐾 I tuoi animali: tocca il nome per aprire il suo libretto.")
+                colonne_av = st.columns(max(1, min(len(lista_animali), 3)))
+                for i_av, nome_av in enumerate(lista_animali):
+                    if colonne_av[i_av % len(colonne_av)].button(("✅ " if nome_av == pet_selected else "") + nome_av,
+                                                                 key=f"scegli_animale_{nome_av}"):
+                        seleziona_animale(nome_av)
 
         etichetta_foto = ("🔄 Cambia" if foto_attuale else "📸 Aggiungi") + f" la foto di {pet_selected}"
         with st.expander(etichetta_foto, expanded=False):
