@@ -37,6 +37,17 @@ try:
 except Exception:
     REPORTLAB_OK = False
 
+# Tema chiaro per tutti i dispositivi: sui telefoni con modo scuro Streamlit passa al tema scuro
+# (testi chiari) e alcuni elementi diventano illeggibili sulla grafica chiara dell'app.
+try:
+    for _chiave_tema, _valore_tema in {
+        "theme.base": "light", "theme.primaryColor": "#0284C7", "theme.backgroundColor": "#F8F6F0",
+        "theme.secondaryBackgroundColor": "#FFFFFF", "theme.textColor": "#1E293B",
+    }.items():
+        st._config.set_option(_chiave_tema, _valore_tema)
+except Exception:
+    pass
+
 if "sidebar_state" not in st.session_state:
     st.session_state.sidebar_state = "expanded"
 
@@ -707,7 +718,7 @@ AVATAR_HTML = r"""<!DOCTYPE html>
   .av.attivo .cerchio { opacity: 1; box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 4.5px #B8975A, 0 8px 16px -8px rgba(30,58,43,0.55); }
   .nome { margin-top: 8px; max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: #5A6B62; font-weight: 600; }
   .av.attivo .nome { color: #1E3A2B; font-weight: 700; }
-  #nota { font-size: 12px; color: #6B7A72; margin-top: 2px; }
+  #nota { font-size: 12px; color: #5B6A62; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -2311,7 +2322,7 @@ _REGOLE_GRAFICA = [
     ('hr',
      'border: none !important; height: 1px !important; margin: 1.6rem 0 !important; '
      'background: linear-gradient(90deg, rgba(184,151,90,0), #CDB98A, rgba(184,151,90,0)) !important;'),
-    ('[data-testid="stCaptionContainer"]', 'color: #6B7A72 !important;'),
+    ('[data-testid="stCaptionContainer"]', 'color: #5B6A62 !important;'),
 
     # --- schede ---
     ('.wellness-card',
@@ -2392,7 +2403,7 @@ _REGOLE_GRAFICA = [
      'background: #FFFFFF; border: 1px solid #ECE6D6; border-radius: 18px; padding: 14px 18px; '
      'box-shadow: 0 1px 2px rgba(30, 58, 43, 0.04), 0 14px 30px -22px rgba(30, 58, 43, 0.25);'),
     ('[data-testid="stMetricLabel"] p',
-     'font-size: 0.72rem !important; text-transform: uppercase; letter-spacing: 0.09em !important; font-weight: 700 !important; color: #6B7A72 !important;'),
+     'font-size: 0.72rem !important; text-transform: uppercase; letter-spacing: 0.09em !important; font-weight: 700 !important; color: #5B6A62 !important;'),
     ('[data-testid="stMetricValue"]', "font-family: " + _FONT_TITOLI + " !important; color: #1E3A2B !important; font-weight: 600 !important;"),
     ('[data-testid="stAlert"]', 'border-radius: 14px !important; border: 1px solid rgba(30, 58, 43, 0.12) !important;'),
 
@@ -2413,12 +2424,39 @@ _REGOLE_GRAFICA = [
     ('.cal-tab td.cal-stima', 'box-shadow: inset 0 0 0 1.5px #D6455F;'),
 ]
 
+# Regole di sicurezza: anche con il tema scuro del telefono, testi e campi restano chiari e leggibili.
+_CAMPI_TESTO = 'input:not([type="checkbox"]):not([type="radio"]):not([type="range"]) | textarea'
+_REGOLE_TEMA_CHIARO = [
+    ('[data-testid="stMarkdownContainer"] p | [data-testid="stMarkdownContainer"] li', 'color: #1E293B;'),
+    ('[data-testid="stCaptionContainer"] p | [data-testid="stCaptionContainer"] span', 'color: #5B6A62 !important;'),
+    (_CAMPI_TESTO,
+     'color: #0F172A !important; -webkit-text-fill-color: #0F172A !important; background-color: #FFFFFF !important; caret-color: #0284C7;'),
+    ('input::placeholder | textarea::placeholder',
+     'color: #94A3B8 !important; -webkit-text-fill-color: #94A3B8 !important; opacity: 1 !important;'),
+    ('[data-baseweb="input"] | [data-baseweb="base-input"] | [data-baseweb="textarea"] | [data-baseweb="select"] > div',
+     'background-color: #FFFFFF !important;'),
+    ('[data-baseweb="input"] svg | [data-baseweb="select"] svg | [data-testid="stNumberInput"] button',
+     'color: #64748B !important; fill: #64748B !important;'),
+    ('[data-baseweb="select"] *', 'color: #0F172A !important; -webkit-text-fill-color: #0F172A !important;'),
+    ('[data-testid="stAlert"] p | [data-testid="stAlert"] span | [data-testid="stAlert"] li | [data-testid="stAlert"] strong | '
+     '[data-testid="stAlert"] em | [data-testid="stAlert"] code | [data-testid="stAlert"] a',
+     'color: #1E293B !important; -webkit-text-fill-color: #1E293B !important;'),
+    ('[data-testid="stRadio"] label p | [data-testid="stCheckbox"] label p | [data-baseweb="radio"] p | [data-baseweb="checkbox"] p',
+     'color: #1E293B !important;'),
+    ('button[data-baseweb="tab"]', 'color: #5A6B62 !important;'),
+    ('button[data-baseweb="tab"][aria-selected="true"]', 'color: #1E3A2B !important;'),
+    ('[data-testid="stFileUploaderDropzone"] span | [data-testid="stFileUploaderDropzone"] small | '
+     '[data-testid="stFileUploaderDropzone"] p | [data-testid="stFileUploaderDropzone"] div', 'color: #475569 !important;'),
+    ('[data-testid="stFileUploaderDropzone"] button',
+     'background: #FFFFFF !important; color: #1E3A2B !important; border: 1px solid #DCD5C2 !important;'),
+]
+
 st.markdown(
     "<style>\n"
     "@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&display=swap');\n"
     ".stApp { background-image: radial-gradient(1100px 520px at 88% -8%, rgba(184, 151, 90, 0.11), rgba(184, 151, 90, 0) 62%); }\n"
     + _css_area_principale([('::selection', 'background: rgba(184, 151, 90, 0.35);')])
-    + "\n" + _css_area_principale(_REGOLE_GRAFICA) +
+    + "\n" + _css_area_principale(_REGOLE_GRAFICA + _REGOLE_TEMA_CHIARO) +
     "\n</style>",
     unsafe_allow_html=True
 )
