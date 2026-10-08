@@ -5,6 +5,10 @@ import io
 import base64
 import urllib.parse
 import hashlib
+import hmac
+import secrets
+import smtplib
+from email.message import EmailMessage
 import uuid
 import re
 import math
@@ -60,9 +64,23 @@ st.set_page_config(
 
 DATA_FILE = "data_pethealth.json"
 
-def hash_password(password):
-    """Calcola l'hash SHA-256 della password per una conservazione sicura nel database."""
-    return hashlib.sha256(password.encode('utf-8')).hexdigest()
+def hash_password(password, salt=None):
+    """Hash PBKDF2-SHA256 con sale casuale (formato pbkdf2$sale$hash). Mai la password in chiaro."""
+    salt = salt or secrets.token_hex(16)
+    h = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 200_000).hex()
+    return f"pbkdf2${salt}${h}"
+
+def verifica_password(password, memorizzato):
+    """Controlla la password. Accetta anche i vecchi account (SHA-256 semplice)."""
+    memorizzato = memorizzato or ""
+    if memorizzato.startswith("pbkdf2$"):
+        try:
+            _, salt, _h = memorizzato.split("$", 2)
+        except ValueError:
+            return False
+        return hmac.compare_digest(hash_password(password, salt), memorizzato)
+    vecchio = hashlib.sha256(password.encode("utf-8")).hexdigest()
+    return hmac.compare_digest(vecchio, memorizzato)
 
 def genera_id_veterinario_permanente(num_ordine, provincia=""):
     """Genera un ID univoco, deterministico e PERMANENTE per il Veterinario basato su FNOVI e Provincia."""
@@ -85,17 +103,49 @@ def carica_dati():
             return None
     return None
 
-def salva_dati():
-    """Salva lo stato globale e degli utenti registrati nel file JSON."""
-    dati = {
-        "users": st.session_state.get("db_users", {}),
-        "db_veterinari": st.session_state.get("db_veterinari", {})
-    }
+def _email_mie():
+    """Gli account che QUESTA sessione ha il diritto di scrivere: quello collegato e quello in attivazione."""
+    return {e for e in (st.session_state.get("logged_user_email"),
+                        st.session_state.get("verification_pending_email")) if e}
+
+def aggiorna_altri_utenti_da_disco():
+    """Porta in sessione gli account degli altri utenti, così la sessione non lavora su copie vecchie."""
+    su_disco = carica_dati() or {}
+    mie = _email_mie()
+    utenti = st.session_state.setdefault("db_users", {})
+    for email, dati_utente in (su_disco.get("users", {}) or {}).items():
+        if email not in mie:
+            utenti[email] = dati_utente
+    vet = st.session_state.setdefault("db_veterinari", {})
+    for k, v in (su_disco.get("db_veterinari", {}) or {}).items():
+        vet.setdefault(k, v)
+
+def salva_dati(extra_email=None):
+    """SALVATAGGIO SICURO: rilegge l'archivio più recente e sovrascrive soltanto l'account di chi sta lavorando.
+    Così due persone che usano l'app nello stesso momento non cancellano più i dati l'una dell'altra."""
+    mie = _email_mie()
+    if extra_email:
+        mie.add(extra_email)
+    su_disco = carica_dati() or {}
+    utenti = dict(su_disco.get("users", {}) or {})
+    sessione = st.session_state.get("db_users", {})
+    for email in mie:
+        if email in sessione:
+            utenti[email] = sessione[email]
+    vet = dict(su_disco.get("db_veterinari", {}) or {})
+    vet.update(st.session_state.get("db_veterinari", {}))
+    dati = {"users": utenti, "db_veterinari": vet}
     try:
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
+        tmp = DATA_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(dati, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, DATA_FILE)
     except Exception as e:
         st.error(f"Errore durante il salvataggio dei dati: {e}")
+        return
+    for email, dati_utente in utenti.items():
+        if email not in mie:
+            sessione[email] = dati_utente
 
 if "db_users" not in st.session_state or "db_veterinari" not in st.session_state:
     dati_salvati = carica_dati()
@@ -2298,7 +2348,7 @@ def _css_area_principale(regole):
         blocchi.append(",\n".join(elenco) + " {" + dichiarazioni + "}")
     return "\n".join(blocchi)
 
-_FONT_TITOLI = "'Playfair Display', Georgia, 'Times New Roman', serif"
+_FONT_TITOLI = "'Fraunces', Georgia, 'Times New Roman', serif"
 
 _REGOLE_GRAFICA = [
     # --- impaginazione ---
@@ -2453,7 +2503,7 @@ _REGOLE_TEMA_CHIARO = [
 
 st.markdown(
     "<style>\n"
-    "@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&display=swap');\n"
+    "@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');\n"
     ".stApp { background-image: radial-gradient(1100px 520px at 88% -8%, rgba(184, 151, 90, 0.11), rgba(184, 151, 90, 0) 62%); }\n"
     + _css_area_principale([('::selection', 'background: rgba(184, 151, 90, 0.35);')])
     + "\n" + _css_area_principale(_REGOLE_GRAFICA + _REGOLE_TEMA_CHIARO) +
@@ -2461,6 +2511,204 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+
+# ---------------------------------------------------------------------------
+# REBRANDING 2026 - PetHealth Wellness & Care
+# Logo, accesso verde, menù azzurro, promemoria, demo, attivazione sicura.
+# ---------------------------------------------------------------------------
+def _marchio_svg(ring, paw, cross, size):
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="{size}" height="{size}" aria-hidden="true" '
+            f'style="flex:none;display:block">'
+            f'<circle cx="32" cy="32" r="30" fill="none" stroke="{ring}" stroke-width="2.5"/>'
+            f'<g fill="{paw}"><ellipse cx="19.5" cy="28" rx="3.6" ry="4.8" transform="rotate(-24 19.5 28)"/>'
+            f'<ellipse cx="27.5" cy="20" rx="3.9" ry="5.2" transform="rotate(-8 27.5 20)"/>'
+            f'<ellipse cx="36.5" cy="20" rx="3.9" ry="5.2" transform="rotate(8 36.5 20)"/>'
+            f'<ellipse cx="44.5" cy="28" rx="3.6" ry="4.8" transform="rotate(24 44.5 28)"/>'
+            f'<path d="M32 30c-7.5 0-13.5 6.6-13.5 12.2 0 4 3 6.6 7 6.6 2.4 0 3.9-1 6.5-1s4.1 1 6.5 1c4 0 7-2.6 7-6.6C45.5 36.6 39.5 30 32 30z"/></g>'
+            f'<path d="M30.2 35.2h3.6v3.6h3.6v3.6h-3.6V46h-3.6v-3.6h-3.6v-3.6h3.6z" fill="{cross}"/></svg>')
+
+def logo_html(sidebar=False):
+    """Logo PetHealth: versione su verde (accesso) oppure bianca su azzurro (menù laterale)."""
+    if sidebar:
+        marchio = _marchio_svg("#FFFFFF", "#FFFFFF", "#0284C7", 38)
+        c_health, c_tag, size = "#FFFFFF", "#FFFFFF", "1.25rem"
+    else:
+        marchio = _marchio_svg("#D9BF86", "#5CC0F5", "#1E3A2B", 46)
+        c_health, c_tag, size = "#8FD3F8", "#D9BF86", "1.6rem"
+    return (f'<div style="display:flex;align-items:center;gap:12px">{marchio}<div>'
+            f'<div style="font-family:\'Fraunces\',Georgia,serif;font-weight:600;font-size:{size};line-height:1;letter-spacing:-0.02em;color:#FFFFFF !important">'
+            f'Pet<span style="color:{c_health} !important">Health</span></div>'
+            f'<div style="font:700 9px/1 \'Plus Jakarta Sans\',sans-serif;letter-spacing:0.26em;text-transform:uppercase;color:{c_tag} !important;margin-top:6px">Wellness &amp; Care</div>'
+            f'</div></div>')
+
+_CSS_REBRAND = (
+    "\n/* ===== REBRANDING 2026 ===== */\n"
+    "html, body, .stApp { font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important; }\n"
+    # --- menù laterale: voci come nel prototipo (trasparenti, voce attiva evidenziata) ---
+    "[data-testid=\"stSidebar\"] .stButton > button, [data-testid=\"stSidebar\"] [data-testid=\"stBaseButton-secondary\"] {\n"
+    "  background: transparent !important; background-image: none !important; border: 1px solid transparent !important; box-shadow: none !important;\n"
+    "  justify-content: flex-start !important; text-align: left !important; padding: 0.55rem 0.85rem !important; border-radius: 12px !important; }\n"
+    "[data-testid=\"stSidebar\"] .stButton > button:hover, [data-testid=\"stSidebar\"] [data-testid=\"stBaseButton-secondary\"]:hover {\n"
+    "  background: rgba(255,255,255,0.16) !important; transform: none !important; filter: none !important; }\n"
+    "[data-testid=\"stSidebar\"] [data-testid=\"stBaseButton-primary\"] {\n"
+    "  background: rgba(255,255,255,0.22) !important; background-image: none !important; border: 1px solid transparent !important;\n"
+    "  box-shadow: inset 3px 0 0 #FFFFFF !important; justify-content: flex-start !important; text-align: left !important;\n"
+    "  padding: 0.55rem 0.85rem !important; border-radius: 12px !important; }\n"
+    "[data-testid=\"stSidebar\"] .stButton > button p, [data-testid=\"stSidebar\"] .stButton > button div { text-align: left !important; justify-content: flex-start !important; font-weight: 600 !important; font-size: 0.93rem !important; }\n"
+    "[data-testid=\"stSidebar\"] .ph-side-logo { padding: 2px 4px 14px 4px; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.32); }\n"
+    # --- blocchi della dashboard ---
+    ".ph-head { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; margin: 4px 0 18px 0; }\n"
+    ".ph-head h2 { margin: 0 !important; }\n"
+    ".ph-head h2::after { display: none !important; }\n"
+    ".ph-head .ph-sub { color: #5B6A62 !important; margin: 4px 0 0 0 !important; font-size: 0.98rem; }\n"
+    ".ph-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }\n"
+    ".ph-metric { background: #FFFFFF; border: 1px solid #ECE6D6; border-radius: 22px; padding: 18px 22px; min-width: 0;\n"
+    "  box-shadow: 0 1px 2px rgba(30,58,43,0.04), 0 18px 40px -26px rgba(30,58,43,0.28); }\n"
+    ".ph-metric b { display: block; font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 2.1rem; line-height: 1; color: #1E3A2B; font-variant-numeric: tabular-nums; }\n"
+    ".ph-metric span { font: 700 0.68rem/1 'Plus Jakarta Sans', sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: #5B6A62; display: block; margin-top: 8px; }\n"
+    ".ph-rem { display: flex; gap: 12px; justify-content: space-between; align-items: center; flex-wrap: wrap; padding: 12px 16px; border-radius: 14px; border: 1px solid; margin-bottom: 10px; }\n"
+    ".ph-rem.ok { background: #EEF6F1; border-color: #BFDCCB; }\n"
+    ".ph-rem.warn { background: #FBF3E2; border-color: #E8CF97; }\n"
+    ".ph-rem.err { background: #FBEDE6; border-color: #EDB9A2; }\n"
+    ".ph-rem .quando { font: 700 0.76rem 'Plus Jakarta Sans', sans-serif; border-radius: 99px; padding: 4px 12px; background: #FFFFFF; }\n"
+    ".ph-rem.ok .quando { color: #2F7D5B; } .ph-rem.warn .quando { color: #8A5A0B; } .ph-rem.err .quando { color: #B03A0B; }\n"
+    "@media (max-width: 700px) { .ph-metrics { grid-template-columns: minmax(0, 1fr); } }\n"
+)
+st.markdown("<style>" + _css_area_principale([
+    ('.wellness-card', 'border-radius: 22px !important;'),
+    ('[data-testid="stExpander"] details', 'border-radius: 16px !important;'),
+]) + _CSS_REBRAND + "</style>", unsafe_allow_html=True)
+
+def voce_menu(etichetta, sezione):
+    """Voce del menù laterale: quella della sezione aperta è evidenziata."""
+    attiva = st.session_state.get("sezione_attiva") == sezione
+    if st.button(etichetta, key=f"menu_{sezione}", type="primary" if attiva else "secondary"):
+        cambia_sezione(sezione)
+
+# ---------------------------------------------------------------------------
+# DASHBOARD: intestazione, numeri e promemoria
+# ---------------------------------------------------------------------------
+def mostra_intestazione_dashboard(user_db, pet, visite, terapie):
+    ana = (user_db.get("db_anagrafica", {}) or {}).get(pet, {}) or {}
+    foto = html_foto_animale(ana.get("foto_animale", ""), ana.get("tipo_animale", ""), pet, 92)
+    sub = " · ".join([x for x in [ana.get("tipo_animale"), ana.get("razza"), ana.get("sesso")] if x]) or "Libretto sanitario"
+    st.markdown(f'<div class="ph-head">{foto}<div><h2>{html_escape(pet)}</h2><p class="ph-sub">{html_escape(sub)}</p></div></div>',
+                unsafe_allow_html=True)
+
+    pesi = [p for p in sorted((user_db.get("db_peso", {}) or {}).get(pet, []), key=lambda p: str(p.get("data", "")))
+            if isinstance(p.get("peso_kg"), (int, float)) and p["peso_kg"] > 0]
+    ultimo = fmt_peso(pesi[-1]["peso_kg"]) if pesi else "—"
+    st.markdown(
+        '<div class="ph-metrics">'
+        f'<div class="ph-metric"><b>{html_escape(str(ultimo))}</b><span>Ultimo peso</span></div>'
+        f'<div class="ph-metric"><b>{len(visite)}</b><span>Visite e vaccini</span></div>'
+        f'<div class="ph-metric"><b>{len(terapie)}</b><span>Terapie registrate</span></div>'
+        '</div>', unsafe_allow_html=True)
+
+    oggi = date.today()
+    promemoria = []
+    for v in visite:
+        d = _data_o_none(v.get("scadenza_vaccino")) if v.get("scadenza_vaccino") else None
+        if d:
+            promemoria.append(((d - oggi).days, f"{v.get('nome_vaccino') or v.get('tipo', 'Vaccino')} · scadenza", d))
+    promemoria.sort(key=lambda x: x[0])
+    st.markdown("### ⏰ Promemoria")
+    righe = []
+    for giorni, testo, d in promemoria:
+        if giorni > 90:
+            continue
+        classe = "err" if giorni < 0 else ("warn" if giorni <= 30 else "ok")
+        quando = f"scaduto da {-giorni} giorni" if giorni < 0 else ("oggi" if giorni == 0 else f"tra {giorni} giorni")
+        righe.append(f'<div class="ph-rem {classe}"><div><b>{html_escape(testo)}</b><div style="font-size:0.85rem;color:#5B6A62">{d.strftime("%d/%m/%Y")}</div></div>'
+                     f'<span class="quando">{quando}</span></div>')
+    st.markdown("".join(righe) if righe else '<div class="ph-rem ok"><b>Nessuna scadenza nei prossimi 90 giorni: tutto in regola.</b></div>',
+                unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------------
+# ATTIVAZIONE ACCOUNT: codice a 6 cifre inviato per email (mai mostrato a schermo se l'email è configurata)
+# Per attivare l'invio aggiungi in Streamlit Cloud > Settings > Secrets:
+# [smtp]
+# host = "smtp.gmail.com"
+# port = 465
+# user = "tuo.indirizzo@gmail.com"
+# password = "password-per-app"
+# ---------------------------------------------------------------------------
+def invia_email_attivazione(destinatario, nome, codice):
+    try:
+        cfg = st.secrets["smtp"]
+        msg = EmailMessage()
+        msg["Subject"] = "Il tuo codice di attivazione PetHealth"
+        msg["From"] = cfg.get("from", cfg["user"])
+        msg["To"] = destinatario
+        msg.set_content(f"Ciao {nome},\n\nil tuo codice di attivazione PetHealth è: {codice}\nÈ valido 15 minuti.\n\nSe non hai richiesto tu la registrazione ignora questo messaggio.")
+        porta = int(cfg.get("port", 465))
+        if porta == 587:
+            with smtplib.SMTP(cfg["host"], porta, timeout=15) as srv:
+                srv.starttls(); srv.login(cfg["user"], cfg["password"]); srv.send_message(msg)
+        else:
+            with smtplib.SMTP_SSL(cfg["host"], porta, timeout=15) as srv:
+                srv.login(cfg["user"], cfg["password"]); srv.send_message(msg)
+        return True
+    except Exception:
+        return False
+
+def nuovo_codice_attivazione(email_c):
+    """Crea un nuovo codice per l'account, lo salva con scadenza e prova a inviarlo. Restituisce True se inviato per email."""
+    codice = f"{secrets.randbelow(10 ** 6):06d}"
+    u = st.session_state.db_users[email_c]
+    u["codice_conferma"] = codice
+    u["codice_scadenza"] = (datetime.now() + timedelta(minutes=15)).isoformat()
+    st.session_state.verification_pending_email = email_c
+    salva_dati(extra_email=email_c)
+    inviata = invia_email_attivazione(email_c, u.get("nome", ""), codice)
+    st.session_state.posta_demo = None if inviata else {"email": email_c, "codice": codice}
+    return inviata
+
+# ---------------------------------------------------------------------------
+# ACCOUNT DEMO (Luna e Micio)
+# ---------------------------------------------------------------------------
+def _dati_demo():
+    oggi = date.today()
+    g = lambda n: str(oggi + timedelta(days=n))
+    return {
+        "nome": "Giulia Rossi", "email": "demo@pethealth.it", "password": hash_password(secrets.token_hex(12)),
+        "numero_whatsapp": "", "numero_whatsapp_2": "", "stato": "attivo", "data_registrazione": str(oggi),
+        "lista_animali": ["Luna", "Micio"], "pet_selezionato": "Luna",
+        "db_anagrafica": {
+            "Luna": {"tipo_animale": "Cane", "nome": "Luna", "razza": "Labrador", "sesso": "Femmina", "data_nascita": "2022-04-12",
+                     "microchip": "380260000123456", "microchip_foto": "", "segni_particolari": "", "proprietario_nome": "Giulia Rossi",
+                     "proprietario_indirizzo": "", "proprietario_telefono": "", "proprietario_citta": "", "foto_animale": ""},
+            "Micio": {"tipo_animale": "Gatto", "nome": "Micio", "razza": "Europeo", "sesso": "Maschio", "data_nascita": "2020-09-03",
+                      "microchip": "380260000654321", "microchip_foto": "", "segni_particolari": "", "proprietario_nome": "Giulia Rossi",
+                      "proprietario_indirizzo": "", "proprietario_telefono": "", "proprietario_citta": "", "foto_animale": ""},
+        },
+        "db_visite": {"Luna": [
+            {"data": g(-340), "tipo": "Vaccinazione", "veterinario": "Dott. Rossi", "diagnosi": "Richiamo antirabbica", "referto": None,
+             "certificata": False, "num_ordine_vet": "", "provincia_vet": "", "vet_id_permanente": None, "codice_certificato": None,
+             "nome_vaccino": "Antirabbica", "lotto_vaccino": "A1234", "scadenza_vaccino": g(12), "etichetta_vaccino": ""},
+            {"data": g(-200), "tipo": "Vaccinazione", "veterinario": "Dott.ssa Neri", "diagnosi": "Polivalente", "referto": None,
+             "certificata": False, "num_ordine_vet": "", "provincia_vet": "", "vet_id_permanente": None, "codice_certificato": None,
+             "nome_vaccino": "Polivalente (DHPP)", "lotto_vaccino": "B778", "scadenza_vaccino": g(-5), "etichetta_vaccino": ""},
+            {"data": g(-60), "tipo": "Visita di controllo", "veterinario": "Dott. Rossi", "diagnosi": "Controllo annuale, tutto nella norma", "referto": None,
+             "certificata": False, "num_ordine_vet": "", "provincia_vet": "", "vet_id_permanente": None, "codice_certificato": None,
+             "nome_vaccino": "", "lotto_vaccino": "", "scadenza_vaccino": "", "etichetta_vaccino": ""}]},
+        "db_terapie": {"Luna": [{"farmaco": "Antiparassitario spot-on", "dosaggio": "1 pipetta", "orario": "Mattina",
+                                 "periodo": "Una volta al mese", "data_inizio": g(-5), "note": "", "ricetta": None}]},
+        "db_peso": {"Luna": [{"data": g(-150), "peso_kg": 10.8, "note": ""}, {"data": g(-110), "peso_kg": 11.4, "note": ""},
+                             {"data": g(-70), "peso_kg": 11.9, "note": ""}, {"data": g(-35), "peso_kg": 12.1, "note": ""},
+                             {"data": g(-3), "peso_kg": 12.4, "note": ""}],
+                    "Micio": [{"data": g(-20), "peso_kg": 4.6, "note": ""}]},
+        "db_calori": {"Luna": [{"inizio": g(-130), "fine": g(-118), "note": ""}, {"inizio": g(-62), "fine": g(-50), "note": ""}]},
+        "db_fatture": {}, "angeli_archiviati": {},
+    }
+
+def entra_con_demo():
+    email = "demo@pethealth.it"
+    st.session_state.db_users[email] = _dati_demo()
+    st.session_state.logged_user_email = email
+    st.session_state.sezione_attiva = "dashboard"
+    salva_dati()
+    st.rerun()
 
 # ---------------------------------------------------------------------------
 # CHIUSURA AUTOMATICA DELLA SIDEBAR (dopo la scelta di una sezione)
@@ -2511,137 +2759,169 @@ if st.session_state.get("trigger_close_sidebar", False):
     st.session_state.trigger_close_sidebar = False
     components.html(SCRIPT_CHIUDI_SIDEBAR.replace("__NONCE__", uuid.uuid4().hex), height=0, width=0)
 
+_CSS_ACCESSO = """
+.stApp, [data-testid="stAppViewContainer"], section.main, [data-testid="stMain"] {
+    background-color: #1E3A2B !important; background-image: none !important; }
+.stApp::before { content: ""; position: fixed; left: 0; top: 0; bottom: 0; width: 10px; background: #0284C7; z-index: 999; }
+[data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"], [data-testid="stExpandSidebarButton"], [data-testid="collapsedControl"] { display: none !important; }
+[data-testid="stMainBlockContainer"], .block-container { max-width: 1100px !important; padding-top: 1.4rem !important; }
+.ph-auth-top { padding: 4px 0 28px 0; }
+[data-testid="stVerticalBlockBorderWrapper"]:has(.ph-auth-marker) {
+    background: #FFFFFF !important; border: 1px solid #D9BF86 !important; border-radius: 22px !important;
+    padding: 14px 16px 18px 16px !important; box-shadow: 0 24px 60px -20px rgba(0,0,0,0.55) !important; }
+[data-testid="stVerticalBlockBorderWrapper"]:has(.ph-auth-marker) [data-testid="stForm"] {
+    border: none !important; box-shadow: none !important; padding: 0 !important; background: transparent !important; }
+[data-baseweb="tab-list"] { background: #F1ECDD !important; border-radius: 99px !important; padding: 4px !important; gap: 2px !important; }
+button[data-baseweb="tab"] { flex: 1 1 0 !important; justify-content: center !important; border-radius: 99px !important; height: 40px !important;
+    background: transparent !important; color: #5B6A62 !important; }
+button[data-baseweb="tab"][aria-selected="true"] { background: #FFFFFF !important; color: #1E293B !important; box-shadow: 0 2px 8px -2px rgba(0,0,0,0.2) !important; }
+[data-baseweb="tab-highlight"], [data-baseweb="tab-border"] { display: none !important; }
+.ph-hero-eyebrow { font: 700 11px/1 'Plus Jakarta Sans', sans-serif; letter-spacing: 0.16em; text-transform: uppercase; color: #D9BF86 !important; }
+.ph-posta { background: #F4EEDD; border: 1.5px dashed #B8975A; border-radius: 14px; padding: 14px 16px; margin: 10px 0 14px 0; color: #1E293B; }
+.ph-posta code { font-size: 1.5rem !important; letter-spacing: 0.2em; background: #FFFFFF !important; color: #0369A1 !important; padding: 4px 12px !important; }
+.ph-demo { background: #F4EEDD; border: 1px solid #B8975A; border-radius: 16px; padding: 14px 16px; margin-top: 18px; color: #1E293B; font-size: 0.9rem; }
+"""
+
 if st.session_state.logged_user_email is None:
-    st.markdown("<h1 style='text-align: center; color: #1E3A2B; margin-top: 15px;'>🐾 PetHealth Platform</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #475569; font-size:1.1rem; margin-bottom: 25px;'>La piattaforma digitale per la gestione della salute, libretto sanitario ed anagrafica dei tuoi animali domestici.</p>", unsafe_allow_html=True)
+    aggiorna_altri_utenti_da_disco()
+    st.markdown("<style>" + _CSS_ACCESSO + "</style>", unsafe_allow_html=True)
+    st.markdown('<div class="ph-auth-top">' + logo_html() + '</div>', unsafe_allow_html=True)
 
-    auth_tab1, auth_tab2, auth_tab3 = st.tabs(["🔑 Accedi", "📝 Registrati", "📧 Attivazione Account"])
+    col_hero, col_card = st.columns([1.1, 0.9], gap="large")
+    with col_hero:
+        st.markdown(
+            '<div style="padding-top:2.2rem">'
+            '<span class="ph-hero-eyebrow">Area riservata</span>'
+            '<h1 style="font-family:\'Fraunces\',Georgia,serif !important;font-weight:600 !important;color:#F8F6F0 !important;'
+            'font-size:clamp(2.4rem,5vw,4.3rem) !important;line-height:1.08 !important;margin:18px 0 0 0 !important;letter-spacing:-0.02em">'
+            'Bentornato,<br><em style="color:#D9BF86 !important;font-weight:400 !important">libretto alla mano.</em></h1>'
+            '<p style="color:#E6E3D8 !important;font-size:1.1rem !important;max-width:46ch;margin-top:22px !important">'
+            'Vaccini, terapie, peso e calore di ogni animale, sempre aggiornati e con i promemoria al posto giusto.</p></div>',
+            unsafe_allow_html=True)
 
-    # SCHEDA ACCESSO
-    with auth_tab1:
-        st.markdown("<div class='auth-container'>", unsafe_allow_html=True)
-        st.markdown("<h3 style='color: #1E3A2B; text-align: center; margin-bottom: 10px;'>Accedi al tuo Account</h3>", unsafe_allow_html=True)
-        st.caption("Inserisci le tue credenziali di accesso per entrare nell'applicazione.")
-        st.write("")
-        
-        with st.form("form_login"):
-            login_email = st.text_input("Indirizzo Email*", placeholder="es. mario.rossi@email.it")
-            login_pass = st.text_input("Password*", type="password", placeholder="••••••••")
-            btn_login = st.form_submit_button("🔑 Accedi alla Web App")
-            
-            if btn_login:
-                email_clean = login_email.strip().lower()
-                users_db = st.session_state.db_users
-                
-                if email_clean in users_db:
-                    user_info = users_db[email_clean]
-                    if user_info.get("stato") == "in_attesa":
-                        st.warning("⚠️ Il tuo profilo richiede prima l'attivazione. Utilizza la scheda 'Attivazione Account' per accedere.")
-                        st.session_state.verification_pending_email = email_clean
-                    elif user_info.get("password") == hash_password(login_pass):
-                        st.session_state.logged_user_email = email_clean
-                        st.success(f"Benvenuto/a {user_info.get('nome')}!")
-                        st.rerun()
+    with col_card:
+        with st.container(border=True):
+            st.markdown('<span class="ph-auth-marker"></span>', unsafe_allow_html=True)
+            auth_tab1, auth_tab2, auth_tab3 = st.tabs(["Accedi", "Registrati", "Attiva"])
+
+            # SCHEDA ACCESSO
+            with auth_tab1:
+                st.write("")
+                with st.form("form_login"):
+                    login_email = st.text_input("Email", placeholder="es. mario.rossi@email.it")
+                    login_pass = st.text_input("Password", type="password", placeholder="••••••••")
+                    btn_login = st.form_submit_button("Accedi")
+                    if btn_login:
+                        email_clean = login_email.strip().lower()
+                        users_db = st.session_state.db_users
+                        user_info = users_db.get(email_clean)
+                        if not user_info or not verifica_password(login_pass, user_info.get("password", "")):
+                            st.error("Email o password non corretti.")
+                        elif user_info.get("stato") == "in_attesa":
+                            st.warning("Il tuo profilo richiede prima l'attivazione: apri la scheda «Attiva».")
+                            st.session_state.verification_pending_email = email_clean
+                        else:
+                            if not str(user_info.get("password", "")).startswith("pbkdf2$"):
+                                user_info["password"] = hash_password(login_pass)   # aggiorna i vecchi account
+                            st.session_state.logged_user_email = email_clean
+                            st.session_state.sezione_attiva = "dashboard"
+                            salva_dati()
+                            st.rerun()
+
+            # SCHEDA REGISTRAZIONE
+            with auth_tab2:
+                st.write("")
+                with st.form("form_registrazione"):
+                    reg_nome = st.text_input("Nome e cognome*", placeholder="es. Mario Rossi")
+                    reg_email = st.text_input("Email*", placeholder="es. mario.rossi@email.it")
+                    reg_telefono = st.text_input("Cellulare / WhatsApp*", placeholder="es. +39 333 1234567")
+                    col_p1, col_p2 = st.columns(2)
+                    with col_p1:
+                        reg_pass = st.text_input("Password (min. 8)*", type="password")
+                    with col_p2:
+                        reg_pass_conf = st.text_input("Conferma password*", type="password")
+                    reg_privacy = st.checkbox("Accetto l'informativa privacy: i miei dati restano miei e posso eliminarli quando voglio.")
+                    btn_register = st.form_submit_button("Crea account")
+                    if btn_register:
+                        email_c = reg_email.strip().lower()
+                        if not reg_nome.strip() or not email_c or "@" not in email_c or not reg_pass or not reg_telefono.strip():
+                            st.error("Compila tutti i campi obbligatori marcati con (*).")
+                        elif reg_pass != reg_pass_conf:
+                            st.error("Le password inserite non corrispondono.")
+                        elif len(reg_pass) < 8:
+                            st.error("La password deve avere almeno 8 caratteri.")
+                        elif not reg_privacy:
+                            st.error("Serve il consenso all'informativa privacy.")
+                        elif email_c in st.session_state.db_users:
+                            st.error("Esiste già un profilo con questa email.")
+                        else:
+                            st.session_state.db_users[email_c] = {
+                                "nome": reg_nome.strip(), "email": email_c, "password": hash_password(reg_pass),
+                                "numero_whatsapp": reg_telefono.strip(), "numero_whatsapp_2": "", "stato": "in_attesa",
+                                "consenso_privacy": str(date.today()), "data_registrazione": str(date.today()),
+                                "lista_animali": [], "pet_selezionato": None, "db_visite": {}, "db_terapie": {},
+                                "db_fatture": {}, "db_peso": {}, "db_calori": {}, "db_anagrafica": {}, "angeli_archiviati": {}
+                            }
+                            inviata = nuovo_codice_attivazione(email_c)
+                            if inviata:
+                                st.success("Account creato. Ti abbiamo inviato il codice di attivazione per email: inseriscilo nella scheda «Attiva».")
+                            else:
+                                st.success("Account creato. Apri la scheda «Attiva» per inserire il codice.")
+
+            # SCHEDA ATTIVAZIONE
+            with auth_tab3:
+                st.write("")
+                target_email = st.session_state.get("verification_pending_email") or ""
+                posta = st.session_state.get("posta_demo")
+                if posta and posta.get("email") == target_email:
+                    st.markdown(
+                        '<div class="ph-posta"><b>Posta simulata · solo prova</b><br>'
+                        'L\'invio email non è ancora configurato (vedi Secrets → [smtp]). Con l\'email attiva il codice arriva solo nella tua casella e non compare mai qui.'
+                        f'<div style="margin-top:8px"><code>{html_escape(posta["codice"])}</code></div></div>', unsafe_allow_html=True)
+                with st.form("form_attivazione"):
+                    att_email = st.text_input("Email", value=target_email)
+                    att_codice = st.text_input("Codice di attivazione (6 cifre)", max_chars=8)
+                    btn_att = st.form_submit_button("Attiva e accedi")
+                    if btn_att:
+                        em = att_email.strip().lower()
+                        u = st.session_state.db_users.get(em)
+                        if not u:
+                            st.error("Account non trovato.")
+                        elif u.get("stato") == "attivo":
+                            st.success("Questo account è già attivo: usa la scheda «Accedi».")
+                        else:
+                            scad = u.get("codice_scadenza")
+                            scaduto = False
+                            try:
+                                scaduto = bool(scad) and datetime.now() > datetime.fromisoformat(scad)
+                            except Exception:
+                                scaduto = False
+                            if scaduto:
+                                st.error("Codice scaduto: richiedine uno nuovo.")
+                            elif not hmac.compare_digest(att_codice.strip().upper(), str(u.get("codice_conferma", "")).upper()) or not att_codice.strip():
+                                st.error("Codice non corretto.")
+                            else:
+                                st.session_state.verification_pending_email = em
+                                u["stato"] = "attivo"
+                                u.pop("codice_conferma", None); u.pop("codice_scadenza", None)
+                                st.session_state.logged_user_email = em
+                                st.session_state.sezione_attiva = "dashboard"
+                                st.session_state.posta_demo = None
+                                salva_dati()
+                                st.rerun()
+                if st.button("Invia un nuovo codice", key="reinvia_codice"):
+                    em = (target_email or "").strip().lower()
+                    if em in st.session_state.db_users and st.session_state.db_users[em].get("stato") != "attivo":
+                        inviata = nuovo_codice_attivazione(em)
+                        st.success("Nuovo codice inviato per email." if inviata else "Nuovo codice generato.")
+                        if not inviata:
+                            st.rerun()
                     else:
-                        st.error("❌ Password non corretta. Riprova.")
-                else:
-                    st.error("❌ Nessun profilo registrato con questa email. Effettua prima la registrazione nel tab 'Registrati'.")
-        st.markdown("</div>", unsafe_allow_html=True)
+                        st.error("Inserisci prima l'email con cui ti sei registrato.")
 
-    # SCHEDA REGISTRAZIONE
-    with auth_tab2:
-        st.markdown("<div class='auth-container'>", unsafe_allow_html=True)
-        st.markdown("<h3 style='color: #1E3A2B; text-align: center; margin-bottom: 10px;'>Modulo di Registrazione Utente</h3>", unsafe_allow_html=True)
-        st.caption("Compila tutti i campi richiesti per creare il tuo profilo di gestione animali.")
-        st.write("")
-        
-        with st.form("form_registrazione"):
-            reg_nome = st.text_input("Nome e Cognome Proprietario*", placeholder="es. Mario Rossi")
-            reg_email = st.text_input("Indirizzo Email*", placeholder="es. mario.rossi@email.it")
-            reg_telefono = st.text_input("Numero di Cellulare / WhatsApp*", placeholder="es. +39 333 1234567")
-            
-            col_p1, col_p2 = st.columns(2)
-            with col_p1:
-                reg_pass = st.text_input("Crea Password*", type="password", placeholder="••••••••")
-            with col_p2:
-                reg_pass_conf = st.text_input("Conferma Password*", type="password", placeholder="••••••••")
-            
-            st.write("")
-            btn_register = st.form_submit_button("📝 Registra il tuo Account")
-            
-            if btn_register:
-                email_c = reg_email.strip().lower()
-                if not reg_nome.strip() or not email_c or not reg_pass or not reg_telefono.strip():
-                    st.error("⚠ Compila tutti i campi obbligatori marcati con (*).")
-                elif reg_pass != reg_pass_conf:
-                    st.error("❌ Le password inserite non corrispondono.")
-                elif len(reg_pass) < 6:
-                    st.error("⚠️️ La password deve essere di almeno 6 caratteri.")
-                elif email_c in st.session_state.db_users:
-                    st.error("❌ Risulta già presente un profilo con questa email.")
-                else:
-                    code_token = str(uuid.uuid4())[:8].upper()
-                    st.session_state.db_users[email_c] = {
-                        "nome": reg_nome.strip(),
-                        "email": email_c,
-                        "password": hash_password(reg_pass),
-                        "numero_whatsapp": reg_telefono.strip(),
-                        "numero_whatsapp_2": "",
-                        "stato": "in_attesa",
-                        "codice_conferma": code_token,
-                        "data_registrazione": str(date.today()),
-                        "lista_animali": [],
-                        "pet_selezionato": None,
-                        "db_visite": {},
-                        "db_terapie": {},
-                        "db_fatture": {},
-                        "db_peso": {},
-                        "db_calori": {},
-                        "db_anagrafica": {},
-                        "angeli_archiviati": {}
-                    }
-                    salva_dati()
-                    st.session_state.verification_pending_email = email_c
-                    st.success("✅ Registrazione effettuata con successo! È stato generato il tuo codice di attivazione.")
-                    st.info("👉 Passa alla scheda 'Attivazione Account' per attivare ed effettuare il tuo primo accesso.")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with auth_tab3:
-        st.markdown("<div class='auth-container'>", unsafe_allow_html=True)
-        st.markdown("<h3 style='color: #1E3A2B; text-align: center; margin-bottom: 10px;'>Attivazione & Conferma Registrazione</h3>", unsafe_allow_html=True)
-        
-        target_email = st.session_state.verification_pending_email or ""
-        email_to_verify = st.text_input("Inserisci l'email con cui ti sei registrato:", value=target_email)
-        
-        if email_to_verify.strip().lower() in st.session_state.db_users:
-            u_data = st.session_state.db_users[email_to_verify.strip().lower()]
-            if u_data.get("stato") == "attivo":
-                st.success("🎉 Questo account risulta già attivo! Puoi accedere subito nella scheda 'Accedi'.")
-            else:
-                st.markdown(f"""
-                    <div style="background:#F0FDF4; border:1.5px dashed #16A34A; padding:20px; border-radius:12px; margin-top:15px; margin-bottom:15px;">
-                        <h4 style="margin:0 0 10px 0; color:#15803D;">✉ Messaggio di Benvenuto PetHealth</h4>
-                        <p style="margin:0 0 8px 0; color:#1E293B;"><strong>Utente:</strong> {u_data['nome']}</p>
-                        <p style="margin:0 0 8px 0; color:#1E293B;"><strong>Email:</strong> {u_data['email']}</p>
-                        <p style="margin:0 0 12px 0; color:#1E293B;"><strong>Codice di Attivazione:</strong> <code>{u_data.get('codice_conferma')}</code></p>
-                        <hr style="border:0; border-top:1px solid #CBD5E1; margin:10px 0;">
-                        <p style="color:#334155; font-size:0.92rem;">Clicca sul pulsante sottostante per confermare e accedere direttamente alla Web App.</p>
-                    </div>
-                """, unsafe_allow_html=True)
-                
-                if st.button("🔗 CONFERMA ATTIVAZIONE ED ENTRA SUBITO"):
-                    u_data["stato"] = "attivo"
-                    st.session_state.db_users[email_to_verify.strip().lower()] = u_data
-                    salva_dati()
-                    st.session_state.logged_user_email = email_to_verify.strip().lower()
-                    st.success("🎉 Registrazione attivata con successo!")
-                    st.rerun()
-        else:
-            if email_to_verify:
-                st.error("Nessun account in attesa di attivazione trovato per questa email.")
-            else:
-                st.info("Registrati nella scheda 'Registrati' prima di procedere all'attivazione.")
-        st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown('<div class="ph-demo"><b>Provalo subito.</b> Carica un account di esempio con Luna e Micio.</div>', unsafe_allow_html=True)
+            if st.button("Entra con la demo", key="btn_demo"):
+                entra_con_demo()
 
     st.stop()
 
@@ -2661,6 +2941,7 @@ lista_animali = user_db["lista_animali"]
 pet_selezionato = user_db.get("pet_selezionato")
 
 with st.sidebar:
+    st.markdown('<div class="ph-side-logo">' + logo_html(sidebar=True) + '</div>', unsafe_allow_html=True)
     st.caption("UTENTE REGISTRATO")
     st.markdown(f"### 👤 {user_db.get('nome', 'Utente')}")
     st.caption(f"📧 {user_email}")
@@ -2702,28 +2983,29 @@ with st.sidebar:
     st.write("")
     st.markdown("**SEZIONI**")
     
-    if st.button("🏠 Riepilogo (Dashboard)"): cambia_sezione("dashboard")
-    if st.button("📋 Anagrafica Pet & Proprietario"): cambia_sezione("anagrafica")
-    if st.button("🏥 Visite e Clinica"): cambia_sezione("visite")
-    if st.button("💊 Terapie e Farmaci"): cambia_sezione("terapie")
-    if st.button("⚖️ Peso e Andamento"): cambia_sezione("peso")
+    voce_menu("🏠 Riepilogo (Dashboard)", "dashboard")
+    voce_menu("📋 Anagrafica Pet & Proprietario", "anagrafica")
+    voce_menu("🏥 Visite e Clinica", "visite")
+    voce_menu("💊 Terapie e Farmaci", "terapie")
+    voce_menu("⚖️ Peso e Andamento", "peso")
     sesso_selezionato = (user_db["db_anagrafica"].get(pet_selected, {}) or {}).get("sesso") if pet_selected else None
     if sesso_selezionato == "Femmina":
-        if st.button("🌸 Calore e Calendario"): cambia_sezione("calore")
-    if st.button("📄 Fatture e Spese"): cambia_sezione("fatture")
-    if st.button("✈️ Passaporto & Viaggi"): cambia_sezione("passaporto")
-    if st.button("📘 Libretto PDF (scarica)"): cambia_sezione("pdf_libretto")
-    if st.button("🚨 Urgenze & Cliniche 24H"): cambia_sezione("urgenze")
-    if st.button("🌈 I nostri angeli a 4 zampe"): cambia_sezione("angeli")
+        voce_menu("🌸 Calore e Calendario", "calore")
+    voce_menu("📄 Fatture e Spese", "fatture")
+    voce_menu("✈️ Passaporto & Viaggi", "passaporto")
+    voce_menu("📘 Libretto PDF (scarica)", "pdf_libretto")
+    voce_menu("🚨 Urgenze & Cliniche 24H", "urgenze")
+    voce_menu("🌈 I nostri angeli a 4 zampe", "angeli")
     
     st.write("")
-    if st.button("➕ Registra Nuovo Animale"): cambia_sezione("nuovo_animale")
+    voce_menu("➕ Registra Nuovo Animale", "nuovo_animale")
 
 if st.session_state.sezione_attiva == "dashboard":
     if pet_selected:
-        col1, col2 = st.columns(2)
         terapie_pet = user_db["db_terapie"].get(pet_selected, [])
         visite_pet = user_db["db_visite"].get(pet_selected, [])
+        mostra_intestazione_dashboard(user_db, pet_selected, visite_pet, terapie_pet)
+        col1, col2 = st.columns(2)
 
         with col1:
             st.markdown(f"""
